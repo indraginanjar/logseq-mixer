@@ -1,0 +1,42 @@
+{
+  "name": "logseq-composer",
+  "version": "0.0.1",
+  "main": "dist/index.html",
+  "scripts": {
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "postbuild": "cp -r dist/* ~/.logseq/plugins/logseq-composer/",
+    "dev": "yarn && yarn build && yarn postbuild"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.1.0",
+    "@fortawesome/free-solid-svg-icons": "^6.1.0",
+    "@fortawesome/react-fontawesome": "^0.2.0",
+    "@lancedb/lancedb": "^0.18.2",
+    "@logseq/libs": "^0.0.17",
+    "@orama/orama": "^3.1.4",
+    "@orama/plugin-data-persistence": "^3.1.4",
+    "@radix-ui/colors": "^0.1.8",
+    "@radix-ui/react-collapsible": "^0.1.5",
+    "@radix-ui/react-toolbar": "^0.1.4",
+    "@stitches/react": "^1.2.6",
+    "apache-arrow": "18.1.0",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-markdown": "8.0.7",
+    "recoil": "^0.7.7"
+  },
+  "devDependencies": {
+    "@types/react": "^17.0.33",
+    "@types/react-dom": "^17.0.10",
+    "@vitejs/plugin-react": "^1.0.7",
+    "typescript": "^4.5.4",
+    "vite": "^2.7.2",
+    "vite-tsconfig-paths": "^3.3.17"
+  },
+  "logseq": {
+    "id": "logseq-composer",
+    "title": "Logseq Composer",
+    "icon": "logseq.png"
+  }
+}

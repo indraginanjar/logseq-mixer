@@ -1,0 +1,26 @@
+name: Build and Release Plugin
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Create zip
+        run: |
+          mkdir release
+          cp index.html manifest.json LICENSE README.md logseq.png demo.gif release/
+          cd release && zip -r ../logseq-composer.zip .
+
+      - name: Upload plugin zip to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: logseq-composer.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
