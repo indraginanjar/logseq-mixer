@@ -3,7 +3,7 @@
 **Logseq Composer** is a plugin that connects your Logseq notes with any LLM using Retrieval-Augmented Generation (RAG).  
 Hope you find it useful! 😀👍🍀🍷
 
-**For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button, it may take a while depending on the size of the notes)**
+### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button, it may take a while depending on the size of the notes)
 
 🎥 [Watch demo](https://www.youtube.com/watch?v=J0QDrz-Ccis)
 
