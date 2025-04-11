@@ -1,16 +1,13 @@
-MIT License
+Copyright Martin Minarik 2025
 
 Copyright (c) 2025 Martin Minarik
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is granted to use this plugin as-is in Logseq, both personally and commercially.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+You may not:
+- Modify, adapt, reverse-engineer, or decompile the code
+- Distribute the code or any modified version of it
+- Sell or include the code in any paid package or product
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

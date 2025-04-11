@@ -228,7 +228,7 @@ export function App({ themeMode: initialThemeMode }: Props) {
           <CloseButton onClick={() => window.logseq.hideMainUI()}>✖</CloseButton>
         </Header>
 
-        <MessagesContainer>
+        <MessagesContainer id="messages-container">
           <ChatMessageList messages={messages} />
           <div ref={messagesEndRef} />
         </MessagesContainer>

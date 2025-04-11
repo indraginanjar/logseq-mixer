@@ -7,6 +7,7 @@ interface IPluginSettings {
   EmbeddingApiKey: string;
   LiteLLMLink: string;
   apiKey: string;
+  VectorDBLogseqCopilot: string;
 
 }
 

@@ -47,13 +47,6 @@ const settings: SettingSchemaDesc[] = [
     title: 'API Key',
     description: 'Enter your API key for the service',
     default: 'sk-proj-1234',
-  },
-  {
-    key: 'VectorDBLogseqCopilot',
-    type: 'string',
-    title: 'VectorDBLogseqCopilot DEV!',
-    description: 'VectorDB JSON dont edit',
-    default: '',
   }
 ];
 
