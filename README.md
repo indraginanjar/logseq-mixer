@@ -28,8 +28,9 @@ If something breaks or you'd like a feature, please:
 
 ### 📦 Installation
 
-Coming soon to the Marketplace...  
-For now, clone or download the ZIP and load it manually in Logseq.
+- Install it from the marketplace
+- Configure your keys
+- enjoy!
 
 ---
 
