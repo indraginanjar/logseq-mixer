@@ -1,49 +1,90 @@
 # Logseq Composer ✍️
 
-**Logseq Composer** is a plugin that connects your notes with any LLM using Retrieval-Augmented Generation (RAG). Hope you find it useful! 😀👍🍀🍷
+**Logseq Composer** is a plugin that connects your Logseq notes with any LLM using Retrieval-Augmented Generation (RAG).  
+Hope you find it useful! 😀👍🍀🍷
 
-https://www.youtube.com/watch?v=J0QDrz-Ccis
-
----
-
-### ⚙️📚 How it works
-
-- Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) for vector search
-- Retrieves relevant notes using RAG (simple Vector search for now)
-- Pipes the results into any LLM via [LiteLLM](https://github.com/BerriAI/litellm)
-- You can use **any LLM** supported by LiteLLM (chatgpt 4o, deepseek, Claude, etc.)
-- Currently, an **OpenAI API key is required for embeddings** – but the plugin will still run
+🎥 [Watch demo](https://www.youtube.com/watch?v=J0QDrz-Ccis)
 
 ---
 
-### ⚙️ Settings
-Descriptions are included with the plugin but here is more context.
-- selectedModel: model name (string) passed into liteLLM
-- prompt: the text at the top of the prompt, "context" is the name of json passed to the LLM in each query, include it in your prompt for better contextual thinking. the default is pretty good, as i have tested it.
-- EmbeddingApiKey: api key used for an embedding model, currently only openai's "text-embedding-ada-002" model is supported and you need an openAI API key for embedding with this plugin. however the plugin will run without an embedding key, you will just have to look at the currect note you are working with (currently looked at note is always being passed to the LLM as extra context)
-- LiteLLMLink: this setting is open, for users who would like to run their own local models using OLLAMA or other models. the default value ([http://172.105.80.74:4000/chat/completions](http://172.105.80.74:4000/chat/completions)) is our personal liteLLM instance, that just passes your API keys to their respective platforms, use it if you don't want to configure your own liteLLM session. otherwise setup your own liteLLM server and pass it to the plugin.
-- apiKey: the API key passed to the remote LLM, by default our liteLLM passes this key to the respective service openAI, google, etc.
+### ⚙️ How It Works
+
+- Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) for semantic vector search
+- Retrieves related notes using RAG (vector similarity search for now)
+- Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
+- Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA
+- Plugin still runs without embeddings — the currently active note will be passed as fallback context
+
+---
+
+### 🛠 Plugin Settings (Detailed)
+
+You can configure these in the Logseq plugin UI:
+
+- **`selectedModel`**  
+  - Example: `"gpt-4o"`  
+  - The name of the LLM model to use. This is passed directly into LiteLLM, so it should match a valid model from the provider you're using.
+
+- **`prompt`**  
+  - This is the custom prompt shown to the LLM with every query.  
+  - The word `"context"` inside your prompt is replaced by the text content pulled from your notes (via vector search or current page).  
+  - Default is tuned for productivity, but you can customize it for different LLM personalities or task types.
+
+- **`EmbeddingApiKey`**  
+  - Used for generating vector embeddings of your notes (for semantic search).  
+  - Currently only supports OpenAI’s `text-embedding-ada-002` model.  
+  - If not set, vector search is skipped and only the current Logseq note is passed as context.  
+  - You do **not** need this if you're okay with simpler functionality.
+
+- **`LiteLLMLink`**   
+  - The full endpoint to your LiteLLM instance.  
+  - Default value:  
+    ```
+    http://172.105.80.74:4000/chat/completions
+    ```
+  - This is a public instance that forwards your request to the correct provider (OpenAI, Google, etc.) using your API key.  
+  - You can self-host [LiteLLM](https://github.com/BerriAI/litellm) for full control or privacy — just set your own URL here.
+
+- **`apiKey`**  
+  - The API key used to authenticate your request with the actual LLM provider (OpenAI, Anthropic, Google, etc.).  
+  - This key is passed to LiteLLM which handles routing and forwarding it properly.  
+  - **Keep this secure**, especially if using shared or public LiteLLM endpoints.
+
 ---
 
 ### ⚠️ Early Stage Notice
 
-This is my **first Logseq plugin**, and it's **under heavy development**, with updates coming in the future.  
-If something breaks or you'd like a feature or give feedback, please:
+This is my **first Logseq plugin**, and it's still in **heavy development** with updates coming soon.  
+If something breaks or you'd like to suggest a feature or improvement:
 
-- Be patient 🙏
+- Please be patient 🙏
 - [Create an issue](https://github.com/martindev9999/logseq-composer/issues)
 
 ---
 
 ### 📦 Installation
 
-- Install it from the marketplace
-- Configure your keys
-- enjoy!
+- Install it from the Logseq Marketplace (once it's approved)
+- Open plugin settings and configure your:
+  - API key
+  - LLM model
+  - (Optional) Embedding key
+  - (Optional) Custom LiteLLM server
+- Start composing with full context-awareness inside Logseq!
 
 ---
 
 ### 📄 License
 
-Usage is allowed, but redistribution, resale, or modification is **not**.  
-See `LICENSE` for details.
+This project is open-source and licensed under the **MIT License**.  
+You’re free to:
+- Use
+- Copy
+- Modify
+- Distribute
+
+Please see the [`LICENSE`](./LICENSE) file for full details.
+
+---
+
+Feel free to open a pull request if you'd like to contribute!
