@@ -2,7 +2,7 @@
 
 **Logseq Composer** is a plugin that connects your notes with any LLM using Retrieval-Augmented Generation (RAG). Hope you find it useful! 😀👍🍀🍷
 
-https://www.youtube.com/watch?v=YOUR_VIDEO_ID
+https://www.youtube.com/watch?v=J0QDrz-Ccis
 
 ---
 
