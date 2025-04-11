@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "postbuild": "if [ \"$CI\" != \"true\" ]; then cp -r dist/* ~/.logseq/plugins/logseq-bradder-plugin/; fi",,
+    "postbuild": "if [ \"$CI\" != \"true\" ]; then cp -r dist/* ~/.logseq/plugins/logseq-bradder-plugin/; fi",
     "dev": "yarn && yarn build && yarn postbuild"
   },
   "dependencies": {
