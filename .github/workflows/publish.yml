@@ -15,7 +15,7 @@ jobs:
       - name: Create zip
         run: |
           mkdir release
-          cp index.html manifest.json LICENSE README.md logseq.png demo.gif release/
+          cp index.html manifest.json LICENSE README.md logseq.png release/
           cd release && zip -r ../logseq-composer.zip .
 
       - name: Upload plugin zip to release
