@@ -1,7 +1,12 @@
 {
   "name": "logseq-composer",
   "version": "0.0.1",
+  "author": "Martin Minarik",
+  "description": "Plugin that connects all of your notes with any LLM",
   "main": "dist/index.html",
+  "effect": "true",
+  "sponsors": ["https://buymeacoffee.com/martinminarik"],
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -33,8 +38,12 @@
     "@vitejs/plugin-react": "^1.0.7",
     "typescript": "^4.5.4",
     "vite": "^2.7.2",
-    "vite-tsconfig-paths": "^3.3.17"
+    "vite-tsconfig-paths": "^3.3.17",
+    "@logseq/libs": "^0.0.1-alpha.29"
   },
+  "browserslist": [
+    "chrome 80"
+  ],
   "logseq": {
     "id": "logseq-composer",
     "title": "Logseq Composer",

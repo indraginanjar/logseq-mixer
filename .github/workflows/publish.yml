@@ -8,17 +8,30 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Create zip
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Build plugin
+        run: yarn build
+
+      - name: Create release folder and zip
         run: |
           mkdir release
           cp -r dist/* release/
-          cp packageLS.json release/
-          mv release/packageLS.json release/package.json
-          cp manifest.json LICENSE README.md logseq.png release/
+          cp package.json README.md LICENSE logseq.png release/
           cd release && zip -r ../logseq-composer.zip .
 
       - name: Upload plugin zip to release
