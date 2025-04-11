@@ -16,6 +16,8 @@ jobs:
         run: |
           mkdir release
           cp -r dist/* release/
+          cp packageLS.json release/
+          mv release/packageLS.json release/package.json
           cp manifest.json LICENSE README.md logseq.png release/
           cd release && zip -r ../logseq-composer.zip .
 
