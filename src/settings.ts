@@ -39,7 +39,7 @@ const settings: SettingSchemaDesc[] = [
     type: 'string',
     title: 'LiteLLM api link',
     description: 'LiteLLM\'s api endpoint, replace with your own if you want custom models',
-    default: 'http://localhost:4000/chat/completions',
+    default: 'http://172.105.80.74:4000/chat/completions',
   },
   {
     key: 'apiKey',

@@ -12,8 +12,18 @@ Hope you find it useful! 😀👍🍀🍷
 - Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) for semantic vector search
 - Retrieves related notes using RAG (vector similarity search for now)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
-- Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA
+- Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
 - Plugin still runs without embeddings — the currently active note will be passed as fallback context
+
+---
+
+### ⚠️ Early Stage Notice
+
+This is my **first Logseq plugin**, and it's still in **heavy development** with updates coming soon.  
+If something breaks or you'd like to suggest a feature or improvement:
+
+- Please be patient 🙏
+- [Create an issue](https://github.com/martindev9999/logseq-composer/issues)
 
 ---
 
@@ -52,16 +62,6 @@ You can configure these in the Logseq plugin UI:
 
 ---
 
-### ⚠️ Early Stage Notice
-
-This is my **first Logseq plugin**, and it's still in **heavy development** with updates coming soon.  
-If something breaks or you'd like to suggest a feature or improvement:
-
-- Please be patient 🙏
-- [Create an issue](https://github.com/martindev9999/logseq-composer/issues)
-
----
-
 ### 📦 Installation
 
 - Install it from the Logseq Marketplace (once it's approved)
@@ -84,7 +84,3 @@ You’re free to:
 - Distribute
 
 Please see the [`LICENSE`](./LICENSE) file for full details.
-
----
-
-Feel free to open a pull request if you'd like to contribute!
