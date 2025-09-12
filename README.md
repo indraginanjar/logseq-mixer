@@ -9,7 +9,7 @@ Hope you find it useful! 😀👍🍀🍷
 
 **Support me to help the project ❤️**
 
-<a href="https://www.buymeacoffee.com/yoyurec" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important;width: 178px !important;" ></a>
+<a href="https://www.buymeacoffee.com/yoyurec](https://buymeacoffee.com/martinminarik" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important;width: 178px !important;" ></a>
 
 ---
 
