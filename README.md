@@ -3,7 +3,7 @@
 **Logseq Composer** is a plugin that connects your Logseq notes with any LLM using Retrieval-Augmented Generation (RAG).  
 Hope you find it useful! 😀👍🍀🍷
 
-### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button, it may take a while depending on the size of the notes)
+### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button). By default, only new or updated pages are indexed — this is fast even for large vaults.
 
 🎥 [Watch demo](https://www.youtube.com/watch?v=J0QDrz-Ccis)
 
@@ -65,6 +65,11 @@ You can configure these in the Logseq plugin UI:
   - The API key used to authenticate your request with the actual LLM provider (OpenAI, Anthropic, Google, etc.).  
   - This key is passed to LiteLLM which handles routing and forwarding it properly.  
   - **Keep this secure**, especially if using shared or public LiteLLM endpoints.
+
+- **`indexingMode`**  
+  - Choose between `"incremental"` (default) and `"full"`.  
+  - **Incremental**: Only embeds pages that are new or have been updated since the last index. Fast and cost-efficient.  
+  - **Full**: Wipes the vector database and re-embeds every page from scratch. Use this if you suspect the index is corrupted or want a clean rebuild.
 
 ---
 
