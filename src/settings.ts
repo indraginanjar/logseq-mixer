@@ -47,6 +47,15 @@ const settings: SettingSchemaDesc[] = [
     title: 'API Key',
     description: 'Enter your API key for the service',
     default: 'sk-proj-1234',
+  },
+  {
+    key: 'indexingMode',
+    type: 'enum',
+    title: 'Indexing Mode',
+    description: 'Incremental only embeds new/updated pages. Full Re-index wipes the database and re-embeds everything.',
+    default: 'incremental',
+    enumChoices: ['incremental', 'full'],
+    enumPicker: 'select',
   }
 ];
 

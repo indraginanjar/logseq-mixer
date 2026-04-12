@@ -1,5 +1,5 @@
 import { getEmbedingsAllNotes, useGenerateEmbedding } from 'embedManager';
-import { startPageIndexingOnChange } from 'indexManager';
+import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManager';
 import { queryLiteLLM } from 'LLMManager';
 import { batchInsertEmbeddings, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 
@@ -9,9 +9,14 @@ const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }
 const MAX_HISTORY_LENGTH = 6;
 
 export async function indexEntireLogSeq(settings: any) {
-  const oramaDatabaseInstance = await loadVectorDatabase(settings, true);
-  const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey);
-  await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings);
+  if (settings.indexingMode === 'full') {
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, true);
+    const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey);
+    await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings);
+  } else {
+    const oramaDatabaseInstance = await loadVectorDatabase(settings);
+    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey);
+  }
 }
 
 export async function enableAutoIndexer(settings: any) {

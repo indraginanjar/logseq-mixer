@@ -6,7 +6,15 @@ export type VectorDBSchemaDynamic = {
   embedding: number[]; // embedding as a number array
 };
 
+// text-embedding-ada-002 has an 8191 token limit.
+// Using a conservative estimate to account for variable tokenization.
+const MAX_INPUT_CHARS = 25000;
+
 export async function useGenerateEmbedding(inputText: string, apiKey: string): Promise<number[]> {
+  const truncatedText = inputText.length > MAX_INPUT_CHARS
+    ? inputText.slice(0, MAX_INPUT_CHARS)
+    : inputText;
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -19,7 +27,7 @@ export async function useGenerateEmbedding(inputText: string, apiKey: string): P
       },
       body: JSON.stringify({
         model: 'text-embedding-ada-002',
-        input: inputText,
+        input: truncatedText,
       }),
       signal: controller.signal,
     });
@@ -67,9 +75,9 @@ export async function getEmbedingsAllNotes(apiKey: string,): Promise<VectorDBSch
             embedding: await useGenerateEmbedding(WholePageContent, apiKey)
           };
           return MyNewEmbedding;
-        } catch (err) {
+        } catch (err: any) {
           console.error('Embedding failed for page:', page.name, err);
-          throw new Error(`Embedding failed. Verify your Embedding OpenAI API key in the settings and try again.`);
+          throw new Error(`Embedding failed for page "${page.name}": ${err.message || 'Unknown error. Verify your Embedding OpenAI API key in the settings.'}`);
         }
       })
     );
