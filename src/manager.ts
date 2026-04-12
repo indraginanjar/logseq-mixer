@@ -11,7 +11,7 @@ const MAX_HISTORY_LENGTH = 6;
 export async function indexEntireLogSeq(settings: any) {
   const oramaDatabaseInstance = await loadVectorDatabase(settings, true);
   const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey);
-  batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings);
+  await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings);
 }
 
 export async function enableAutoIndexer(settings: any) {

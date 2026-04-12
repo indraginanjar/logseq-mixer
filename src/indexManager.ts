@@ -10,6 +10,16 @@ let currentEmbeddingKey = '';
 let currentOramaInstance: Orama<VectorDBSchema>;
 let indexingInProgress = false;
 
+let _isUpdatingSettings = false;
+
+export function getIsUpdatingSettings(): boolean {
+  return _isUpdatingSettings;
+}
+
+export function setIsUpdatingSettings(value: boolean): void {
+  _isUpdatingSettings = value;
+}
+
 const isInternalPage = (name: string) => {
   return name.startsWith('card') ||
          name.startsWith('contents') ||
@@ -59,10 +69,10 @@ export async function checkAndIndexUpdatedPages(
         };
 
         if (dbRecord?.id) {
-          remove(oramaInstance, dbRecord.id);
+          await remove(oramaInstance, dbRecord.id);
         }
 
-        batchInsertEmbeddings(oramaInstance, [newEmbedding]);
+        await batchInsertEmbeddings(oramaInstance, [newEmbedding]);
       } catch (error) {
         console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
       }
@@ -87,6 +97,7 @@ export function startPageIndexingOnChange(
   hasHooked = true;
 
   logseq.DB.onChanged(async () => {
+    if (getIsUpdatingSettings()) return;
     try {
       await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey);
     } catch (err) {
