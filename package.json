@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "postbuild": "if [ \"$CI\" != \"true\" ]; then cp -r dist/* ~/.logseq/plugins/logseq-bradder-plugin/; fi",
+    "postbuild": "node -e \"if(process.env.CI!=='true'){const fs=require('fs'),p=require('path'),s='dist',d=p.join(require('os').homedir(),'.logseq/plugins/logseq-bradder-plugin');fs.mkdirSync(d,{recursive:true});fs.cpSync(s,d,{recursive:true})}\"",
     "dev": "yarn && yarn build && yarn postbuild"
   },
   "dependencies": {
