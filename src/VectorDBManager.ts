@@ -1,6 +1,7 @@
 import { create, insertMultiple, type Orama, search } from "@orama/orama";
 import { persist, restore } from "@orama/plugin-data-persistence";
 import { VectorDBSchemaDynamic } from "embedManager";
+import { setIsUpdatingSettings } from "indexManager";
 
 export type VectorDBSchema = {
   id: 'string';
@@ -50,13 +51,18 @@ export async function loadVectorDatabase(settings: any,forceNew: boolean = false
 }
 
 export async function batchInsertEmbeddings(oramaDBInstance :Orama<VectorDBSchema>,Embedings:VectorDBSchemaDynamic[]){
-  insertMultiple(oramaDBInstance,Embedings);
+  await insertMultiple(oramaDBInstance,Embedings);
   const jsonIndex = await persist(oramaDBInstance, 'json');
-  await logseq.updateSettings({VectorDBLogseqCopilot: jsonIndex,});
+  setIsUpdatingSettings(true);
+  try {
+    await logseq.updateSettings({VectorDBLogseqCopilot: jsonIndex,});
+  } finally {
+    setIsUpdatingSettings(false);
+  }
 }
 
 export async function vectorSearchOramaDB(oramaDBInstance :Orama<VectorDBSchema>,vector:number[]){
-  const results = search(oramaDBInstance, {
+  const results = await search(oramaDBInstance, {
     mode: "vector",
     vector: {
       value: vector,

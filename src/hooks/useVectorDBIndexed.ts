@@ -1,5 +1,5 @@
 import { create, insert, search } from '@orama/orama';
-import { useGenerateEmbedding } from './useGenerateEmbedding';
+import { useGenerateEmbedding } from 'embedManager';
 // Define your schema for the documents you want to index
 
 
