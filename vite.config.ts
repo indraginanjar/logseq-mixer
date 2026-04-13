@@ -10,5 +10,7 @@ export default defineConfig({
     target: 'esnext',
     minify: 'esbuild',
   },
-  
+  test: {
+    globals: true,
+  },
 });

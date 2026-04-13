@@ -5,7 +5,9 @@
   "description": "Plugin that connects all of your notes with any LLM",
   "main": "index.html",
   "effect": "true",
-  "sponsors": ["https://buymeacoffee.com/martinminarik"],
+  "sponsors": [
+    "https://buymeacoffee.com/martinminarik"
+  ],
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "tsc && vite build",
@@ -32,13 +34,14 @@
     "recoil": "^0.7.7"
   },
   "devDependencies": {
+    "@logseq/libs": "^0.0.1-alpha.29",
     "@types/react": "^17.0.33",
     "@types/react-dom": "^17.0.10",
     "@vitejs/plugin-react": "^1.0.7",
     "typescript": "^4.5.4",
     "vite": "^2.7.2",
     "vite-tsconfig-paths": "^3.3.17",
-    "@logseq/libs": "^0.0.1-alpha.29"
+    "vitest": "^0.34.6"
   },
   "browserslist": [
     "chrome 80"

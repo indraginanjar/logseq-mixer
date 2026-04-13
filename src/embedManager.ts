@@ -1,3 +1,5 @@
+import { CrossPageDeduplicator, deduplicateBlocks } from './deduplicator';
+import { normalizeBlockContent } from './normalizer';
 
 export type VectorDBSchemaDynamic = {
   id: string;
@@ -30,9 +32,149 @@ export function isValidEmbeddingModel(model: string): boolean {
   return model in EMBEDDING_MODELS;
 }
 
-// text-embedding-ada-002 has an 8191 token limit.
-// Max chars per chunk, leaving room for page metadata header.
-const MAX_CHUNK_CHARS = 24000;
+export interface BlockLine {
+  content: string;
+  isHeading: boolean;
+  depth: number;       // nesting depth (0 = top-level)
+  groupId: number;     // semantic group ID (-1 if ungrouped)
+}
+
+/**
+ * Identify semantic groups: a heading block + all its children.
+ * Returns block lines annotated with group membership.
+ *
+ * A heading block and all subsequent blocks at deeper depth form a semantic
+ * group, until the next heading at the same or shallower depth.
+ * Non-heading blocks that aren't part of any group get groupId: -1.
+ *
+ * Uses the original content (pre-normalization) to detect heading markers,
+ * since normalization strips `#` prefixes.
+ */
+export function identifySemanticGroups(blockLines: string[]): BlockLine[] {
+  const parsed: BlockLine[] = blockLines.map((line) => {
+    const { content, depth } = parseBlockLine(line);
+    const isHeading = /^#{1,6}\s+/.test(content);
+    return { content: line, isHeading, depth, groupId: -1 };
+  });
+
+  let groupId = 0;
+
+  for (let i = 0; i < parsed.length; i++) {
+    if (!parsed[i].isHeading) continue;
+
+    const headingDepth = parsed[i].depth;
+    parsed[i].groupId = groupId;
+
+    // Collect all subsequent blocks at deeper depth
+    let j = i + 1;
+    while (j < parsed.length) {
+      if (parsed[j].depth <= headingDepth) break;
+      parsed[j].groupId = groupId;
+      j++;
+    }
+
+    groupId++;
+    // Skip past children already assigned to this group
+    i = j - 1; // eslint-disable-line
+  }
+
+  return parsed;
+}
+
+/**
+ * Parse a flattened block line to extract the raw content and nesting depth.
+ * - Top-level lines: `- content` → depth 0
+ * - Nested lines: `[a > b > c] content` → depth = number of `>` + 1
+ */
+function parseBlockLine(line: string): { content: string; depth: number } {
+  // Check for breadcrumb prefix: [parent > child > ...] content
+  const breadcrumbMatch = line.match(/^\[([^\]]*)\]\s*(.*)/);
+  if (breadcrumbMatch) {
+    const breadcrumb = breadcrumbMatch[1];
+    const content = breadcrumbMatch[2];
+    // Depth = number of segments in the breadcrumb chain
+    const segments = breadcrumb.split('>').length;
+    return { content, depth: segments };
+  }
+
+  // Top-level line: `- content`
+  const topLevelMatch = line.match(/^- (.*)/);
+  if (topLevelMatch) {
+    return { content: topLevelMatch[1], depth: 0 };
+  }
+
+  // Fallback: treat as top-level
+  return { content: line, depth: 0 };
+}
+
+export interface PageLinkData {
+  outgoingLinks: string[];   // page names from [[link]] syntax
+  backlinks: string[];       // page names that link TO this page
+}
+
+/**
+ * Extract outgoing page links from flattened block content.
+ * Parses [[page_name]] patterns and returns a deduplicated array of page names.
+ */
+export function extractOutgoingLinks(blockLines: string[]): string[] {
+  const linkRegex = /\[\[(.+?)\]\]/g;
+  const seen = new Set<string>();
+  for (const line of blockLines) {
+    let match: RegExpExecArray | null;
+    while ((match = linkRegex.exec(line)) !== null) {
+      seen.add(match[1]);
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * Fetch backlinks for a page using the Logseq API.
+ * Returns an array of page names that link to the given page.
+ * Returns an empty array if the API call fails or no backlinks exist.
+ */
+export async function fetchBacklinks(pageName: string): Promise<string[]> {
+  try {
+    const refs = await logseq.Editor.getPageLinkedReferences(pageName);
+    if (!refs || !Array.isArray(refs)) {
+      return [];
+    }
+    // Each entry is a [page, blocks[]] tuple — extract the page name
+    const names: string[] = [];
+    for (const entry of refs) {
+      const page = entry?.[0];
+      if (page?.name) {
+        names.push(page.name);
+      } else if (page?.originalName) {
+        names.push(page.originalName);
+      }
+    }
+    return names;
+  } catch (err) {
+    console.error(`Failed to fetch backlinks for "${pageName}":`, err);
+    return [];
+  }
+}
+
+/** Default overlap as fraction of previous chunk's block lines */
+export const OVERLAP_FRACTION = 0.15;
+
+/** Max fraction of chunk char limit that overlap lines may consume */
+export const MAX_OVERLAP_BUDGET = 0.20;
+
+// Conservative chars-per-token ratio for mixed content (code, non-Latin, markdown).
+// OpenAI averages ~4 chars/token for English, but mixed content can be ~2.5.
+const CHARS_PER_TOKEN = 2.5;
+
+/**
+ * Derive the max chunk character limit from the model's token limit.
+ * Uses a conservative chars-per-token ratio to avoid exceeding the API limit.
+ */
+export function getMaxChunkChars(model: string = DEFAULT_EMBEDDING_MODEL): number {
+  const config = EMBEDDING_MODELS[model];
+  if (!config) throw new Error(`Unknown embedding model: ${model}`);
+  return Math.floor(config.maxTokens * CHARS_PER_TOKEN);
+}
 
 /**
  * Resolve block references ((uuid)) and block embeds {{embed ((uuid))}}
@@ -93,20 +235,49 @@ export function clearRefCache(): void {
 }
 
 /**
- * Recursively flatten a block tree into a list of content strings with indentation.
- * Preserves Logseq's block hierarchy.
+ * Format block properties as a compact string.
+ * Skips internal/system keys (id, uuid, etc.) to avoid noise.
+ */
+function formatBlockProperties(properties?: Record<string, any>): string {
+  if (!properties || Object.keys(properties).length === 0) return '';
+  const skipKeys = new Set(['id', 'uuid', 'collapsed', 'ls-type', 'heading', 'logseq.order-list-type']);
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(properties)) {
+    if (skipKeys.has(key)) continue;
+    const val = Array.isArray(value) ? value.join(', ') : String(value);
+    if (val) parts.push(`${key}: ${val}`);
+  }
+  return parts.length > 0 ? ` {${parts.join('; ')}}` : '';
+}
+
+/**
+ * Recursively flatten a block tree into a list of content strings.
+ * Preserves Logseq's block hierarchy by prefixing each child block
+ * with its parent chain as a breadcrumb (e.g. "parent > child > grandchild").
+ * This makes each block line self-contained with full context.
+ * Appends block properties (priority, status, etc.) when present.
  * Resolves block references ((uuid)) and embeds {{embed ((uuid))}} to actual content.
  */
-async function flattenBlocks(blocks: any[], depth: number = 0): Promise<string[]> {
+async function flattenBlocks(blocks: any[], parentChain: string[] = []): Promise<string[]> {
   const lines: string[] = [];
   for (const block of blocks) {
     if (block.content) {
-      const indent = '  '.repeat(depth);
       const resolvedContent = await resolveBlockReferences(block.content);
-      lines.push(`${indent}- ${resolvedContent}`);
-    }
-    if (block.children && block.children.length > 0) {
-      lines.push(...await flattenBlocks(block.children, depth + 1));
+      const props = formatBlockProperties(block.properties);
+      if (parentChain.length > 0) {
+        const breadcrumb = parentChain.join(' > ');
+        lines.push(`[${breadcrumb}] ${resolvedContent}${props}`);
+      } else {
+        lines.push(`- ${resolvedContent}${props}`);
+      }
+      if (block.children && block.children.length > 0) {
+        const shortContent = resolvedContent.length > 60
+          ? resolvedContent.slice(0, 60) + '…'
+          : resolvedContent;
+        lines.push(...await flattenBlocks(block.children, [...parentChain, shortContent]));
+      }
+    } else if (block.children && block.children.length > 0) {
+      lines.push(...await flattenBlocks(block.children, parentChain));
     }
   }
   return lines;
@@ -114,35 +285,184 @@ async function flattenBlocks(blocks: any[], depth: number = 0): Promise<string[]
 
 /**
  * Group block lines into chunks that fit within the embedding model's token limit.
- * Each chunk is a string of concatenated block lines.
- * Blocks are never split mid-line — the boundary is always between blocks.
- * If a single block exceeds the limit, it gets its own chunk (truncated).
+ * Supports semantic grouping (keeping heading groups together) and chunk overlap.
+ *
+ * - Blocks with the same groupId (not -1) form a semantic group.
+ * - Semantic groups are kept together when they fit; split between child blocks when they don't.
+ * - After finalizing each chunk, overlap lines from its tail are prepended to the next chunk.
+ * - Single-chunk pages produce no overlap.
  */
-export function groupBlocksIntoChunks(blockLines: string[], pageHeader: string): string[] {
+export function groupBlocksIntoChunks(
+  blockLines: BlockLine[],
+  pageHeader: string,
+  maxChunkChars: number,
+  overlapFraction: number = OVERLAP_FRACTION
+): string[] {
   if (blockLines.length === 0) {
     return [pageHeader];
   }
 
-  const chunks: string[] = [];
-  let currentChunk = pageHeader;
+  const contentBudget = maxChunkChars - pageHeader.length;
+  const overlapBudgetChars = Math.floor(maxChunkChars * MAX_OVERLAP_BUDGET);
 
-  for (const line of blockLines) {
-    const candidate = currentChunk + line + '\n';
-    if (candidate.length > MAX_CHUNK_CHARS && currentChunk !== pageHeader) {
-      // Current chunk is full, push it and start a new one
-      chunks.push(currentChunk);
-      currentChunk = pageHeader + line + '\n';
+  // --- Collect semantic groups as runs of consecutive same-groupId lines ---
+  interface Segment {
+    lines: BlockLine[];
+    groupId: number;
+  }
+
+  const segments: Segment[] = [];
+  let i = 0;
+  while (i < blockLines.length) {
+    const bl = blockLines[i];
+    if (bl.groupId !== -1) {
+      // Collect all consecutive lines with the same groupId
+      const groupLines: BlockLine[] = [bl];
+      let j = i + 1;
+      while (j < blockLines.length && blockLines[j].groupId === bl.groupId) {
+        groupLines.push(blockLines[j]);
+        j++;
+      }
+      segments.push({ lines: groupLines, groupId: bl.groupId });
+      i = j;
     } else {
-      currentChunk = candidate;
+      // Ungrouped line — individual segment
+      segments.push({ lines: [bl], groupId: -1 });
+      i++;
     }
   }
 
-  // Push the last chunk
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
+  // --- Build chunks from segments ---
+  // Each "raw chunk" is an array of BlockLine references (before overlap is applied).
+  const rawChunks: BlockLine[][] = [];
+  let currentLines: BlockLine[] = [];
+  let currentLen = 0; // character length of content in currentLines (excluding header)
+
+  function flushCurrent() {
+    if (currentLines.length > 0) {
+      rawChunks.push(currentLines);
+      currentLines = [];
+      currentLen = 0;
+    }
   }
 
-  return chunks;
+  function lineCharLen(bl: BlockLine): number {
+    return bl.content.length + 1; // +1 for '\n'
+  }
+
+  function segmentCharLen(seg: Segment): number {
+    return seg.lines.reduce((sum, bl) => sum + lineCharLen(bl), 0);
+  }
+
+  for (const seg of segments) {
+    const segLen = segmentCharLen(seg);
+
+    if (seg.groupId !== -1) {
+      // --- Semantic group handling ---
+      if (currentLen + segLen <= contentBudget) {
+        // Fits in current chunk
+        currentLines.push(...seg.lines);
+        currentLen += segLen;
+      } else if (segLen <= contentBudget) {
+        // Doesn't fit in current, but fits in a fresh chunk
+        flushCurrent();
+        currentLines = [...seg.lines];
+        currentLen = segLen;
+      } else {
+        // Oversized group — split between child blocks (never mid-block)
+        flushCurrent();
+        for (const bl of seg.lines) {
+          const blLen = lineCharLen(bl);
+          if (currentLen + blLen <= contentBudget) {
+            currentLines.push(bl);
+            currentLen += blLen;
+          } else {
+            flushCurrent();
+            if (blLen <= contentBudget) {
+              currentLines = [bl];
+              currentLen = blLen;
+            } else {
+              // Single block exceeds budget — must split its text
+              let remaining = bl.content + '\n';
+              while (remaining.length > 0) {
+                const slice = remaining.slice(0, contentBudget);
+                remaining = remaining.slice(contentBudget);
+                rawChunks.push([{ content: slice.replace(/\n$/, ''), isHeading: bl.isHeading, depth: bl.depth, groupId: bl.groupId }]);
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // --- Ungrouped line: existing adjacency-based behavior ---
+      const bl = seg.lines[0];
+      const blLen = lineCharLen(bl);
+
+      if (currentLen + blLen <= contentBudget) {
+        currentLines.push(bl);
+        currentLen += blLen;
+      } else {
+        flushCurrent();
+        if (blLen <= contentBudget) {
+          currentLines = [bl];
+          currentLen = blLen;
+        } else {
+          // Single block exceeds budget — split its text
+          let remaining = bl.content + '\n';
+          while (remaining.length > 0) {
+            const slice = remaining.slice(0, contentBudget);
+            remaining = remaining.slice(contentBudget);
+            rawChunks.push([{ content: slice.replace(/\n$/, ''), isHeading: bl.isHeading, depth: bl.depth, groupId: bl.groupId }]);
+          }
+        }
+      }
+    }
+  }
+  flushCurrent();
+
+  // --- Single-chunk pages produce no overlap ---
+  if (rawChunks.length <= 1) {
+    return rawChunks.map(
+      (lines) => pageHeader + lines.map((bl) => bl.content + '\n').join('')
+    );
+  }
+
+  // --- Apply overlap between chunks ---
+  const finalChunks: string[] = [];
+  let overlapLines: BlockLine[] = [];
+
+  for (let ci = 0; ci < rawChunks.length; ci++) {
+    const chunkBlockLines = rawChunks[ci];
+
+    // Build chunk text: header + overlap lines + new content
+    let chunkText = pageHeader;
+    if (ci > 0 && overlapLines.length > 0) {
+      chunkText += overlapLines.map((bl) => bl.content + '\n').join('');
+    }
+    chunkText += chunkBlockLines.map((bl) => bl.content + '\n').join('');
+
+    // Trim if overlap caused the chunk to exceed the limit
+    if (chunkText.length > maxChunkChars) {
+      chunkText = chunkText.slice(0, maxChunkChars);
+    }
+
+    finalChunks.push(chunkText);
+
+    // Compute overlap for the next chunk
+    const overlapCount = Math.ceil(chunkBlockLines.length * overlapFraction);
+    let candidateOverlap = chunkBlockLines.slice(chunkBlockLines.length - overlapCount);
+
+    // Cap overlap at the budget
+    let overlapCharLen = candidateOverlap.reduce((sum, bl) => sum + bl.content.length + 1, 0);
+    while (candidateOverlap.length > 0 && overlapCharLen > overlapBudgetChars) {
+      candidateOverlap = candidateOverlap.slice(1);
+      overlapCharLen = candidateOverlap.reduce((sum, bl) => sum + bl.content.length + 1, 0);
+    }
+
+    overlapLines = candidateOverlap;
+  }
+
+  return finalChunks;
 }
 
 export async function useGenerateEmbedding(inputText: string, apiKey: string, model: string = DEFAULT_EMBEDDING_MODEL): Promise<number[]> {
@@ -150,9 +470,10 @@ export async function useGenerateEmbedding(inputText: string, apiKey: string, mo
     throw new Error('Embedding API key is not configured. Please set your OpenAI API key in the plugin settings.');
   }
 
-  // Safety truncation for any single chunk that still exceeds the limit
-  const text = inputText.length > MAX_CHUNK_CHARS
-    ? inputText.slice(0, MAX_CHUNK_CHARS)
+  // Safety truncation for any single chunk that still exceeds the model's limit
+  const maxChars = getMaxChunkChars(model);
+  const text = inputText.length > maxChars
+    ? inputText.slice(0, maxChars)
     : inputText;
 
   const controller = new AbortController();
@@ -193,14 +514,45 @@ export async function useGenerateEmbedding(inputText: string, apiKey: string, mo
 
 
 /**
+ * Build the page header string that prefixes each chunk.
+ * Includes page id, name, tags (if any), and optional graph context
+ * (outgoing links and backlinks) for richer semantic context.
+ */
+export function buildPageHeader(
+  pageId: string | number,
+  pageName: string,
+  properties?: Record<string, any>,
+  linkData?: PageLinkData
+): string {
+  let header = `note_id: ${pageId}\nnote_name: ${pageName}\n`;
+  const tags = properties?.tags;
+  if (tags) {
+    const tagList = Array.isArray(tags) ? tags.join(', ') : String(tags);
+    if (tagList) {
+      header += `note_tags: ${tagList}\n`;
+    }
+  }
+  if (linkData?.outgoingLinks && linkData.outgoingLinks.length > 0) {
+    header += `note_links: ${linkData.outgoingLinks.join(', ')}\n`;
+  }
+  if (linkData?.backlinks && linkData.backlinks.length > 0) {
+    header += `note_backlinks: ${linkData.backlinks.join(', ')}\n`;
+  }
+  header += `note_content:\n\n`;
+  return header;
+}
+
+/**
  * Generate embeddings for all pages using block-based chunking.
  * Blocks are grouped into chunks that respect Logseq's block boundaries.
- * Each chunk includes the page header (id, name) for context.
+ * Each chunk includes the page header (id, name, tags) for context.
  */
 export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAULT_EMBEDDING_MODEL): Promise<VectorDBSchemaDynamic[]> {
   const BATCH_SIZE = 5;
+  const maxChunkChars = getMaxChunkChars(model);
   const pages = (await logseq.Editor.getAllPages()) ?? [];
   const allNotesEmbeddings: VectorDBSchemaDynamic[] = [];
+  const crossPageDedup = new CrossPageDeduplicator();
 
   for (let i = 0; i < pages.length; i += BATCH_SIZE) {
     const batch = pages.slice(i, i + BATCH_SIZE);
@@ -208,9 +560,47 @@ export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAU
       batch.map(async (page) => {
         try {
           const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
-          const pageHeader = `note_id: ${page.id}\nnote_name: ${page.name}\nnote_content:\n\n`;
-          const blockLines = await flattenBlocks(blocks);
-          const chunks = groupBlocksIntoChunks(blockLines, pageHeader);
+          const originalLines = await flattenBlocks(blocks);
+
+          // Normalize block content (strip markdown formatting)
+          const normalizedLines = originalLines.map((line) => normalizeBlockContent(line));
+
+          // Deduplicate within-page
+          const withinPageDeduped = deduplicateBlocks(normalizedLines);
+
+          // Deduplicate across pages
+          const crossPageDeduped = withinPageDeduped.filter(
+            (line) => crossPageDedup.tryAdd(line)
+          );
+
+          // Build a mapping from normalized line → original line for heading detection.
+          // identifySemanticGroups() needs original content to detect `#` heading markers.
+          const normalizedToOriginal = new Map<string, string>();
+          for (let idx = 0; idx < originalLines.length; idx++) {
+            const norm = normalizedLines[idx];
+            if (!normalizedToOriginal.has(norm)) {
+              normalizedToOriginal.set(norm, originalLines[idx]);
+            }
+          }
+          const originalForGrouping = crossPageDeduped.map(
+            (norm) => normalizedToOriginal.get(norm) ?? norm
+          );
+
+          // Identify semantic groups using original content (heading markers intact)
+          const semanticBlockLines = identifySemanticGroups(originalForGrouping);
+
+          // Replace BlockLine.content with normalized text for embedding
+          for (let idx = 0; idx < semanticBlockLines.length; idx++) {
+            semanticBlockLines[idx].content = crossPageDeduped[idx];
+          }
+
+          // Extract graph context
+          const outgoingLinks = extractOutgoingLinks(originalLines);
+          const backlinks = await fetchBacklinks(page.name);
+          const linkData: PageLinkData = { outgoingLinks, backlinks };
+
+          const pageHeader = buildPageHeader(page.id, page.name, page.properties, linkData);
+          const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxChunkChars);
 
           const chunkEmbeddings: VectorDBSchemaDynamic[] = [];
           for (let c = 0; c < chunks.length; c++) {
@@ -248,6 +638,10 @@ export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAU
 /**
  * Generate block-based chunk embeddings for a single page.
  * Used by the incremental indexer (checkAndIndexUpdatedPages).
+ *
+ * Pipeline: flatten → normalize → deduplicate (within-page) → semantic group → chunk → embed.
+ * Semantic grouping uses original (pre-normalization) content to detect heading markers,
+ * since normalization strips `#` prefixes.
  */
 export async function getEmbeddingsForPage(
   pageId: string,
@@ -255,11 +649,42 @@ export async function getEmbeddingsForPage(
   pageName: string,
   lastUpdated: number,
   apiKey: string,
-  model: string = DEFAULT_EMBEDDING_MODEL
+  model: string = DEFAULT_EMBEDDING_MODEL,
+  properties?: Record<string, any>,
+  linkData?: PageLinkData
 ): Promise<VectorDBSchemaDynamic[]> {
-  const pageHeader = `note_id: ${pageId}\nnote_name: ${pageName}\nnote_content:\n\n`;
-  const blockLines = await flattenBlocks(blocks);
-  const chunks = groupBlocksIntoChunks(blockLines, pageHeader);
+  const originalLines = await flattenBlocks(blocks);
+
+  // Normalize block content (strip markdown formatting)
+  const normalizedLines = originalLines.map((line) => normalizeBlockContent(line));
+
+  // Deduplicate within-page only (no cross-page scan for incremental indexing)
+  const dedupedLines = deduplicateBlocks(normalizedLines);
+
+  // Build a mapping from normalized line → original line for heading detection.
+  // identifySemanticGroups() needs original content to detect `#` heading markers.
+  const normalizedToOriginal = new Map<string, string>();
+  for (let idx = 0; idx < originalLines.length; idx++) {
+    const norm = normalizedLines[idx];
+    if (!normalizedToOriginal.has(norm)) {
+      normalizedToOriginal.set(norm, originalLines[idx]);
+    }
+  }
+  const originalForGrouping = dedupedLines.map(
+    (norm) => normalizedToOriginal.get(norm) ?? norm
+  );
+
+  // Identify semantic groups using original content (heading markers intact)
+  const semanticBlockLines = identifySemanticGroups(originalForGrouping);
+
+  // Replace BlockLine.content with normalized text for embedding
+  for (let idx = 0; idx < semanticBlockLines.length; idx++) {
+    semanticBlockLines[idx].content = dedupedLines[idx];
+  }
+
+  const pageHeader = buildPageHeader(pageId, pageName, properties, linkData);
+  const maxChunkChars = getMaxChunkChars(model);
+  const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxChunkChars);
   const embeddings: VectorDBSchemaDynamic[] = [];
 
   for (let c = 0; c < chunks.length; c++) {
