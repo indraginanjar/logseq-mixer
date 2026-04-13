@@ -1,8 +1,8 @@
 // File: IndexManager.ts
 
 import { getByID, remove } from "@orama/orama";
-import { DEFAULT_EMBEDDING_MODEL, getEmbeddingsForPage } from "embedManager";
-import { OramaInstance, batchInsertEmbeddings } from "VectorDBManager";
+import { DEFAULT_EMBEDDING_MODEL, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
+import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
 
 let hasHooked = false;
 let currentApiKey = '';
@@ -19,6 +19,23 @@ export function getIsUpdatingSettings(): boolean {
 
 export function setIsUpdatingSettings(value: boolean): void {
   _isUpdatingSettings = value;
+}
+
+/**
+ * Recursively collect all block content strings from a block tree.
+ * Used to extract outgoing links before the full embedding pipeline runs.
+ */
+function collectBlockContent(blocks: any[]): string[] {
+  const lines: string[] = [];
+  for (const block of blocks) {
+    if (block.content) {
+      lines.push(block.content);
+    }
+    if (block.children && block.children.length > 0) {
+      lines.push(...collectBlockContent(block.children));
+    }
+  }
+  return lines;
 }
 
 const isInternalPage = (name: string) => {
@@ -55,13 +72,21 @@ export async function checkAndIndexUpdatedPages(
       try {
         const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
 
+        // Extract graph context for the page
+        const blockContentLines = collectBlockContent(blocks);
+        const outgoingLinks = extractOutgoingLinks(blockContentLines);
+        const backlinks = await fetchBacklinks(page.name);
+        const linkData: PageLinkData = { outgoingLinks, backlinks };
+
         const newEmbeddings = await getEmbeddingsForPage(
           page.id.toString(),
           blocks,
           page.name,
           lastUpdated,
           embeddingApiKey,
-          model
+          model,
+          page.properties,
+          linkData
         );
 
         // Remove old record and any existing chunks for this page

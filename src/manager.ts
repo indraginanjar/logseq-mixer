@@ -1,6 +1,7 @@
 import { clearRefCache, getEmbedingsAllNotes, useGenerateEmbedding } from 'embedManager';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManager';
 import { queryLiteLLM } from 'LLMManager';
+import { rerankWithRRF, type SearchHit } from 'reranker';
 import { batchInsertEmbeddings, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 
 // Global variable to store conversation history
@@ -37,10 +38,17 @@ export async function handleQuery(query: string, settings: any): Promise<string>
     const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel);
     const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
     
-    // Append vector search context if available.
+    // Rerank vector search results using RRF before building context.
     if (vectorResult.hits && vectorResult.hits.length > 0) {
-      vectorResult.hits.forEach(hit => {
-        vectorContext += hit.document.content + "\n\n";
+      const searchHits: SearchHit[] = vectorResult.hits.map(hit => ({
+        id: hit.document.id as string,
+        content: hit.document.content as string,
+        score: hit.score,
+      }));
+
+      const reranked = rerankWithRRF(searchHits, query);
+      reranked.forEach(hit => {
+        vectorContext += hit.content + "\n\n";
       });
     }
   } catch (err) {
