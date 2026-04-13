@@ -6,6 +6,30 @@ export type VectorDBSchemaDynamic = {
   embedding: number[]; // embedding as a number array
 };
 
+export interface EmbeddingModelConfig {
+  name: string;
+  dimensions: number;
+  maxTokens: number;
+}
+
+export const EMBEDDING_MODELS: Record<string, EmbeddingModelConfig> = {
+  'text-embedding-ada-002': { name: 'text-embedding-ada-002', dimensions: 1536, maxTokens: 8191 },
+  'text-embedding-3-small': { name: 'text-embedding-3-small', dimensions: 1536, maxTokens: 8191 },
+  'text-embedding-3-large': { name: 'text-embedding-3-large', dimensions: 3072, maxTokens: 8191 },
+};
+
+export const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
+
+export function getDimensionsForModel(model: string): number {
+  const config = EMBEDDING_MODELS[model];
+  if (!config) throw new Error(`Unknown embedding model: ${model}`);
+  return config.dimensions;
+}
+
+export function isValidEmbeddingModel(model: string): boolean {
+  return model in EMBEDDING_MODELS;
+}
+
 // text-embedding-ada-002 has an 8191 token limit.
 // Max chars per chunk, leaving room for page metadata header.
 const MAX_CHUNK_CHARS = 24000;
@@ -121,7 +145,11 @@ export function groupBlocksIntoChunks(blockLines: string[], pageHeader: string):
   return chunks;
 }
 
-export async function useGenerateEmbedding(inputText: string, apiKey: string): Promise<number[]> {
+export async function useGenerateEmbedding(inputText: string, apiKey: string, model: string = DEFAULT_EMBEDDING_MODEL): Promise<number[]> {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Embedding API key is not configured. Please set your OpenAI API key in the plugin settings.');
+  }
+
   // Safety truncation for any single chunk that still exceeds the limit
   const text = inputText.length > MAX_CHUNK_CHARS
     ? inputText.slice(0, MAX_CHUNK_CHARS)
@@ -138,7 +166,7 @@ export async function useGenerateEmbedding(inputText: string, apiKey: string): P
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'text-embedding-ada-002',
+        model,
         input: text,
       }),
       signal: controller.signal,
@@ -169,7 +197,7 @@ export async function useGenerateEmbedding(inputText: string, apiKey: string): P
  * Blocks are grouped into chunks that respect Logseq's block boundaries.
  * Each chunk includes the page header (id, name) for context.
  */
-export async function getEmbedingsAllNotes(apiKey: string): Promise<VectorDBSchemaDynamic[]> {
+export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAULT_EMBEDDING_MODEL): Promise<VectorDBSchemaDynamic[]> {
   const BATCH_SIZE = 5;
   const pages = (await logseq.Editor.getAllPages()) ?? [];
   const allNotesEmbeddings: VectorDBSchemaDynamic[] = [];
@@ -178,30 +206,35 @@ export async function getEmbedingsAllNotes(apiKey: string): Promise<VectorDBSche
     const batch = pages.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.all(
       batch.map(async (page) => {
-        const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
-        const pageHeader = `note_id: ${page.id}\nnote_name: ${page.name}\nnote_content:\n\n`;
-        const blockLines = await flattenBlocks(blocks);
-        const chunks = groupBlocksIntoChunks(blockLines, pageHeader);
+        try {
+          const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
+          const pageHeader = `note_id: ${page.id}\nnote_name: ${page.name}\nnote_content:\n\n`;
+          const blockLines = await flattenBlocks(blocks);
+          const chunks = groupBlocksIntoChunks(blockLines, pageHeader);
 
-        const chunkEmbeddings: VectorDBSchemaDynamic[] = [];
-        for (let c = 0; c < chunks.length; c++) {
-          try {
-            const chunkId = chunks.length === 1
-              ? page.id.toString()
-              : `${page.id}_chunk_${c}`;
-            const embedding: VectorDBSchemaDynamic = {
-              id: chunkId,
-              lastUpdated: page.updatedAt ?? 0,
-              content: chunks[c],
-              embedding: await useGenerateEmbedding(chunks[c], apiKey)
-            };
-            chunkEmbeddings.push(embedding);
-          } catch (err: any) {
-            console.error('Embedding failed for page:', page.name, 'chunk:', c, err);
-            throw new Error(`Embedding failed for page "${page.name}": ${err.message || 'Unknown error. Verify your Embedding OpenAI API key in the settings.'}`);
+          const chunkEmbeddings: VectorDBSchemaDynamic[] = [];
+          for (let c = 0; c < chunks.length; c++) {
+            try {
+              const chunkId = chunks.length === 1
+                ? page.id.toString()
+                : `${page.id}_chunk_${c}`;
+              const embedding: VectorDBSchemaDynamic = {
+                id: chunkId,
+                lastUpdated: page.updatedAt ?? 0,
+                content: chunks[c],
+                embedding: await useGenerateEmbedding(chunks[c], apiKey, model)
+              };
+              chunkEmbeddings.push(embedding);
+            } catch (err: any) {
+              console.error('Embedding failed for page:', page.name, 'chunk:', c, err);
+              // Continue batch — don't abort other pages
+            }
           }
+          return chunkEmbeddings;
+        } catch (err: any) {
+          console.error(`Embedding failed for page "${page.name}":`, err);
+          return []; // Skip this page, continue batch
         }
-        return chunkEmbeddings;
       })
     );
     for (const pageChunks of batchResults) {
@@ -221,7 +254,8 @@ export async function getEmbeddingsForPage(
   blocks: any[],
   pageName: string,
   lastUpdated: number,
-  apiKey: string
+  apiKey: string,
+  model: string = DEFAULT_EMBEDDING_MODEL
 ): Promise<VectorDBSchemaDynamic[]> {
   const pageHeader = `note_id: ${pageId}\nnote_name: ${pageName}\nnote_content:\n\n`;
   const blockLines = await flattenBlocks(blocks);
@@ -236,7 +270,7 @@ export async function getEmbeddingsForPage(
       id: chunkId,
       lastUpdated,
       content: chunks[c],
-      embedding: await useGenerateEmbedding(chunks[c], apiKey)
+      embedding: await useGenerateEmbedding(chunks[c], apiKey, model)
     };
     embeddings.push(embedding);
   }

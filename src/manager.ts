@@ -1,4 +1,4 @@
-import { getEmbedingsAllNotes, useGenerateEmbedding } from 'embedManager';
+import { clearRefCache, getEmbedingsAllNotes, useGenerateEmbedding } from 'embedManager';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManager';
 import { queryLiteLLM } from 'LLMManager';
 import { batchInsertEmbeddings, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
@@ -11,18 +11,18 @@ const MAX_HISTORY_LENGTH = 6;
 export async function indexEntireLogSeq(settings: any) {
   clearRefCache();
   if (settings.indexingMode === 'full') {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, true);
-    const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey);
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, true, settings.embeddingModel);
+    const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey, settings.embeddingModel);
     await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings);
   } else {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings);
-    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey);
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel);
+    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel);
   }
 }
 
 export async function enableAutoIndexer(settings: any) {
-  const oramaDatabaseInstance = await loadVectorDatabase(settings);
-  startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey);
+  const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel);
+  startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel);
 }
 
 export async function handleQuery(query: string, settings: any): Promise<string> {
@@ -33,8 +33,8 @@ export async function handleQuery(query: string, settings: any): Promise<string>
 
   // Wrap vector search in try/catch to prevent indexing issues from blocking LLM query.
   try {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings);
-    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey);
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel);
+    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel);
     const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
     
     // Append vector search context if available.
