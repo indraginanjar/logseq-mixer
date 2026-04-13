@@ -1,7 +1,7 @@
 // File: IndexManager.ts
 
 import { Orama, getByID, remove } from "@orama/orama";
-import { VectorDBSchemaDynamic, useGenerateEmbedding } from "embedManager";
+import { getEmbeddingsForPage } from "embedManager";
 import { VectorDBSchema, batchInsertEmbeddings } from "VectorDBManager";
 
 let hasHooked = false;
@@ -52,27 +52,28 @@ export async function checkAndIndexUpdatedPages(
 
       try {
         const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
-        let wholePageContent = `note_id: ${page.id}\nnote_name: ${page.name}\nnote_content:\n\n`;
-        for (const block of blocks) {
-          if (block.content) {
-            wholePageContent += `- ${block.content}\n`;
-          }
-        }
 
-        const embedding = await useGenerateEmbedding(wholePageContent, embeddingApiKey);
-
-        const newEmbedding: VectorDBSchemaDynamic = {
-          id: page.id.toString(),
+        const newEmbeddings = await getEmbeddingsForPage(
+          page.id.toString(),
+          blocks,
+          page.name,
           lastUpdated,
-          content: wholePageContent,
-          embedding,
-        };
+          embeddingApiKey
+        );
 
+        // Remove old record and any existing chunks for this page
         if (dbRecord?.id) {
           await remove(oramaInstance, dbRecord.id);
         }
+        // Remove old chunks (try chunk_0 through chunk_99 as a safe upper bound)
+        for (let c = 0; c < 100; c++) {
+          const chunkId = `${page.id}_chunk_${c}`;
+          const chunkRecord = getByID(oramaInstance, chunkId);
+          if (!chunkRecord) break;
+          await remove(oramaInstance, chunkId);
+        }
 
-        await batchInsertEmbeddings(oramaInstance, [newEmbedding]);
+        await batchInsertEmbeddings(oramaInstance, newEmbeddings);
       } catch (error) {
         console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
       }

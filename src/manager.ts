@@ -9,6 +9,7 @@ const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }
 const MAX_HISTORY_LENGTH = 6;
 
 export async function indexEntireLogSeq(settings: any) {
+  clearRefCache();
   if (settings.indexingMode === 'full') {
     const oramaDatabaseInstance = await loadVectorDatabase(settings, true);
     const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey);
