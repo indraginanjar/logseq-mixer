@@ -3,12 +3,14 @@
 import { getByID, remove } from "@orama/orama";
 import { DEFAULT_EMBEDDING_MODEL, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
+import type { StorageProvider } from "./storage/StorageProvider";
 
 let hasHooked = false;
 let currentApiKey = '';
 let currentEmbeddingKey = '';
 let currentModel = '';
 let currentOramaInstance: OramaInstance;
+let currentStorageProvider: StorageProvider;
 let indexingInProgress = false;
 
 let _isUpdatingSettings = false;
@@ -52,7 +54,8 @@ export async function checkAndIndexUpdatedPages(
   apiKey: string,
   oramaInstance: OramaInstance,
   embeddingApiKey: string,
-  model: string = DEFAULT_EMBEDDING_MODEL
+  model: string = DEFAULT_EMBEDDING_MODEL,
+  storageProvider: StorageProvider
 ): Promise<void> {
   if (indexingInProgress) return;
 
@@ -101,7 +104,7 @@ export async function checkAndIndexUpdatedPages(
           await remove(oramaInstance, chunkId);
         }
 
-        await batchInsertEmbeddings(oramaInstance, newEmbeddings);
+        await batchInsertEmbeddings(oramaInstance, newEmbeddings, storageProvider);
       } catch (error) {
         console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
       }
@@ -117,12 +120,14 @@ export function startPageIndexingOnChange(
   apiKey: string,
   oramaInstance: OramaInstance,
   embeddingApiKey: string,
-  model: string = DEFAULT_EMBEDDING_MODEL
+  model: string = DEFAULT_EMBEDDING_MODEL,
+  storageProvider: StorageProvider
 ): void {
   currentApiKey = apiKey;
   currentEmbeddingKey = embeddingApiKey;
   currentModel = model;
   currentOramaInstance = oramaInstance;
+  currentStorageProvider = storageProvider;
 
   if (hasHooked) return;
   hasHooked = true;
@@ -130,7 +135,7 @@ export function startPageIndexingOnChange(
   logseq.DB.onChanged(async () => {
     if (getIsUpdatingSettings()) return;
     try {
-      await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel);
+      await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider);
     } catch (err) {
       console.error('Error indexing updated pages:', err);
     }

@@ -65,6 +65,15 @@ const settings: SettingSchemaDesc[] = [
     default: 'incremental',
     enumChoices: ['incremental', 'full'],
     enumPicker: 'select',
+  },
+  {
+    key: 'storageBackend',
+    type: 'enum',
+    title: 'Storage Backend',
+    description: 'Where to store the vector database. "sqlite" (recommended) stores data in a local SQLite file for better performance and external access. "settings" is the legacy option that stores data in Logseq plugin settings.',
+    default: 'sqlite',
+    enumChoices: ['sqlite', 'settings'],
+    enumPicker: 'select',
   }
 ];
 

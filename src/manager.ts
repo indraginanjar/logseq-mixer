@@ -3,30 +3,31 @@ import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManag
 import { queryLiteLLM } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
 import { batchInsertEmbeddings, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
+import type { StorageProvider } from './storage/StorageProvider';
 
 // Global variable to store conversation history
 const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = [];
 // Set maximum number of history messages to include in the prompt (e.g., last 6 messages)
 const MAX_HISTORY_LENGTH = 6;
 
-export async function indexEntireLogSeq(settings: any) {
+export async function indexEntireLogSeq(settings: any, storageProvider: StorageProvider) {
   clearRefCache();
   if (settings.indexingMode === 'full') {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, true, settings.embeddingModel);
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, true, settings.embeddingModel, storageProvider);
     const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey, settings.embeddingModel);
-    await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings);
+    await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings, storageProvider);
   } else {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel);
-    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel);
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
+    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
   }
 }
 
-export async function enableAutoIndexer(settings: any) {
-  const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel);
-  startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel);
+export async function enableAutoIndexer(settings: any, storageProvider: StorageProvider) {
+  const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
+  startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
 }
 
-export async function handleQuery(query: string, settings: any): Promise<string> {
+export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider): Promise<string> {
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
@@ -34,7 +35,7 @@ export async function handleQuery(query: string, settings: any): Promise<string>
 
   // Wrap vector search in try/catch to prevent indexing issues from blocking LLM query.
   try {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel);
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
     const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel);
     const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
     

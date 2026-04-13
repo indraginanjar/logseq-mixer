@@ -1,17 +1,20 @@
 import { create, insertMultiple, search, type Orama } from "@orama/orama";
 import { persist, restore } from "@orama/plugin-data-persistence";
 import { DEFAULT_EMBEDDING_MODEL, VectorDBSchemaDynamic, getDimensionsForModel } from "embedManager";
-import { setIsUpdatingSettings } from "indexManager";
+import type { StorageProvider } from "./storage/StorageProvider";
 
 // Use `any` for the Orama type parameter because the vector dimension is dynamic
 // (e.g. 'vector[1536]' or 'vector[3072]') and cannot be expressed as a static string literal type.
 export type OramaInstance = Orama<any>;
 
-export async function loadVectorDatabase(settings: any, forceNew: boolean = false, model: string = DEFAULT_EMBEDDING_MODEL): Promise<OramaInstance> {
+export async function loadVectorDatabase(settings: any, forceNew: boolean = false, model: string = DEFAULT_EMBEDDING_MODEL, storageProvider: StorageProvider): Promise<OramaInstance> {
 
   // Detect model change — if the model has changed (or lastEmbeddingModel is missing), force a fresh database
-  const modelChanged = !settings.lastEmbeddingModel || settings.lastEmbeddingModel !== model;
+  // Only force new if lastEmbeddingModel is explicitly set to a DIFFERENT model.
+  // If lastEmbeddingModel is missing/undefined, we should try to load existing data first.
+  const modelChanged = settings.lastEmbeddingModel && settings.lastEmbeddingModel !== model;
   if (modelChanged) {
+    console.info(`[loadVectorDatabase] Model changed from "${settings.lastEmbeddingModel}" to "${model}". Forcing new DB.`);
     forceNew = true;
   }
 
@@ -30,23 +33,28 @@ export async function loadVectorDatabase(settings: any, forceNew: boolean = fals
     });
   }
 
-  if (!settings.VectorDBLogseqCopilot || settings.VectorDBLogseqCopilot === ''|| forceNew) {
+  const existingData = await storageProvider.load();
+
+  if (!existingData || forceNew) {
+    console.info(`[loadVectorDatabase] Creating fresh DB. existingData=${!!existingData}, forceNew=${forceNew}`);
     const freshDB = await createNewDatabase();
     const jsonIndex = await persist(freshDB, 'json');
-    await logseq.updateSettings({VectorDBLogseqCopilot: jsonIndex, lastEmbeddingModel: model,});
+    await storageProvider.save(jsonIndex as string);
+    await logseq.updateSettings({ lastEmbeddingModel: model });
     oramaInstance = await restore('json', jsonIndex);
   }
 
   else {
-
+    console.info('[loadVectorDatabase] Restoring existing DB from storage.');
     try {
-      oramaInstance = await restore('json', settings.VectorDBLogseqCopilot);
+      oramaInstance = await restore('json', existingData);
     }
     catch (error) {
-      console.log("Error: database couldn't be recovered from settings. Resetting...");
+      console.log("Error: database couldn't be recovered from storage. Resetting...");
       const freshDB = await createNewDatabase();
       const jsonIndex = await persist(freshDB, 'json');
-      await logseq.updateSettings({VectorDBLogseqCopilot: jsonIndex, lastEmbeddingModel: model,});
+      await storageProvider.save(jsonIndex as string);
+      await logseq.updateSettings({ lastEmbeddingModel: model });
       oramaInstance = await restore('json', jsonIndex);
     }
   }
@@ -54,15 +62,10 @@ export async function loadVectorDatabase(settings: any, forceNew: boolean = fals
   return oramaInstance;
 }
 
-export async function batchInsertEmbeddings(oramaDBInstance: OramaInstance, Embedings: VectorDBSchemaDynamic[]) {
+export async function batchInsertEmbeddings(oramaDBInstance: OramaInstance, Embedings: VectorDBSchemaDynamic[], storageProvider: StorageProvider) {
   await insertMultiple(oramaDBInstance,Embedings);
   const jsonIndex = await persist(oramaDBInstance, 'json');
-  setIsUpdatingSettings(true);
-  try {
-    await logseq.updateSettings({VectorDBLogseqCopilot: jsonIndex,});
-  } finally {
-    setIsUpdatingSettings(false);
-  }
+  await storageProvider.save(jsonIndex as string);
 }
 
 export async function vectorSearchOramaDB(oramaDBInstance: OramaInstance, vector: number[]) {
