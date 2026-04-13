@@ -1,4 +1,5 @@
 import '@logseq/libs';
+import { setIsUpdatingSettings } from 'indexManager';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { RecoilRoot } from 'recoil';
@@ -20,8 +21,7 @@ async function main() {
   const storageProvider = await createStorageProvider(storageBackend);
 
   // Migrate data when backend changed, or on first run upgrading to sqlite
-  // (lastStorageBackend is undefined on first run after the update, so we
-  // attempt migration from settings to pick up any pre-existing embeddings)
+  // Only migrate if the SQLite provider has no data (avoid wiping existing data)
   const needsMigration =
     (lastStorageBackend && lastStorageBackend !== storageBackend) ||
     (!lastStorageBackend && storageBackend === 'sqlite');
@@ -29,19 +29,30 @@ async function main() {
   if (needsMigration) {
     const oldBackend = (lastStorageBackend as 'sqlite' | 'settings') ?? 'settings';
     if (oldBackend !== storageBackend) {
-      console.info(`Migrating storage from "${oldBackend}" to "${storageBackend}"...`);
-      try {
-        const oldProvider = await createStorageProvider(oldBackend);
-        await migrateStorage(oldProvider, storageProvider);
-        console.info('Storage migration completed.');
-      } catch (err) {
-        console.error('Storage migration failed:', err);
+      // Only migrate if the target provider is empty
+      const existingTargetData = await storageProvider.load();
+      if (!existingTargetData) {
+        console.info(`Migrating storage from "${oldBackend}" to "${storageBackend}"...`);
+        try {
+          const oldProvider = await createStorageProvider(oldBackend);
+          await migrateStorage(oldProvider, storageProvider);
+          console.info('Storage migration completed.');
+        } catch (err) {
+          console.error('Storage migration failed:', err);
+        }
+      } else {
+        console.info('Target storage already has data, skipping migration.');
       }
     }
   }
 
   // Track the current backend so we can detect changes on next startup
-  await logseq.updateSettings({ lastStorageBackend: storageBackend });
+  setIsUpdatingSettings(true);
+  try {
+    await logseq.updateSettings({ lastStorageBackend: storageBackend });
+  } finally {
+    setIsUpdatingSettings(false);
+  }
 
   const { preferredThemeMode } = await logseq.App.getUserConfigs();
 

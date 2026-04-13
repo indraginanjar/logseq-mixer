@@ -1,8 +1,8 @@
-import { clearRefCache, getEmbedingsAllNotes, useGenerateEmbedding } from 'embedManager';
+import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManager';
 import { queryLiteLLM } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
-import { batchInsertEmbeddings, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
+import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 import type { StorageProvider } from './storage/StorageProvider';
 
 // Global variable to store conversation history
@@ -12,14 +12,10 @@ const MAX_HISTORY_LENGTH = 6;
 
 export async function indexEntireLogSeq(settings: any, storageProvider: StorageProvider) {
   clearRefCache();
-  if (settings.indexingMode === 'full') {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, true, settings.embeddingModel, storageProvider);
-    const AllEmbeddings = await getEmbedingsAllNotes(settings.EmbeddingApiKey, settings.embeddingModel);
-    await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings, storageProvider);
-  } else {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
-    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
-  }
+  // Always load existing DB — never wipe it. Both modes index incrementally
+  // so the user can query while indexing is in progress.
+  const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
+  await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
 }
 
 export async function enableAutoIndexer(settings: any, storageProvider: StorageProvider) {
@@ -35,10 +31,16 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Wrap vector search in try/catch to prevent indexing issues from blocking LLM query.
   try {
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
+    const oramaDatabaseInstance = await getOrLoadVectorDatabase(settings, settings.embeddingModel, storageProvider);
     const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel);
+    
+    console.info(`[handleQuery] Query embedding dimensions: ${queryEmbedding?.length}, model: ${settings.embeddingModel}`);
+    console.info(`[handleQuery] Embedding sample (first 5): ${queryEmbedding?.slice(0, 5)}`);
+    
     const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
     
+    console.info(`[handleQuery] Vector search returned ${vectorResult.hits?.length ?? 0} hits (count: ${vectorResult.count})`);
+
     // Rerank vector search results using RRF before building context.
     if (vectorResult.hits && vectorResult.hits.length > 0) {
       const searchHits: SearchHit[] = vectorResult.hits.map(hit => ({
@@ -48,14 +50,19 @@ export async function handleQuery(query: string, settings: any, storageProvider:
       }));
 
       const reranked = rerankWithRRF(searchHits, query);
+      console.info(`[handleQuery] After reranking: ${reranked.length} results`);
       reranked.forEach(hit => {
         vectorContext += hit.content + "\n\n";
       });
     }
   } catch (err) {
     console.error("Vector search failed, proceeding without additional context:", err);
-    // Optionally, you could update vectorContext with a note or leave it empty.
     vectorContext = "";
+  }
+
+  console.info(`[handleQuery] vectorContext length: ${vectorContext.length} chars`);
+  if (vectorContext) {
+    console.info(`[handleQuery] vectorContext preview: ${vectorContext.slice(0, 200)}...`);
   }
 
   // Construct prompt starting with your base prompt.
