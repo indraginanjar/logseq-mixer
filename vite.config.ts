@@ -9,6 +9,7 @@ export default defineConfig({
   build: {
     target: 'esnext',
     minify: 'esbuild',
+    chunkSizeWarningLimit: 600,
   },
   test: {
     globals: true,
