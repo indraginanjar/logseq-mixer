@@ -35,6 +35,15 @@ const settings: SettingSchemaDesc[] = [
     default: 'sk-proj-1234',
   },
   {
+    key: 'embeddingModel',
+    type: 'enum',
+    title: 'Embedding Model',
+    description: 'Choose the OpenAI embedding model. Changing this will re-create the vector database.',
+    default: 'text-embedding-3-small',
+    enumChoices: ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'],
+    enumPicker: 'select',
+  },
+  {
     key: 'LiteLLMLink',
     type: 'string',
     title: 'LiteLLM api link',

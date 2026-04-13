@@ -1,13 +1,14 @@
 // File: IndexManager.ts
 
-import { Orama, getByID, remove } from "@orama/orama";
-import { getEmbeddingsForPage } from "embedManager";
-import { VectorDBSchema, batchInsertEmbeddings } from "VectorDBManager";
+import { getByID, remove } from "@orama/orama";
+import { DEFAULT_EMBEDDING_MODEL, getEmbeddingsForPage } from "embedManager";
+import { OramaInstance, batchInsertEmbeddings } from "VectorDBManager";
 
 let hasHooked = false;
 let currentApiKey = '';
 let currentEmbeddingKey = '';
-let currentOramaInstance: Orama<VectorDBSchema>;
+let currentModel = '';
+let currentOramaInstance: OramaInstance;
 let indexingInProgress = false;
 
 let _isUpdatingSettings = false;
@@ -32,8 +33,9 @@ const isInternalPage = (name: string) => {
 
 export async function checkAndIndexUpdatedPages(
   apiKey: string,
-  oramaInstance: Orama<VectorDBSchema>,
-  embeddingApiKey: string
+  oramaInstance: OramaInstance,
+  embeddingApiKey: string,
+  model: string = DEFAULT_EMBEDDING_MODEL
 ): Promise<void> {
   if (indexingInProgress) return;
 
@@ -58,7 +60,8 @@ export async function checkAndIndexUpdatedPages(
           blocks,
           page.name,
           lastUpdated,
-          embeddingApiKey
+          embeddingApiKey,
+          model
         );
 
         // Remove old record and any existing chunks for this page
@@ -87,11 +90,13 @@ export async function checkAndIndexUpdatedPages(
 
 export function startPageIndexingOnChange(
   apiKey: string,
-  oramaInstance: Orama<VectorDBSchema>,
-  embeddingApiKey: string
+  oramaInstance: OramaInstance,
+  embeddingApiKey: string,
+  model: string = DEFAULT_EMBEDDING_MODEL
 ): void {
   currentApiKey = apiKey;
   currentEmbeddingKey = embeddingApiKey;
+  currentModel = model;
   currentOramaInstance = oramaInstance;
 
   if (hasHooked) return;
@@ -100,7 +105,7 @@ export function startPageIndexingOnChange(
   logseq.DB.onChanged(async () => {
     if (getIsUpdatingSettings()) return;
     try {
-      await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey);
+      await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel);
     } catch (err) {
       console.error('Error indexing updated pages:', err);
     }

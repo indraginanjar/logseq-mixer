@@ -1,22 +1,23 @@
 import { create, insert, search } from '@orama/orama';
-import { useGenerateEmbedding } from 'embedManager';
+import { DEFAULT_EMBEDDING_MODEL, getDimensionsForModel, useGenerateEmbedding } from 'embedManager';
 // Define your schema for the documents you want to index
 
 
-export async function checkIfVectorDBIndexed(embeddingsApiKey: string): Promise<boolean> {
+export async function checkIfVectorDBIndexed(embeddingsApiKey: string, model: string = DEFAULT_EMBEDDING_MODEL): Promise<boolean> {
   try {
     // Create an index (or connect to one if you have persistence)
+    const dimensions = getDimensionsForModel(model);
     const oramaIndex = create({ 
       schema:{
         id: 'string',
         content: 'string',
         // If you have vector embeddings, you can store them as an array
-        embedding: "vector[1536]"
+        embedding: `vector[${dimensions}]`
       },
       id: "main-orama-db",
      });
     console.log('Orama index created:', oramaIndex);
-    const newVector = await useGenerateEmbedding("This is a test note.",embeddingsApiKey);
+    const newVector = await useGenerateEmbedding("This is a test note.",embeddingsApiKey, model);
     insert(oramaIndex, {
       content:"This is a test note.",
       embedding:newVector
@@ -24,7 +25,7 @@ export async function checkIfVectorDBIndexed(embeddingsApiKey: string): Promise<
     const searchResult = search(oramaIndex, {
       mode: "vector",
       vector: {
-        value: await useGenerateEmbedding("This is note.",embeddingsApiKey),
+        value: await useGenerateEmbedding("This is note.",embeddingsApiKey, model),
         property: "embedding",
       },
       similarity: 0.85, // Minimum similarity. Defaults to `0.8`

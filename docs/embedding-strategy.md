@@ -2,14 +2,32 @@
 
 ## Overview
 
-Logseq Composer uses OpenAI's `text-embedding-ada-002` model to generate vector embeddings for all user notes. These embeddings power semantic search via RAG (Retrieval-Augmented Generation), allowing the LLM to find and reference relevant notes when answering queries.
+Logseq Composer uses OpenAI embedding models to generate vector embeddings for all user notes. The embedding model is configurable via plugin settings, with three supported models to balance cost, speed, and quality. These embeddings power semantic search via RAG (Retrieval-Augmented Generation), allowing the LLM to find and reference relevant notes when answering queries.
 
 ## Embedding Model
 
-- **Model**: `text-embedding-ada-002`
-- **Vector dimensions**: 1536
-- **Max token limit**: 8,191 tokens
+The plugin supports three OpenAI embedding models:
+
+| Model | Dimensions | Max Tokens | Cost (per 1M tokens) |
+|-------|-----------|------------|---------------------|
+| text-embedding-ada-002 | 1536 | 8,191 | ~$0.10 |
+| text-embedding-3-small (default) | 1536 | 8,191 | ~$0.02 |
+| text-embedding-3-large | 3072 | 8,191 | ~$0.13 |
+
+The model is configurable via the `embeddingModel` plugin setting. The default is `text-embedding-3-small`.
+
 - **Max input chars**: 24,000 characters per chunk (safety limit to stay within token limit)
+
+## Model Change Behavior
+
+When the user changes the embedding model in plugin settings:
+
+1. On the next database load, the plugin compares the current `embeddingModel` setting against the persisted `lastEmbeddingModel`
+2. If they differ (or `lastEmbeddingModel` is missing), a fresh database is created with the new model's vector dimensions
+3. All existing embeddings are discarded — the user must re-index
+4. This applies even when switching between models with the same dimension (e.g., ada-002 → 3-small), because embeddings from different models are not comparable
+
+The `lastEmbeddingModel` value is persisted in plugin settings alongside the database.
 
 ## Vector Database
 
@@ -20,7 +38,7 @@ The plugin uses [Orama](https://github.com/oramasearch/orama) as an in-memory ve
 | id          | string         | Page ID or `{pageId}_chunk_{n}` for multi-chunk pages |
 | content     | string         | Block content for this chunk         |
 | lastUpdated | number         | Timestamp of last page update        |
-| embedding   | vector[1536]   | 1536-dimensional embedding vector    |
+| embedding   | vector[{dimensions}] | Embedding vector sized to selected model (1536 or 3072) |
 
 ### Persistence
 
@@ -108,7 +126,7 @@ A per-run cache prevents redundant `logseq.Editor.getBlock()` calls for the same
 
 When the user sends a query:
 
-1. The query text is embedded using the same `text-embedding-ada-002` model
+1. The query text is embedded using the selected embedding model
 2. The embedding is searched against the Orama database using vector similarity
 3. Search parameters:
    - **Similarity threshold**: 0.65 (minimum cosine similarity)
@@ -157,7 +175,7 @@ If vector search fails for any reason, the query proceeds without additional con
      ▼                    ▼
  ┌───────────────────────────────────────┐
  │      useGenerateEmbedding()           │
- │  (OpenAI text-embedding-ada-002)      │
+ │  (OpenAI — selected model)            │
  │  - 30s timeout                        │
  │  - 24,000 char safety limit           │
  └──────────────┬────────────────────────┘
@@ -179,4 +197,4 @@ If vector search fails for any reason, the query proceeds without additional con
 | `src/VectorDBManager.ts` | Database CRUD, persistence, vector search                  |
 | `src/indexManager.ts`  | Incremental indexing, auto-index on change, re-index guard   |
 | `src/manager.ts`       | Orchestration: manual re-index, auto-indexer, query handling |
-| `src/settings.ts`      | Plugin settings schema including indexing mode               |
+| `src/settings.ts`      | Plugin settings schema including indexing mode and embedding model selection |
