@@ -7,6 +7,7 @@ import { useRecoilValue } from 'recoil';
 import { useAppVisible } from './hooks/useAppVisible';
 import { settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
+import type { StorageProvider } from './storage/StorageProvider';
 // Overlay to dim the background
 const Overlay = styled('div', {
   position: 'fixed',
@@ -129,11 +130,25 @@ const IndexDBButton = styled('button', {
   marginTop: '8px',
 });
 
+// Export DB button
+const ExportDBButton = styled('button', {
+  backgroundColor: '#6c757d',
+  border: 'none',
+  borderRadius: '4px',
+  padding: '8px 16px',
+  cursor: 'pointer',
+  color: '#fff',
+  fontSize: '1rem',
+  transition: 'background-color 0.2s',
+  '&:hover': { backgroundColor: '#545b62' },
+});
+
 type Props = {
   themeMode: AppUserConfigs['preferredThemeMode'];
+  storageProvider: StorageProvider;
 };
 
-export function App({ themeMode: initialThemeMode }: Props) {
+export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isVisible = useAppVisible();
@@ -149,7 +164,7 @@ export function App({ themeMode: initialThemeMode }: Props) {
   // Auto-scroll to bottom when messages update.
   useEffect(() => {
     if (settings) {
-      enableAutoIndexer(settings);
+      enableAutoIndexer(settings, storageProvider);
     }
   }, [settings]); 
   
@@ -170,7 +185,7 @@ export function App({ themeMode: initialThemeMode }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const assistantResponse = await handleQuery(inputMessage.trim(), settings);
+      const assistantResponse = await handleQuery(inputMessage.trim(), settings, storageProvider);
       const assistantMessage: ChatMessage = {
         id: Date.now() + '_assistant',
         content: assistantResponse,
@@ -202,7 +217,7 @@ export function App({ themeMode: initialThemeMode }: Props) {
     setError(null);
     try {
       console.log('Indexing started...');
-      await indexEntireLogSeq(settings);
+      await indexEntireLogSeq(settings, storageProvider);
       console.log('Indexing done!');
     } catch (err: any) {
       console.error('Indexing error:', err);
@@ -254,9 +269,16 @@ export function App({ themeMode: initialThemeMode }: Props) {
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
               </svg>
             </SendButton>
-            <IndexDBButton onClick={handleIndexDB} disabled={isIndexing}>
-              {isIndexing ? 'Indexing...' : 'Re-Index DB'}
-            </IndexDBButton>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {storageProvider.exportToFile && (
+                <ExportDBButton onClick={() => storageProvider.exportToFile?.()}>
+                  Export DB
+                </ExportDBButton>
+              )}
+              <IndexDBButton onClick={handleIndexDB} disabled={isIndexing}>
+                {isIndexing ? 'Indexing...' : 'Re-Index DB'}
+              </IndexDBButton>
+            </div>
           </div>
         </InputArea>
       </ChatPanel>

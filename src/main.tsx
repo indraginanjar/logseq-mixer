@@ -5,17 +5,50 @@ import { RecoilRoot } from 'recoil';
 import 'VectorDBManager';
 import App from './App';
 import settings from './settings';
+import { createStorageProvider } from './storage/createStorageProvider';
+import { migrateStorage } from './storage/migrate';
 
 async function main() {
   const key = logseq.baseInfo.id;
   console.info(`${key}: MAIN`);
+
+  // Read storage backend setting (default to 'sqlite' on first run)
+  const storageBackend = (logseq.settings?.storageBackend as 'sqlite' | 'settings') ?? 'sqlite';
+  const lastStorageBackend = logseq.settings?.lastStorageBackend as string | undefined;
+
+  // Create the active storage provider
+  const storageProvider = await createStorageProvider(storageBackend);
+
+  // Migrate data when backend changed, or on first run upgrading to sqlite
+  // (lastStorageBackend is undefined on first run after the update, so we
+  // attempt migration from settings to pick up any pre-existing embeddings)
+  const needsMigration =
+    (lastStorageBackend && lastStorageBackend !== storageBackend) ||
+    (!lastStorageBackend && storageBackend === 'sqlite');
+
+  if (needsMigration) {
+    const oldBackend = (lastStorageBackend as 'sqlite' | 'settings') ?? 'settings';
+    if (oldBackend !== storageBackend) {
+      console.info(`Migrating storage from "${oldBackend}" to "${storageBackend}"...`);
+      try {
+        const oldProvider = await createStorageProvider(oldBackend);
+        await migrateStorage(oldProvider, storageProvider);
+        console.info('Storage migration completed.');
+      } catch (err) {
+        console.error('Storage migration failed:', err);
+      }
+    }
+  }
+
+  // Track the current backend so we can detect changes on next startup
+  await logseq.updateSettings({ lastStorageBackend: storageBackend });
 
   const { preferredThemeMode } = await logseq.App.getUserConfigs();
 
   ReactDOM.render(
     <React.StrictMode>
       <RecoilRoot>
-        <App themeMode={preferredThemeMode} />
+        <App themeMode={preferredThemeMode} storageProvider={storageProvider} />
       </RecoilRoot>
     </React.StrictMode>,
     document.getElementById('root'),
