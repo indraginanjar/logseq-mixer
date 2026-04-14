@@ -126,4 +126,5 @@ Not currently exposed as a plugin setting.
 | File                   | Relevant Code                                                |
 |-----------------------|--------------------------------------------------------------|
 | `src/embedManager.ts` | `flattenBlocks()` (recursive block traversal), `resolveBlockReferences()` (reference resolution), `groupBlocksIntoChunks()` (chunk grouping), `getEmbedingsAllNotes()` (full indexing), `getEmbeddingsForPage()` (incremental indexing) |
-| `src/indexManager.ts`  | `checkAndIndexUpdatedPages()` (incremental indexing with chunk cleanup) |
+| `src/indexManager.ts`  | `checkAndIndexUpdatedPages()` (incremental indexing with chunk cleanup via `deleteDocuments` + `upsertDocuments`) |
+| `src/storage/SQLiteVectorStore.ts` | Per-document storage of chunks (each chunk is a row in the `documents` table) |

@@ -16,9 +16,11 @@ Hope you find it useful! 😀👍🍀🍷
 ### ⚙️ How It Works
 
 - Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) for semantic vector search
-- Retrieves related notes using RAG (vector similarity search for now)
+- Stores each document embedding as an individual row in a SQLite database (via [sql.js](https://github.com/sql-js/sql.js)), persisted to IndexedDB
+- Retrieves related notes using RAG (brute-force cosine similarity search + RRF reranking)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
 - Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
+- Automatically migrates existing Orama-based embeddings to the new per-document format — no re-indexing needed
 - Plugin still runs without embeddings — the currently active note will be passed as fallback context
 
 ---
@@ -48,7 +50,7 @@ You can configure these in the Logseq plugin UI:
 
 - **`EmbeddingApiKey`**  
   - Used for generating vector embeddings of your notes (for semantic search).  
-  - Currently only supports OpenAI’s `text-embedding-ada-002` model.  
+  - Supports OpenAI embedding models: `text-embedding-3-small` (default), `text-embedding-ada-002`, and `text-embedding-3-large`.  
   - If not set, vector search is skipped and only the current Logseq note is passed as context.  
   - You do **not** need this if you're okay with simpler functionality.
 
@@ -71,6 +73,11 @@ You can configure these in the Logseq plugin UI:
   - **Incremental**: Only embeds pages that are new or have been updated since the last index. Fast and cost-efficient.  
   - **Full**: Wipes the vector database and re-embeds every page from scratch. Use this if you suspect the index is corrupted or want a clean rebuild.
 
+- **`storageBackend`**  
+  - Choose between `"sqlite"` (default) and `"settings"`.  
+  - **sqlite**: Per-document storage in a sql.js SQLite database persisted to IndexedDB. Scales to large graphs without memory issues.  
+  - **settings**: Legacy Orama-based storage in Logseq plugin settings. Suitable for small graphs only.
+
 ---
 
 ### 📦 Installation
@@ -88,7 +95,7 @@ You can configure these in the Logseq plugin UI:
 ### 📄 License
 
 This project is open-source and licensed under the **MIT License**.  
-You’re free to:
+You're free to:
 - Use
 - Copy
 - Modify

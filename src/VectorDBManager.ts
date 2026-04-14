@@ -53,13 +53,13 @@ export async function loadVectorDatabase(
     });
   }
 
-  const existingData = await storageProvider.load();
+  const existingData = await storageProvider.load?.() ?? null;
 
   if (!existingData || forceNew) {
     console.info(`[loadVectorDatabase] Creating fresh DB. existingData=${!!existingData}, forceNew=${forceNew}`);
     const freshDB = await createNewDatabase();
     const jsonIndex = await persist(freshDB, 'json');
-    await storageProvider.save(jsonIndex as string);
+    await storageProvider.save?.(jsonIndex as string);
     await updateSettingsGuarded({ lastEmbeddingModel: model });
     cachedInstance = await restore('json', jsonIndex) as unknown as OramaInstance;
   } else {
@@ -72,7 +72,7 @@ export async function loadVectorDatabase(
       console.log("Error: database couldn't be recovered from storage. Resetting...");
       const freshDB = await createNewDatabase();
       const jsonIndex = await persist(freshDB, 'json');
-      await storageProvider.save(jsonIndex as string);
+      await storageProvider.save?.(jsonIndex as string);
       await updateSettingsGuarded({ lastEmbeddingModel: model });
       cachedInstance = await restore('json', jsonIndex) as unknown as OramaInstance;
     }
@@ -100,9 +100,8 @@ export async function batchInsertEmbeddings(
 ) {
   await insertMultiple(oramaDBInstance, Embedings);
   const jsonIndex = await persist(oramaDBInstance, 'json');
-  await storageProvider.save(jsonIndex as string);
+  await storageProvider.save?.(jsonIndex as string);
   // Update cache since the instance was mutated
-  cachedInstance = oramaDBInstance;
 }
 
 export async function vectorSearchOramaDB(oramaDBInstance: OramaInstance, vector: number[]) {

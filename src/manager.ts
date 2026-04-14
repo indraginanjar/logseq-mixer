@@ -3,24 +3,44 @@ import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManag
 import { queryLiteLLM } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
-import type { StorageProvider } from './storage/StorageProvider';
+import type { PerDocumentStorageProvider, StorageProvider } from './storage/StorageProvider';
 
 // Global variable to store conversation history
 const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = [];
 // Set maximum number of history messages to include in the prompt (e.g., last 6 messages)
 const MAX_HISTORY_LENGTH = 6;
 
+/**
+ * Duck-typing check: returns true when the storage provider supports
+ * per-document vector search (SQLiteVectorStore), false for the legacy
+ * Orama-based path (SettingsStorageProvider).
+ */
+function hasSearchByVector(provider: any): provider is PerDocumentStorageProvider {
+  return typeof provider?.searchByVector === 'function';
+}
+
 export async function indexEntireLogSeq(settings: any, storageProvider: StorageProvider) {
   clearRefCache();
-  // Always load existing DB — never wipe it. Both modes index incrementally
-  // so the user can query while indexing is in progress.
-  const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
-  await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+
+  if (hasSearchByVector(storageProvider)) {
+    // Per-document path: no Orama instance needed
+    await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+  } else {
+    // Legacy Orama-based path
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
+    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+  }
 }
 
 export async function enableAutoIndexer(settings: any, storageProvider: StorageProvider) {
-  const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
-  startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+  if (hasSearchByVector(storageProvider)) {
+    // Per-document path: no Orama instance needed
+    startPageIndexingOnChange(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+  } else {
+    // Legacy Orama-based path
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
+    startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+  }
 }
 
 export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider): Promise<string> {
@@ -31,24 +51,32 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Wrap vector search in try/catch to prevent indexing issues from blocking LLM query.
   try {
-    const oramaDatabaseInstance = await getOrLoadVectorDatabase(settings, settings.embeddingModel, storageProvider);
     const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel);
-    
+
     console.info(`[handleQuery] Query embedding dimensions: ${queryEmbedding?.length}, model: ${settings.embeddingModel}`);
     console.info(`[handleQuery] Embedding sample (first 5): ${queryEmbedding?.slice(0, 5)}`);
-    
-    const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
-    
-    console.info(`[handleQuery] Vector search returned ${vectorResult.hits?.length ?? 0} hits (count: ${vectorResult.count})`);
 
-    // Rerank vector search results using RRF before building context.
-    if (vectorResult.hits && vectorResult.hits.length > 0) {
-      const searchHits: SearchHit[] = vectorResult.hits.map(hit => ({
+    let searchHits: SearchHit[];
+
+    if (hasSearchByVector(storageProvider)) {
+      // Per-document path: use storageProvider.searchByVector directly
+      const results = await storageProvider.searchByVector(queryEmbedding, 5, 0.5);
+      console.info(`[handleQuery] Per-document search returned ${results.length} hits`);
+      searchHits = results.map(r => ({ id: r.id, content: r.content, score: r.score }));
+    } else {
+      // Legacy Orama-based path
+      const oramaDatabaseInstance = await getOrLoadVectorDatabase(settings, settings.embeddingModel, storageProvider);
+      const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
+      console.info(`[handleQuery] Vector search returned ${vectorResult.hits?.length ?? 0} hits (count: ${vectorResult.count})`);
+      searchHits = (vectorResult.hits ?? []).map(hit => ({
         id: hit.document.id as string,
         content: hit.document.content as string,
         score: hit.score,
       }));
+    }
 
+    // Rerank vector search results using RRF before building context.
+    if (searchHits.length > 0) {
       const reranked = rerankWithRRF(searchHits, query);
       console.info(`[handleQuery] After reranking: ${reranked.length} results`);
       reranked.forEach(hit => {
