@@ -3,13 +3,13 @@
 import { getByID, remove } from "@orama/orama";
 import { DEFAULT_EMBEDDING_MODEL, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
-import type { StorageProvider } from "./storage/StorageProvider";
+import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "./storage/StorageProvider";
 
 let hasHooked = false;
 let currentApiKey = '';
 let currentEmbeddingKey = '';
 let currentModel = '';
-let currentOramaInstance: OramaInstance;
+let currentOramaInstance: OramaInstance | undefined;
 let currentStorageProvider: StorageProvider;
 let indexingInProgress = false;
 
@@ -21,6 +21,14 @@ export function getIsUpdatingSettings(): boolean {
 
 export function setIsUpdatingSettings(value: boolean): void {
   _isUpdatingSettings = value;
+}
+
+/**
+ * Type guard: returns true when the storage provider supports per-document
+ * operations (SQLiteVectorStore), false for the legacy Orama-based path.
+ */
+function isPerDocumentProvider(provider: any): provider is PerDocumentStorageProvider {
+  return typeof provider?.getDocumentMeta === 'function';
 }
 
 /**
@@ -52,7 +60,7 @@ const isInternalPage = (name: string) => {
 
 export async function checkAndIndexUpdatedPages(
   apiKey: string,
-  oramaInstance: OramaInstance,
+  oramaInstance: OramaInstance | undefined,
   embeddingApiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
   storageProvider: StorageProvider
@@ -67,46 +75,95 @@ export async function checkAndIndexUpdatedPages(
     for (const page of pages) {
       if (isInternalPage(page.name)) continue;
 
-      const dbRecord = getByID(oramaInstance, page.id.toString());
+      const pageIdStr = page.id.toString();
       const lastUpdated: number = page.updatedAt ?? 0;
 
-      if (dbRecord && dbRecord.lastUpdated >= lastUpdated) continue;
+      if (isPerDocumentProvider(storageProvider)) {
+        // --- Per-document path (SQLiteVectorStore) ---
+        const storedLastUpdated = await storageProvider.getDocumentMeta(pageIdStr);
+        if (storedLastUpdated !== null && storedLastUpdated >= lastUpdated) continue;
 
-      try {
-        const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
+        try {
+          const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
 
-        // Extract graph context for the page
-        const blockContentLines = collectBlockContent(blocks);
-        const outgoingLinks = extractOutgoingLinks(blockContentLines);
-        const backlinks = await fetchBacklinks(page.name);
-        const linkData: PageLinkData = { outgoingLinks, backlinks };
+          const blockContentLines = collectBlockContent(blocks);
+          const outgoingLinks = extractOutgoingLinks(blockContentLines);
+          const backlinks = await fetchBacklinks(page.name);
+          const linkData: PageLinkData = { outgoingLinks, backlinks };
 
-        const newEmbeddings = await getEmbeddingsForPage(
-          page.id.toString(),
-          blocks,
-          page.name,
-          lastUpdated,
-          embeddingApiKey,
-          model,
-          page.properties,
-          linkData
-        );
+          const newEmbeddings = await getEmbeddingsForPage(
+            pageIdStr,
+            blocks,
+            page.name,
+            lastUpdated,
+            embeddingApiKey,
+            model,
+            page.properties,
+            linkData
+          );
 
-        // Remove old record and any existing chunks for this page
-        if (dbRecord?.id) {
-          await remove(oramaInstance, dbRecord.id);
+          // Delete old chunks for this page
+          const oldChunkIds = [pageIdStr];
+          for (let c = 0; c < 100; c++) {
+            oldChunkIds.push(`${page.id}_chunk_${c}`);
+          }
+          await storageProvider.deleteDocuments(oldChunkIds);
+
+          // Map embeddings to DocumentRecord[] and upsert
+          const docs: DocumentRecord[] = newEmbeddings.map(e => ({
+            id: e.id,
+            content: e.content,
+            lastUpdated: e.lastUpdated,
+            embedding: e.embedding,
+          }));
+          await storageProvider.upsertDocuments(docs);
+        } catch (error) {
+          console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
         }
-        // Remove old chunks (try chunk_0 through chunk_99 as a safe upper bound)
-        for (let c = 0; c < 100; c++) {
-          const chunkId = `${page.id}_chunk_${c}`;
-          const chunkRecord = getByID(oramaInstance, chunkId);
-          if (!chunkRecord) break;
-          await remove(oramaInstance, chunkId);
+      } else {
+        // --- Legacy Orama-based path ---
+        if (!oramaInstance) {
+          console.error('[indexManager] Legacy path requires oramaInstance but none was provided.');
+          continue;
         }
 
-        await batchInsertEmbeddings(oramaInstance, newEmbeddings, storageProvider);
-      } catch (error) {
-        console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
+        const dbRecord = getByID(oramaInstance, pageIdStr);
+        if (dbRecord && dbRecord.lastUpdated >= lastUpdated) continue;
+
+        try {
+          const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
+
+          const blockContentLines = collectBlockContent(blocks);
+          const outgoingLinks = extractOutgoingLinks(blockContentLines);
+          const backlinks = await fetchBacklinks(page.name);
+          const linkData: PageLinkData = { outgoingLinks, backlinks };
+
+          const newEmbeddings = await getEmbeddingsForPage(
+            pageIdStr,
+            blocks,
+            page.name,
+            lastUpdated,
+            embeddingApiKey,
+            model,
+            page.properties,
+            linkData
+          );
+
+          // Remove old record and any existing chunks for this page
+          if (dbRecord?.id) {
+            await remove(oramaInstance, dbRecord.id);
+          }
+          for (let c = 0; c < 100; c++) {
+            const chunkId = `${page.id}_chunk_${c}`;
+            const chunkRecord = getByID(oramaInstance, chunkId);
+            if (!chunkRecord) break;
+            await remove(oramaInstance, chunkId);
+          }
+
+          await batchInsertEmbeddings(oramaInstance, newEmbeddings, storageProvider);
+        } catch (error) {
+          console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
+        }
       }
     }
   } finally {
@@ -118,7 +175,7 @@ export async function checkAndIndexUpdatedPages(
 
 export function startPageIndexingOnChange(
   apiKey: string,
-  oramaInstance: OramaInstance,
+  oramaInstance: OramaInstance | undefined,
   embeddingApiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
   storageProvider: StorageProvider

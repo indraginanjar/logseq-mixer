@@ -31,18 +31,22 @@ The `lastEmbeddingModel` value is persisted in plugin settings alongside the dat
 
 ## Vector Database
 
-The plugin uses [Orama](https://github.com/oramasearch/orama) as an in-memory vector database with the following schema:
+The plugin uses a per-document SQLite storage model (`SQLiteVectorStore`) backed by [sql.js](https://github.com/sql-js/sql.js) (a WASM build of SQLite). Each document embedding is stored as an individual row in a `documents` table:
 
-| Field        | Type           | Description                          |
+| Column       | Type           | Description                          |
 |-------------|----------------|--------------------------------------|
-| id          | string         | Page ID or `{pageId}_chunk_{n}` for multi-chunk pages |
-| content     | string         | Block content for this chunk         |
-| lastUpdated | number         | Timestamp of last page update        |
-| embedding   | vector[{dimensions}] | Embedding vector sized to selected model (1536 or 3072) |
+| id          | TEXT (PK)      | Page ID or `{pageId}_chunk_{n}` for multi-chunk pages |
+| content     | TEXT           | Block content for this chunk         |
+| lastUpdated | INTEGER        | Timestamp of last page update        |
+| embedding   | BLOB           | Raw Float32Array bytes (4 bytes per float) |
 
 ### Persistence
 
-The database is serialized to JSON using `@orama/plugin-data-persistence` and stored in Logseq's plugin settings under the `VectorDBLogseqCopilot` key. On plugin load, the database is restored from this persisted JSON. If the stored data is missing or corrupted, a fresh database is created automatically.
+The sql.js in-memory database is persisted to IndexedDB as a binary ArrayBuffer. On plugin load, the database is restored from IndexedDB without any JSON parsing. If the stored data is corrupted, a fresh database is created automatically.
+
+### Legacy Backend
+
+A legacy `SettingsStorageProvider` (Orama-based, storing a serialized JSON blob in Logseq plugin settings) is still available as a fallback via the `storageBackend` setting. The plugin uses duck-typing to branch between the two backends at runtime. The SQLite backend is the default.
 
 ## Block-Based Content Processing
 
@@ -127,14 +131,18 @@ A per-run cache prevents redundant `logseq.Editor.getBlock()` calls for the same
 When the user sends a query:
 
 1. The query text is embedded using the selected embedding model
-2. The embedding is searched against the Orama database using vector similarity
+2. The embedding is searched against the `documents` table using brute-force cosine similarity in JavaScript
 3. Search parameters:
-   - **Similarity threshold**: 0.65 (minimum cosine similarity)
+   - **Similarity threshold**: 0.5 (minimum cosine similarity)
    - **Result limit**: 5 most similar chunks
-   - **Vectors excluded** from results (only document content is returned)
-4. The content of matching chunks is appended to the LLM prompt as "Additional Context from Knowledge Base"
+4. Results are reranked using Reciprocal Rank Fusion (RRF) before being injected into the LLM prompt
+5. The content of matching chunks is appended to the LLM prompt as "Additional Context from Knowledge Base"
 
 If vector search fails for any reason, the query proceeds without additional context — only the current page context is used as fallback.
+
+### Legacy Backend
+
+When using the `settings` storage backend, vector search still goes through the Orama in-memory database with a 0.65 similarity threshold.
 
 ## Error Handling
 
@@ -182,10 +190,12 @@ If vector search fails for any reason, the query proceeds without additional con
                 │
                 ▼
  ┌───────────────────────────────────────┐
- │     Orama Vector Database             │
- │  - insertMultiple / remove            │
- │  - vector search (cosine sim)         │
- │  - persist to Logseq settings         │
+ │     SQLiteVectorStore (default)       │
+ │  - upsertDocuments / deleteDocuments  │
+ │  - searchByVector (cosine similarity) │
+ │  - Persisted to IndexedDB as binary   │
+ │                                       │
+ │  Legacy fallback: Orama + Settings    │
  └───────────────────────────────────────┘
 ```
 
@@ -194,7 +204,12 @@ If vector search fails for any reason, the query proceeds without additional con
 | File                    | Responsibility                                              |
 |------------------------|-------------------------------------------------------------|
 | `src/embedManager.ts`  | Block flattening, reference resolution, chunk grouping, embedding generation |
-| `src/VectorDBManager.ts` | Database CRUD, persistence, vector search                  |
+| `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search, IndexedDB persistence |
+| `src/storage/cosineSimilarity.ts` | Embedding BLOB encode/decode, cosine similarity computation |
+| `src/storage/migrateLegacy.ts` | Migration from legacy Orama JSON blob to per-document rows |
+| `src/storage/StorageProvider.ts` | StorageProvider interface (per-document + legacy methods) |
+| `src/storage/createStorageProvider.ts` | Factory: creates SQLiteVectorStore or SettingsStorageProvider based on backend setting |
 | `src/indexManager.ts`  | Incremental indexing, auto-index on change, re-index guard   |
 | `src/manager.ts`       | Orchestration: manual re-index, auto-indexer, query handling |
-| `src/settings.ts`      | Plugin settings schema including indexing mode and embedding model selection |
+| `src/VectorDBManager.ts` | Legacy Orama database CRUD, persistence, vector search (settings backend only) |
+| `src/settings.ts`      | Plugin settings schema including indexing mode, embedding model, and storage backend |

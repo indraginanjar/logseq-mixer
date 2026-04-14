@@ -12,21 +12,26 @@ User Query
     ▼
 ┌──────────────────────────┐
 │ 1. Embed the query       │  useGenerateEmbedding(query)
-│    (text-embedding-ada-002)│
+│    (selected model)      │
 └────────────┬─────────────┘
              │
              ▼
 ┌──────────────────────────┐
-│ 2. Vector similarity     │  vectorSearchOramaDB(db, queryVector)
-│    search in Orama       │
-│    - cosine similarity   │
-│    - threshold: 0.65     │
+│ 2. Vector similarity     │  storageProvider.searchByVector()
+│    search (brute-force   │
+│    cosine similarity)    │
+│    - threshold: 0.5      │
 │    - top 5 results       │
 └────────────┬─────────────┘
              │
              ▼
 ┌──────────────────────────┐
-│ 3. Build LLM prompt      │
+│ 3. Rerank with RRF       │  rerankWithRRF(hits, query)
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│ 4. Build LLM prompt      │
 │    - System prompt        │
 │    - Conversation history │
 │    - Current page context │
@@ -35,43 +40,49 @@ User Query
              │
              ▼
 ┌──────────────────────────┐
-│ 4. Query LLM via LiteLLM │  queryLiteLLM(prompt, model, apiKey, endpoint)
+│ 5. Query LLM via LiteLLM │  queryLiteLLM(prompt, model, apiKey, endpoint)
 └──────────────────────────┘
 ```
 
 ## Step 1: Query Embedding
 
-The user's query text is embedded using the same model (`text-embedding-ada-002`) and API key used for indexing. This produces a 1536-dimensional vector that represents the semantic meaning of the query.
+The user's query text is embedded using the same model and API key used for indexing. The model is configurable (default: `text-embedding-3-small`), producing a 1536 or 3072-dimensional vector depending on the selected model.
 
-- Same truncation rules apply (25,000 char limit), though queries are typically short
+- Same truncation rules apply (24,000 char limit), though queries are typically short
 - Same 30-second timeout applies
 - If embedding fails, vector search is skipped entirely and the query proceeds with only the current page as context
 
 ## Step 2: Vector Search
 
-The query vector is searched against the Orama database using cosine similarity.
+The query vector is searched against the stored documents using brute-force cosine similarity.
 
-### Search Parameters
+### Default Backend (SQLiteVectorStore)
+
+The `SQLiteVectorStore` reads all rows from the `documents` table, decodes each embedding BLOB to a `Float32Array`, computes cosine similarity in JavaScript, and returns the top-K results.
 
 | Parameter       | Value   | Description                                      |
 |----------------|---------|--------------------------------------------------|
-| mode           | vector  | Pure vector similarity search (no keyword/hybrid) |
-| similarity     | 0.65    | Minimum cosine similarity threshold               |
+| similarity     | 0.5     | Minimum cosine similarity threshold               |
 | limit          | 5       | Maximum number of results returned                |
-| offset         | 0       | No pagination offset                              |
-| includeVectors | false   | Only document content is returned, not vectors    |
+
+### Legacy Backend (Orama via SettingsStorageProvider)
+
+When using the `settings` backend, search goes through Orama's in-memory vector index with a 0.65 similarity threshold.
 
 ### What Gets Returned
 
 Each search hit contains:
-- `document.content` — the full page text that was embedded
-- `document.id` — the Logseq page ID
-- `document.lastUpdated` — timestamp of last update
-- `score` — cosine similarity score (0.65 to 1.0)
+- `id` — the document/chunk identifier
+- `content` — the full chunk text that was embedded
+- `score` — cosine similarity score
+
+### Reranking
+
+After vector search, results are reranked using Reciprocal Rank Fusion (RRF) via `rerankWithRRF()`. This combines the vector similarity score with keyword-based scoring for improved relevance.
 
 ### No Results Scenario
 
-If no pages meet the 0.65 similarity threshold, the `vectorResult.hits` array is empty and no additional context is added to the prompt. The LLM still receives the system prompt, conversation history, and current page context.
+If no documents meet the similarity threshold, the results array is empty and no additional context is added to the prompt. The LLM still receives the system prompt, conversation history, and current page context.
 
 ## Step 3: Prompt Construction
 
@@ -152,13 +163,13 @@ This means the plugin always works — even without embeddings configured — by
 
 ## Limitations
 
-- **No hybrid search**: Only vector similarity is used. No keyword matching or BM25 scoring.
-- **No re-ranking**: Results are returned in similarity order with no secondary ranking step.
-- **Full page injection**: Retrieved pages are injected in full, which can consume significant prompt tokens for long pages.
+- **No hybrid search**: Only vector similarity is used (with RRF reranking for keyword boosting). No BM25 scoring.
+- **Full chunk injection**: Retrieved chunks are injected in full, which can consume significant prompt tokens for long pages.
 - **No deduplication**: The current page may appear both as "Current Page Context" and in "Additional Context" if it's a top search result.
-- **Fixed parameters**: Similarity threshold (0.65) and result limit (5) are hardcoded, not configurable.
+- **Fixed parameters**: Similarity threshold (0.5) and result limit (5) are hardcoded, not configurable via settings.
 - **Single-turn LLM call**: The full prompt is sent as one user message. No system/user message separation or multi-turn chat API usage.
 - **No timeout on LLM call**: The `queryLiteLLM()` fetch has no `AbortController` timeout (unlike the embedding call).
+- **Brute-force search**: The SQLite backend scans all document embeddings for every query. This is fast for typical graph sizes but scales linearly with document count.
 
 ## File Reference
 
@@ -166,6 +177,9 @@ This means the plugin always works — even without embeddings configured — by
 |-------------------------|---------------------------------------------------------|
 | `src/manager.ts`        | `handleQuery()` — orchestrates the full retrieval pipeline |
 | `src/embedManager.ts`   | `useGenerateEmbedding()` — embeds the query text         |
-| `src/VectorDBManager.ts`| `vectorSearchOramaDB()` — vector similarity search       |
+| `src/storage/SQLiteVectorStore.ts` | `searchByVector()` — brute-force cosine similarity search (default backend) |
+| `src/storage/cosineSimilarity.ts` | `cosineSimilarity()` — cosine similarity computation     |
+| `src/reranker.ts`       | `rerankWithRRF()` — Reciprocal Rank Fusion reranking     |
+| `src/VectorDBManager.ts`| `vectorSearchOramaDB()` — legacy Orama vector search (settings backend only) |
 | `src/LLMManager.ts`     | `queryLiteLLM()` — sends prompt to LLM via LiteLLM      |
-| `src/settings.ts`       | Plugin settings (model, API keys, prompt, endpoint)      |
+| `src/settings.ts`       | Plugin settings (model, API keys, prompt, endpoint, storage backend) |

@@ -1,5 +1,4 @@
 import '@logseq/libs';
-import { setIsUpdatingSettings } from 'indexManager';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { RecoilRoot } from 'recoil';
@@ -7,7 +6,6 @@ import 'VectorDBManager';
 import App from './App';
 import settings from './settings';
 import { createStorageProvider } from './storage/createStorageProvider';
-import { migrateStorage } from './storage/migrate';
 
 async function main() {
   const key = logseq.baseInfo.id;
@@ -15,44 +13,7 @@ async function main() {
 
   // Read storage backend setting (default to 'sqlite' on first run)
   const storageBackend = (logseq.settings?.storageBackend as 'sqlite' | 'settings') ?? 'sqlite';
-  const lastStorageBackend = logseq.settings?.lastStorageBackend as string | undefined;
-
-  // Create the active storage provider
   const storageProvider = await createStorageProvider(storageBackend);
-
-  // Migrate data when backend changed, or on first run upgrading to sqlite
-  // Only migrate if the SQLite provider has no data (avoid wiping existing data)
-  const needsMigration =
-    (lastStorageBackend && lastStorageBackend !== storageBackend) ||
-    (!lastStorageBackend && storageBackend === 'sqlite');
-
-  if (needsMigration) {
-    const oldBackend = (lastStorageBackend as 'sqlite' | 'settings') ?? 'settings';
-    if (oldBackend !== storageBackend) {
-      // Only migrate if the target provider is empty
-      const existingTargetData = await storageProvider.load();
-      if (!existingTargetData) {
-        console.info(`Migrating storage from "${oldBackend}" to "${storageBackend}"...`);
-        try {
-          const oldProvider = await createStorageProvider(oldBackend);
-          await migrateStorage(oldProvider, storageProvider);
-          console.info('Storage migration completed.');
-        } catch (err) {
-          console.error('Storage migration failed:', err);
-        }
-      } else {
-        console.info('Target storage already has data, skipping migration.');
-      }
-    }
-  }
-
-  // Track the current backend so we can detect changes on next startup
-  setIsUpdatingSettings(true);
-  try {
-    await logseq.updateSettings({ lastStorageBackend: storageBackend });
-  } finally {
-    setIsUpdatingSettings(false);
-  }
 
   const { preferredThemeMode } = await logseq.App.getUserConfigs();
 

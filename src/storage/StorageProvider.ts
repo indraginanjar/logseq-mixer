@@ -1,13 +1,51 @@
+export interface DocumentRecord {
+  id: string;
+  content: string;
+  lastUpdated: number;
+  embedding: number[];
+}
+
+export interface SearchResult {
+  id: string;
+  content: string;
+  score: number;
+}
+
 export interface StorageProvider {
-  /** Persist the serialized Orama JSON string */
-  save(data: string): Promise<void>;
+  /** Insert or replace multiple documents in a single transaction, then flush to IndexedDB */
+  upsertDocuments?(docs: DocumentRecord[]): Promise<void>;
 
-  /** Load the serialized Orama JSON string, or null if none exists */
-  load(): Promise<string | null>;
+  /** Delete documents by their ids, then flush to IndexedDB */
+  deleteDocuments?(ids: string[]): Promise<void>;
 
-  /** Remove all persisted vector DB data */
+  /** Brute-force cosine similarity search, returns top-K results above threshold */
+  searchByVector?(queryVector: number[], limit: number, threshold: number): Promise<SearchResult[]>;
+
+  /** Get the lastUpdated timestamp for a document, or null if not found. Does NOT load the embedding BLOB. */
+  getDocumentMeta?(id: string): Promise<number | null>;
+
+  /** Remove all document rows and flush to IndexedDB */
   clear(): Promise<void>;
 
-  /** Export the database to a downloadable file (optional, only supported by SQLite backend) */
+  /** Export the SQLite database as a downloadable file (optional) */
   exportToFile?(): void;
+
+  // --- Legacy methods used by SettingsStorageProvider + Orama backend ---
+
+  /** Save serialized data (legacy Orama JSON blob) */
+  save?(data: string): Promise<void>;
+
+  /** Load serialized data (legacy Orama JSON blob) */
+  load?(): Promise<string | null>;
+}
+
+/**
+ * A StorageProvider that supports per-document operations (SQLiteVectorStore).
+ * Used as the narrowed type after duck-typing checks.
+ */
+export interface PerDocumentStorageProvider extends StorageProvider {
+  upsertDocuments(docs: DocumentRecord[]): Promise<void>;
+  deleteDocuments(ids: string[]): Promise<void>;
+  searchByVector(queryVector: number[], limit: number, threshold: number): Promise<SearchResult[]>;
+  getDocumentMeta(id: string): Promise<number | null>;
 }
