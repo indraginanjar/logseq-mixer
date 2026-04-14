@@ -16,7 +16,7 @@ The plugin supports three OpenAI embedding models:
 
 The model is configurable via the `embeddingModel` plugin setting. The default is `text-embedding-3-small`.
 
-- **Max input chars**: 24,000 characters per chunk (safety limit to stay within token limit)
+- **Max input chars**: ~16,000 characters per chunk (derived from 8,191 tokens × 2 chars/token, conservative ratio for mixed content)
 
 ## Model Change Behavior
 
@@ -95,7 +95,7 @@ There are three ways embedding/indexing occurs:
 
 ### 1. Manual Re-Index (Re-Index DB button)
 
-The user clicks the green "Re-Index DB" button in the chat panel. This calls `indexEntireLogSeq()` which behaves according to the `indexingMode` setting (incremental or full).
+The user clicks the "🔄 Re-Index" button in the chat panel toolbar. This calls `indexEntireLogSeq()` which behaves according to the `indexingMode` setting (incremental or full). While indexing is in progress, the button changes to "⏹ Stop" — clicking it stops the indexing loop after the current page finishes.
 
 ### 2. Auto-Indexing on Page Changes
 
@@ -148,7 +148,7 @@ When using the `settings` storage backend, vector search still goes through the 
 
 - **API errors**: The actual error message from OpenAI is surfaced to the user, including the page name that failed
 - **Timeout**: Requests that exceed 30 seconds are aborted with "Embedding API request timed out after 30 seconds"
-- **Token limit**: Input is capped at 24,000 characters per chunk; block-based chunking ensures most content fits naturally
+- **Token limit**: Input is capped at ~16,000 characters per chunk (8,191 tokens × 2 chars/token); block-based chunking ensures most content fits naturally
 - **Database corruption**: If the persisted database can't be restored, a fresh database is created automatically
 - **Per-page resilience** (auto-indexer): If embedding fails for one page during auto-indexing, the error is logged and indexing continues for remaining pages
 - **Reference resolution failure**: If a block reference can't be fetched, the original `((uuid))` syntax is kept
@@ -185,7 +185,7 @@ When using the `settings` storage backend, vector search still goes through the 
  │      useGenerateEmbedding()           │
  │  (OpenAI — selected model)            │
  │  - 30s timeout                        │
- │  - 24,000 char safety limit           │
+ │  - ~16,000 char safety limit          │
  └──────────────┬────────────────────────┘
                 │
                 ▼

@@ -2,7 +2,7 @@ import { QueryResultPageEntity } from 'logseqQueryResultTypes';
 
 // https://stackoverflow.com/questions/3561493/is-there-a-regexp-escape-function-in-javascript
 export function escapeRegExp(s: string) {
-  return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  return s.replaceAll(/[-/\\^$*+?.()|[\]{}]/g, String.raw`\$&`);
 }
 
 export function isPage(blockOrPage: any): blockOrPage is QueryResultPageEntity {
