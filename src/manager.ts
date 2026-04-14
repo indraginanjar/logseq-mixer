@@ -48,7 +48,7 @@ export async function enableAutoIndexer(settings: any, storageProvider: StorageP
   }
 }
 
-export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider): Promise<string> {
+export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal): Promise<string> {
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
@@ -138,7 +138,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   }
 
   // Query the LLM with the complete prompt.
-  const llmOutput = await queryLiteLLM(prompt, settings.selectedModel, settings.apiKey, settings.LiteLLMLink);
+  const llmOutput = await queryLiteLLM(prompt, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal);
   const assistantResponse = llmOutput.choices[0].message["content"];
 
   // Add the assistant's answer to the conversation history.

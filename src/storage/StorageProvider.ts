@@ -24,6 +24,9 @@ export interface StorageProvider {
   /** Get the lastUpdated timestamp for a document, or null if not found. Does NOT load the embedding BLOB. */
   getDocumentMeta?(id: string): Promise<number | null>;
 
+  /** Get the total number of documents in the store. */
+  getDocumentCount?(): Promise<number>;
+
   /** Remove all document rows and flush to IndexedDB */
   clear(): Promise<void>;
 
