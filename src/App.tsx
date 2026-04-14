@@ -2,7 +2,7 @@ import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import { useThemeMode } from 'hooks/useThemeMode';
 import { requestPauseIndexing } from 'indexManager';
-import { enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
+import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useAppVisible } from './hooks/useAppVisible';
@@ -83,6 +83,28 @@ const CloseButton = styled('button', {
   fontSize: '14px',
   transition: 'all 0.15s',
   '&:hover': { backgroundColor: '$slate3', color: '$highContrast' },
+});
+
+const HeaderRight = styled('div', {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+});
+
+const HeaderButton = styled('button', {
+  background: 'transparent',
+  border: '1px solid $slate6',
+  borderRadius: '6px',
+  padding: '4px 8px',
+  cursor: 'pointer',
+  color: '$slate10',
+  fontSize: '12px',
+  fontWeight: 500,
+  transition: 'all 0.15s',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
 });
 
 const MessagesContainer = styled('div', {
@@ -406,6 +428,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     }
   };
 
+  const handleNewSession = () => {
+    setMessages([]);
+    setInputMessage('');
+    setError(null);
+    clearConversationHistory();
+  };
+
   if (!isVisible) return null;
 
   return (
@@ -418,7 +447,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             <LogoIcon>✍️</LogoIcon>
             <Title>Composer</Title>
           </HeaderLeft>
-          <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close">✕</CloseButton>
+          <HeaderRight>
+            <HeaderButton onClick={handleNewSession} aria-label="New Session">✨ New</HeaderButton>
+            <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close">✕</CloseButton>
+          </HeaderRight>
         </Header>
 
         <MessagesContainer id="messages-container">
