@@ -10,6 +10,11 @@ const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }
 // Set maximum number of history messages to include in the prompt (e.g., last 6 messages)
 const MAX_HISTORY_LENGTH = 6;
 
+/** Clear the conversation history for a fresh session. */
+export function clearConversationHistory(): void {
+  conversationHistory.length = 0;
+}
+
 /**
  * Duck-typing check: returns true when the storage provider supports
  * per-document vector search (SQLiteVectorStore), false for the legacy
