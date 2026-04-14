@@ -12,6 +12,22 @@ let currentModel = '';
 let currentOramaInstance: OramaInstance | undefined;
 let currentStorageProvider: StorageProvider;
 let indexingInProgress = false;
+let _pauseRequested = false;
+
+/**
+ * Request the current indexing run to pause after the current page finishes.
+ * Returns immediately — the loop will stop at the next iteration.
+ */
+export function requestPauseIndexing(): void {
+  _pauseRequested = true;
+}
+
+/**
+ * Returns true while an indexing run is active.
+ */
+export function isIndexingActive(): boolean {
+  return indexingInProgress;
+}
 
 let _isUpdatingSettings = false;
 
@@ -68,11 +84,18 @@ export async function checkAndIndexUpdatedPages(
   if (indexingInProgress) return;
 
   indexingInProgress = true;
+  _pauseRequested = false;
 
   try {
     const pages = (await logseq.Editor.getAllPages()) ?? [];
 
     for (const page of pages) {
+      // Check for pause request between pages
+      if (_pauseRequested) {
+        console.info('[indexManager] Indexing paused by user.');
+        break;
+      }
+
       if (isInternalPage(page.name)) continue;
 
       const pageIdStr = page.id.toString();
