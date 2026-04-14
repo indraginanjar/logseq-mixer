@@ -11,7 +11,7 @@ For each page, the plugin:
 1. Fetches the page's block tree via `logseq.Editor.getPageBlocksTree()`
 2. Recursively flattens all blocks (including nested children) with indentation reflecting depth
 3. Resolves block references `((uuid))` and block embeds `{{embed ((uuid))}}` to actual content
-4. Groups adjacent block lines into chunks up to 24,000 characters
+4. Groups adjacent block lines into chunks up to ~16,000 characters (derived from the model's 8,191 token limit × 2 chars/token)
 5. Prepends page metadata (id, name) to each chunk for context
 6. Each chunk gets its own embedding and database record
 
@@ -58,7 +58,7 @@ Adjacent block lines are grouped into chunks using `groupBlocksIntoChunks()`:
 
 1. Start with the page header as the initial chunk content
 2. Append block lines one by one
-3. When adding a line would exceed 24,000 characters, finalize the current chunk and start a new one
+3. When adding a line would exceed the chunk character limit (~16,000 chars), finalize the current chunk and start a new one
 4. The new chunk starts with the page header again (so every chunk has page context)
 5. Block lines are never split — the boundary is always between complete blocks
 
@@ -108,7 +108,7 @@ This ensures the embedding model and LLM know which page the blocks belong to, e
 ## Limitations
 
 - **No semantic grouping**: Blocks are grouped by adjacency and size, not by topic. Two unrelated blocks next to each other may share a chunk.
-- **Single block overflow**: If a single block's content exceeds 24,000 characters, it gets its own chunk and is truncated by the safety limit in `useGenerateEmbedding()`.
+- **Single block overflow**: If a single block's content exceeds the chunk limit, it gets its own chunk and is truncated by the safety limit in `useGenerateEmbedding()`.
 - **No overlap between chunks**: Unlike sliding-window chunking, there's no overlap. Context at chunk boundaries may be split between two chunks.
 - **Reference resolution depth**: Only one level of references is resolved. If a referenced block itself contains references, those nested references are not resolved.
 - **Cache scope**: The reference cache is per-indexing-run. References resolved during auto-indexing may use stale cache entries within the same run.
@@ -117,7 +117,9 @@ This ensures the embedding model and LLM know which page the blocks belong to, e
 
 | Parameter       | Value   | Location              | Description                          |
 |----------------|---------|----------------------|--------------------------------------|
-| MAX_CHUNK_CHARS | 24000   | `src/embedManager.ts` | Maximum characters per chunk          |
+| CHARS_PER_TOKEN | 2       | `src/embedManager.ts` | Conservative chars-per-token ratio    |
+| maxTokens      | 8191    | `src/embedManager.ts` | Model token limit (all 3 models)      |
+| Max chunk chars | ~16,382 | Derived               | `maxTokens × CHARS_PER_TOKEN`         |
 
 Not currently exposed as a plugin setting.
 

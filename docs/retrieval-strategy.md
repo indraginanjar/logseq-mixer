@@ -48,7 +48,7 @@ User Query
 
 The user's query text is embedded using the same model and API key used for indexing. The model is configurable (default: `text-embedding-3-small`), producing a 1536 or 3072-dimensional vector depending on the selected model.
 
-- Same truncation rules apply (24,000 char limit), though queries are typically short
+- Same truncation rules apply (~16,000 char limit), though queries are typically short
 - Same 30-second timeout applies
 - If embedding fails, vector search is skipped entirely and the query proceeds with only the current page as context
 
@@ -148,6 +148,7 @@ The assembled prompt is sent to the LLM via LiteLLM.
 - **Auth**: The `settings.apiKey` is passed both as a Bearer token and in the request body
 - **Message format**: Single user message containing the full assembled prompt
 - **No streaming**: The response is awaited in full before displaying
+- **Cancellable**: The user can click the stop button to abort the LLM request mid-flight via `AbortController`
 
 The assistant's response is added to the conversation history for future context.
 
@@ -168,7 +169,7 @@ This means the plugin always works — even without embeddings configured — by
 - **No deduplication**: The current page may appear both as "Current Page Context" and in "Additional Context" if it's a top search result.
 - **Fixed parameters**: Similarity threshold (0.5) and result limit (5) are hardcoded, not configurable via settings.
 - **Single-turn LLM call**: The full prompt is sent as one user message. No system/user message separation or multi-turn chat API usage.
-- **No timeout on LLM call**: The `queryLiteLLM()` fetch has no `AbortController` timeout (unlike the embedding call).
+- **No timeout on LLM call**: The `queryLiteLLM()` fetch has no built-in timeout, but the user can cancel it via the stop button in the chat UI.
 - **Brute-force search**: The SQLite backend scans all document embeddings for every query. This is fast for typical graph sizes but scales linearly with document count.
 
 ## File Reference

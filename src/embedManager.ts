@@ -162,9 +162,10 @@ export const OVERLAP_FRACTION = 0.15;
 /** Max fraction of chunk char limit that overlap lines may consume */
 export const MAX_OVERLAP_BUDGET = 0.20;
 
-// Conservative chars-per-token ratio for mixed content (code, non-Latin, markdown).
-// OpenAI averages ~4 chars/token for English, but mixed content can be ~2.5.
-const CHARS_PER_TOKEN = 2.5;
+// Conservative chars-per-token ratio for mixed content (code, non-Latin, markdown, URLs).
+// OpenAI averages ~4 chars/token for plain English, but mixed content with
+// short words, numbers, and non-Latin scripts can be as low as ~1.5-2.
+const CHARS_PER_TOKEN = 2;
 
 /**
  * Derive the max chunk character limit from the model's token limit.
