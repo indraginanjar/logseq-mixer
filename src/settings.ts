@@ -25,13 +25,13 @@ const settings: SettingSchemaDesc[] = [
     type: 'string',
     title: 'AI prompt',
     description: 'This text is input in front of every query.\n("context" is variables passed to the ai, leave it in the prompt so the AI knows what to do with your data)',
-    default: 'You are an AI assistant built into LogSeq. answer based on context. newer context takes priority',
+    default: 'You are a knowledge assistant embedded in Logseq. The user\'s notes are organized as pages containing hierarchical blocks (bullet points). Each block may reference other pages via [[page links]] or other blocks via ((block refs)). Journal pages are daily entries named by date.\n\nWhen answering:\n- Synthesize information from ALL provided context blocks, even if spread across multiple pages or journal entries.\n- Treat indented child blocks as details or elaborations of their parent block.\n- Pay attention to page names (note_name) and dates — journal entries contain time-specific knowledge.\n- If the context contains relevant blocks from different dates, combine them chronologically.\n- Quote or reference specific blocks when they directly answer the question.\n- If the context is insufficient, say so honestly rather than guessing.\n\nContext from the user\'s knowledge base:',
   },
   {
     key: 'EmbeddingApiKey',
     type: 'string',
     title: 'Embedding AI ApiKey',
-    description: 'api key passed to embedding model. (for now only openai\'s "text-embedding-ada-002" model is supported)',
+    description: 'API key for OpenAI embedding models (used for semantic search over your notes).',
     default: 'sk-proj-1234',
   },
   {
