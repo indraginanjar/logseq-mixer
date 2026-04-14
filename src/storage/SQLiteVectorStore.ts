@@ -170,6 +170,8 @@ export class SQLiteVectorStore implements StorageProvider {
   async clear(): Promise<void> {
     if (!this._db) throw new Error('SQLite database not initialized');
     this._db.run('DELETE FROM documents');
+    // Reclaim disk space so the exported file reflects the actual data size
+    this._db.run('VACUUM');
     await this.flushWithRetry();
   }
 

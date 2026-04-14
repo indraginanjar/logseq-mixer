@@ -23,11 +23,16 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
   clearRefCache();
 
   if (hasSearchByVector(storageProvider)) {
-    // Per-document path: no Orama instance needed
+    // Per-document path: clear the store first when in full mode
+    if (settings.indexingMode === 'full') {
+      console.info('[indexEntireLogSeq] Full mode: clearing documents table before re-index.');
+      await storageProvider.clear();
+    }
     await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
   } else {
-    // Legacy Orama-based path
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
+    // Legacy Orama-based path: forceNew=true when full mode
+    const forceNew = settings.indexingMode === 'full';
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, forceNew, settings.embeddingModel, storageProvider);
     await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
   }
 }
