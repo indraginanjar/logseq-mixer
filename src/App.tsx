@@ -140,8 +140,8 @@ const InputWrapper = styled('div', {
 
 const TextArea = styled('textarea', {
   flex: 1,
-  minHeight: '20px',
-  maxHeight: '120px',
+  minHeight: '80px',
+  maxHeight: '160px',
   resize: 'none',
   border: 'none',
   background: 'transparent',
@@ -151,8 +151,11 @@ const TextArea = styled('textarea', {
   lineHeight: 1.5,
   outline: 'none',
   color: '$highContrast',
+  overflowY: 'auto',
   '&::placeholder': { color: '$slate8' },
   '&:disabled': { opacity: 0.5 },
+  '&::-webkit-scrollbar': { width: '4px' },
+  '&::-webkit-scrollbar-thumb': { background: '$slate6', borderRadius: '2px' },
 });
 
 const SendButton = styled('button', {
@@ -177,9 +180,17 @@ const SendButton = styled('button', {
 const ToolbarRow = styled('div', {
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'flex-end',
+  justifyContent: 'space-between',
   gap: '6px',
   marginTop: '8px',
+});
+
+const StatusText = styled('span', {
+  fontSize: '11px',
+  color: '$slate9',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
 });
 
 const ToolbarButton = styled('button', {
@@ -205,10 +216,10 @@ const ToolbarButton = styled('button', {
         '&:hover': { backgroundColor: '$green4', borderColor: '$green8', color: '$green12' },
       },
       pause: {
-        backgroundColor: '$amber3',
-        borderColor: '$amber7',
-        color: '$amber11',
-        '&:hover': { backgroundColor: '$amber4', borderColor: '$amber8', color: '$amber12' },
+        backgroundColor: '$red3',
+        borderColor: '$red7',
+        color: '$red11',
+        '&:hover': { backgroundColor: '$red4', borderColor: '$red8', color: '$red12' },
       },
     },
   },
@@ -262,6 +273,23 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedDraft, setSavedDraft] = useState('');
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const [docCount, setDocCount] = useState<number | null>(null);
+
+  // Poll document count every 10 seconds
+  useEffect(() => {
+    const fetchCount = async () => {
+      if (storageProvider.getDocumentCount) {
+        try {
+          const count = await storageProvider.getDocumentCount();
+          setDocCount(count);
+        } catch { /* ignore */ }
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 10000);
+    return () => clearInterval(interval);
+  }, [storageProvider]);
 
   useEffect(() => {
     if (settings) enableAutoIndexer(settings, storageProvider);
@@ -275,7 +303,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setInputMessage(e.target.value);
     const el = e.target;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
   };
 
   const handleSubmit = async () => {
@@ -297,18 +325,34 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     try {
-      const resp = await handleQuery(inputMessage.trim(), settings, storageProvider);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const resp = await handleQuery(inputMessage.trim(), settings, storageProvider, controller.signal);
+      abortControllerRef.current = null;
       setMessages(prev => [...prev, {
         id: Date.now() + '_assistant',
         content: resp,
         sender: 'assistant',
       }]);
     } catch (err: any) {
+      abortControllerRef.current = null;
+      if (err.name === 'AbortError') {
+        // User cancelled — don't show error
+        return;
+      }
       console.error('Error in handleQuery:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLoading(false);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -404,19 +448,30 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               disabled={loading}
-              rows={1}
+              rows={4}
             />
-            <SendButton onClick={handleSubmit} disabled={loading || !inputMessage.trim()} aria-label="Send">
-              <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
-            </SendButton>
+            {loading ? (
+              <SendButton onClick={handleCancel} aria-label="Cancel" css={{ backgroundColor: '$red9', '&:hover:not(:disabled)': { backgroundColor: '$red10' } }}>
+                <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
+              </SendButton>
+            ) : (
+              <SendButton onClick={handleSubmit} disabled={!inputMessage.trim()} aria-label="Send">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
+              </SendButton>
+            )}
           </InputWrapper>
           <ToolbarRow>
-            {storageProvider.exportToFile && (
-              <ToolbarButton onClick={() => storageProvider.exportToFile?.()}>📥 Export</ToolbarButton>
-            )}
-            <ToolbarButton variant={isIndexing ? 'pause' : 'index'} onClick={handleIndexDB}>
-              {isIndexing ? '⏸ Pause' : '🔄 Re-Index'}
-            </ToolbarButton>
+            <StatusText>
+              {docCount !== null && <>📊 {docCount.toLocaleString()} chunks indexed</>}
+            </StatusText>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {storageProvider.exportToFile && (
+                <ToolbarButton onClick={() => storageProvider.exportToFile?.()}>📥 Export</ToolbarButton>
+              )}
+              <ToolbarButton variant={isIndexing ? 'pause' : 'index'} onClick={handleIndexDB}>
+                {isIndexing ? '⏹ Stop' : '🔄 Re-Index'}
+              </ToolbarButton>
+            </div>
           </ToolbarRow>
         </InputArea>
       </ChatPanel>

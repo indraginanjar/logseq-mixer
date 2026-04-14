@@ -167,6 +167,15 @@ export class SQLiteVectorStore implements StorageProvider {
     }
   }
 
+  async getDocumentCount(): Promise<number> {
+    if (!this._db) return 0;
+    const result = this._db.exec('SELECT COUNT(*) FROM documents');
+    if (result.length > 0 && result[0].values.length > 0) {
+      return result[0].values[0][0] as number;
+    }
+    return 0;
+  }
+
   async clear(): Promise<void> {
     if (!this._db) throw new Error('SQLite database not initialized');
     this._db.run('DELETE FROM documents');

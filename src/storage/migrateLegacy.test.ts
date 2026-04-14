@@ -276,7 +276,8 @@ describe('Property 7: Migration preserves documents', () => {
             expect(decoded.length).toBe(doc.embedding.length);
             for (let i = 0; i < doc.embedding.length; i++) {
               const expected = Math.fround(doc.embedding[i]);
-              expect(decoded[i]).toBe(expected);
+              // Use === instead of Object.is (toBe) since -0 === +0 is true
+              expect(decoded[i] === expected).toBe(true);
             }
           }
         } finally {
