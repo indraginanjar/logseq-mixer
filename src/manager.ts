@@ -3,7 +3,10 @@ import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManag
 import { queryLiteLLM } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
+import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
 import type { PerDocumentStorageProvider, StorageProvider } from './storage/StorageProvider';
+
+const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
 // Global variable to store conversation history
 const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = [];
@@ -28,6 +31,16 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
   clearRefCache();
 
   if (hasSearchByVector(storageProvider)) {
+    // Check chunking version for migration
+    if (storageProvider instanceof SQLiteVectorStore) {
+      const storedVersion = storageProvider.getChunkingVersion();
+      if (storedVersion !== CURRENT_CHUNKING_VERSION) {
+        console.info('[indexEntireLogSeq] Chunking version mismatch, forcing full re-index.');
+        await storageProvider.clear();
+        storageProvider.setChunkingVersion(CURRENT_CHUNKING_VERSION);
+      }
+    }
+
     // Per-document path: clear the store first when in full mode
     if (settings.indexingMode === 'full') {
       console.info('[indexEntireLogSeq] Full mode: clearing documents table before re-index.');

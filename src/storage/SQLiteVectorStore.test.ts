@@ -324,3 +324,36 @@ describe('Property 6: Search results ordering and threshold filtering', () => {
     );
   });
 });
+
+// Feature: tiktoken-chunking, Chunking version kv_store methods
+describe('Chunking version methods', () => {
+  // **Validates: Requirements 7.2**
+
+  let store: SQLiteVectorStore;
+
+  beforeEach(async () => {
+    store = await createInMemoryStore();
+  });
+
+  afterEach(() => {
+    const db = store.db;
+    if (db) db.close();
+  });
+
+  it('getChunkingVersion returns null when no version is stored', () => {
+    expect(store.getChunkingVersion()).toBeNull();
+  });
+
+  it('setChunkingVersion followed by getChunkingVersion returns the set value', () => {
+    store.setChunkingVersion('2');
+    expect(store.getChunkingVersion()).toBe('2');
+  });
+
+  it('setChunkingVersion overwrites a previously set value', () => {
+    store.setChunkingVersion('1');
+    expect(store.getChunkingVersion()).toBe('1');
+
+    store.setChunkingVersion('2');
+    expect(store.getChunkingVersion()).toBe('2');
+  });
+});
