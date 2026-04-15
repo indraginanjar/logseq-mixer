@@ -20,8 +20,14 @@ function copySqlJsWasm(): Plugin {
 }
 
 // https://vitejs.dev/config/
+const isTest = process.env.VITEST === 'true';
+
 export default defineConfig({
-  plugins: [react(), tsconifgPaths(), copySqlJsWasm()],
+  plugins: [
+    ...(!isTest ? [react()] : []),
+    tsconifgPaths(),
+    copySqlJsWasm(),
+  ],
   base: '',
   build: {
     target: 'esnext',
@@ -30,5 +36,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test-setup.ts'],
   },
 });
