@@ -1,7 +1,7 @@
 import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import { useThemeMode } from 'hooks/useThemeMode';
-import { requestPauseIndexing } from 'indexManager';
+import { isIndexingActive, requestPauseIndexing } from 'indexManager';
 import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
@@ -290,7 +290,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isIndexing, setIsIndexing] = useState(false);
+  const [isIndexing, setIsIndexing] = useState(isIndexingActive());
 
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
