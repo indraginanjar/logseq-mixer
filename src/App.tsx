@@ -6,6 +6,7 @@ import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLo
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useAppVisible } from './hooks/useAppVisible';
+import { useCtrlKey } from './hooks/useCtrlKey';
 import { settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
@@ -115,6 +116,15 @@ const MessagesContainer = styled('div', {
   '&::-webkit-scrollbar': { width: '6px' },
   '&::-webkit-scrollbar-track': { background: 'transparent' },
   '&::-webkit-scrollbar-thumb': { background: '$slate6', borderRadius: '3px' },
+  '& a.ctrl-link': {
+    color: 'inherit',
+    textDecoration: 'none',
+    cursor: 'default',
+  },
+  '&.ctrl-held a.ctrl-link:hover': {
+    textDecoration: 'underline',
+    cursor: 'pointer',
+  },
 });
 
 const ErrorBanner = styled('div', {
@@ -284,6 +294,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isVisible = useAppVisible();
   const themeMode = useThemeMode(initialThemeMode);
+  const ctrlHeld = useCtrlKey();
   const settings = useRecoilValue(settingsState);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -453,7 +464,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           </HeaderRight>
         </Header>
 
-        <MessagesContainer id="messages-container">
+        <MessagesContainer id="messages-container" className={ctrlHeld ? 'ctrl-held' : ''}>
           <ChatMessageList messages={messages} />
           {loading && (
             <TypingIndicator>
