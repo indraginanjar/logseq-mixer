@@ -1,5 +1,6 @@
 import { CrossPageDeduplicator, deduplicateBlocks } from './deduplicator';
 import { normalizeBlockContent } from './normalizer';
+import { countTokens, decode, encode } from './tokenizer';
 
 export type VectorDBSchemaDynamic = {
   id: string;
@@ -162,21 +163,6 @@ export const OVERLAP_FRACTION = 0.15;
 /** Max fraction of chunk char limit that overlap lines may consume */
 export const MAX_OVERLAP_BUDGET = 0.20;
 
-// Conservative chars-per-token ratio for mixed content (code, non-Latin, markdown, URLs).
-// OpenAI averages ~4 chars/token for plain English, but mixed content with
-// short words, numbers, and non-Latin scripts can be as low as ~1.5-2.
-const CHARS_PER_TOKEN = 2;
-
-/**
- * Derive the max chunk character limit from the model's token limit.
- * Uses a conservative chars-per-token ratio to avoid exceeding the API limit.
- */
-export function getMaxChunkChars(model: string = DEFAULT_EMBEDDING_MODEL): number {
-  const config = EMBEDDING_MODELS[model];
-  if (!config) throw new Error(`Unknown embedding model: ${model}`);
-  return Math.floor(config.maxTokens * CHARS_PER_TOKEN);
-}
-
 /**
  * Resolve block references ((uuid)) and block embeds {{embed ((uuid))}}
  * by fetching the referenced block's content from Logseq.
@@ -296,15 +282,15 @@ async function flattenBlocks(blocks: any[], parentChain: string[] = []): Promise
 export function groupBlocksIntoChunks(
   blockLines: BlockLine[],
   pageHeader: string,
-  maxChunkChars: number,
+  maxTokens: number,
   overlapFraction: number = OVERLAP_FRACTION
 ): string[] {
   if (blockLines.length === 0) {
     return [pageHeader];
   }
 
-  const contentBudget = maxChunkChars - pageHeader.length;
-  const overlapBudgetChars = Math.floor(maxChunkChars * MAX_OVERLAP_BUDGET);
+  const contentBudget = maxTokens - countTokens(pageHeader);
+  const overlapBudgetTokens = Math.floor(maxTokens * MAX_OVERLAP_BUDGET);
 
   // --- Collect semantic groups as runs of consecutive same-groupId lines ---
   interface Segment {
@@ -337,7 +323,7 @@ export function groupBlocksIntoChunks(
   // Each "raw chunk" is an array of BlockLine references (before overlap is applied).
   const rawChunks: BlockLine[][] = [];
   let currentLines: BlockLine[] = [];
-  let currentLen = 0; // character length of content in currentLines (excluding header)
+  let currentLen = 0; // token count of content in currentLines (excluding header)
 
   function flushCurrent() {
     if (currentLines.length > 0) {
@@ -347,16 +333,16 @@ export function groupBlocksIntoChunks(
     }
   }
 
-  function lineCharLen(bl: BlockLine): number {
-    return bl.content.length + 1; // +1 for '\n'
+  function lineTokenLen(bl: BlockLine): number {
+    return countTokens(bl.content + '\n');
   }
 
-  function segmentCharLen(seg: Segment): number {
-    return seg.lines.reduce((sum, bl) => sum + lineCharLen(bl), 0);
+  function segmentTokenLen(seg: Segment): number {
+    return seg.lines.reduce((sum, bl) => sum + lineTokenLen(bl), 0);
   }
 
   for (const seg of segments) {
-    const segLen = segmentCharLen(seg);
+    const segLen = segmentTokenLen(seg);
 
     if (seg.groupId !== -1) {
       // --- Semantic group handling ---
@@ -373,7 +359,7 @@ export function groupBlocksIntoChunks(
         // Oversized group — split between child blocks (never mid-block)
         flushCurrent();
         for (const bl of seg.lines) {
-          const blLen = lineCharLen(bl);
+          const blLen = lineTokenLen(bl);
           if (currentLen + blLen <= contentBudget) {
             currentLines.push(bl);
             currentLen += blLen;
@@ -383,12 +369,19 @@ export function groupBlocksIntoChunks(
               currentLines = [bl];
               currentLen = blLen;
             } else {
-              // Single block exceeds budget — must split its text
-              let remaining = bl.content + '\n';
-              while (remaining.length > 0) {
-                const slice = remaining.slice(0, contentBudget);
-                remaining = remaining.slice(contentBudget);
-                rawChunks.push([{ content: slice.replace(/\n$/, ''), isHeading: bl.isHeading, depth: bl.depth, groupId: bl.groupId }]);
+              // Single block exceeds budget — split at token boundaries
+              const tokens = encode(bl.content);
+              let offset = 0;
+              while (offset < tokens.length) {
+                const sliceTokens = tokens.slice(offset, offset + contentBudget);
+                const sliceText = decode(sliceTokens);
+                rawChunks.push([{
+                  content: sliceText,
+                  isHeading: bl.isHeading,
+                  depth: bl.depth,
+                  groupId: bl.groupId
+                }]);
+                offset += contentBudget;
               }
             }
           }
@@ -397,7 +390,7 @@ export function groupBlocksIntoChunks(
     } else {
       // --- Ungrouped line: existing adjacency-based behavior ---
       const bl = seg.lines[0];
-      const blLen = lineCharLen(bl);
+      const blLen = lineTokenLen(bl);
 
       if (currentLen + blLen <= contentBudget) {
         currentLines.push(bl);
@@ -408,12 +401,19 @@ export function groupBlocksIntoChunks(
           currentLines = [bl];
           currentLen = blLen;
         } else {
-          // Single block exceeds budget — split its text
-          let remaining = bl.content + '\n';
-          while (remaining.length > 0) {
-            const slice = remaining.slice(0, contentBudget);
-            remaining = remaining.slice(contentBudget);
-            rawChunks.push([{ content: slice.replace(/\n$/, ''), isHeading: bl.isHeading, depth: bl.depth, groupId: bl.groupId }]);
+          // Single block exceeds budget — split at token boundaries
+          const tokens = encode(bl.content);
+          let offset = 0;
+          while (offset < tokens.length) {
+            const sliceTokens = tokens.slice(offset, offset + contentBudget);
+            const sliceText = decode(sliceTokens);
+            rawChunks.push([{
+              content: sliceText,
+              isHeading: bl.isHeading,
+              depth: bl.depth,
+              groupId: bl.groupId
+            }]);
+            offset += contentBudget;
           }
         }
       }
@@ -442,9 +442,10 @@ export function groupBlocksIntoChunks(
     }
     chunkText += chunkBlockLines.map((bl) => bl.content + '\n').join('');
 
-    // Trim if overlap caused the chunk to exceed the limit
-    if (chunkText.length > maxChunkChars) {
-      chunkText = chunkText.slice(0, maxChunkChars);
+    // Truncate via encode/decode if overlap pushed chunk over the token limit
+    if (countTokens(chunkText) > maxTokens) {
+      const tokens = encode(chunkText);
+      chunkText = decode(tokens.slice(0, maxTokens));
     }
 
     finalChunks.push(chunkText);
@@ -453,11 +454,11 @@ export function groupBlocksIntoChunks(
     const overlapCount = Math.ceil(chunkBlockLines.length * overlapFraction);
     let candidateOverlap = chunkBlockLines.slice(chunkBlockLines.length - overlapCount);
 
-    // Cap overlap at the budget
-    let overlapCharLen = candidateOverlap.reduce((sum, bl) => sum + bl.content.length + 1, 0);
-    while (candidateOverlap.length > 0 && overlapCharLen > overlapBudgetChars) {
+    // Cap overlap at the token budget
+    let overlapTokenLen = candidateOverlap.reduce((sum, bl) => sum + countTokens(bl.content + '\n'), 0);
+    while (candidateOverlap.length > 0 && overlapTokenLen > overlapBudgetTokens) {
       candidateOverlap = candidateOverlap.slice(1);
-      overlapCharLen = candidateOverlap.reduce((sum, bl) => sum + bl.content.length + 1, 0);
+      overlapTokenLen = candidateOverlap.reduce((sum, bl) => sum + countTokens(bl.content + '\n'), 0);
     }
 
     overlapLines = candidateOverlap;
@@ -472,9 +473,10 @@ export async function useGenerateEmbedding(inputText: string, apiKey: string, mo
   }
 
   // Safety truncation for any single chunk that still exceeds the model's limit
-  const maxChars = getMaxChunkChars(model);
-  const text = inputText.length > maxChars
-    ? inputText.slice(0, maxChars)
+  const config = EMBEDDING_MODELS[model];
+  const tokens = encode(inputText);
+  const text = tokens.length > config.maxTokens
+    ? decode(tokens.slice(0, config.maxTokens))
     : inputText;
 
   const controller = new AbortController();
@@ -550,7 +552,7 @@ export function buildPageHeader(
  */
 export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAULT_EMBEDDING_MODEL): Promise<VectorDBSchemaDynamic[]> {
   const BATCH_SIZE = 5;
-  const maxChunkChars = getMaxChunkChars(model);
+  const maxTokens = EMBEDDING_MODELS[model].maxTokens;
   const pages = (await logseq.Editor.getAllPages()) ?? [];
   const allNotesEmbeddings: VectorDBSchemaDynamic[] = [];
   const crossPageDedup = new CrossPageDeduplicator();
@@ -601,7 +603,7 @@ export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAU
           const linkData: PageLinkData = { outgoingLinks, backlinks };
 
           const pageHeader = buildPageHeader(page.id, page.name, page.properties, linkData);
-          const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxChunkChars);
+          const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxTokens);
 
           const chunkEmbeddings: VectorDBSchemaDynamic[] = [];
           for (let c = 0; c < chunks.length; c++) {
@@ -684,8 +686,8 @@ export async function getEmbeddingsForPage(
   }
 
   const pageHeader = buildPageHeader(pageId, pageName, properties, linkData);
-  const maxChunkChars = getMaxChunkChars(model);
-  const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxChunkChars);
+  const maxTokens = EMBEDDING_MODELS[model].maxTokens;
+  const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxTokens);
   const embeddings: VectorDBSchemaDynamic[] = [];
 
   for (let c = 0; c < chunks.length; c++) {

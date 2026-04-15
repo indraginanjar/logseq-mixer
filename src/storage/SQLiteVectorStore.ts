@@ -199,6 +199,27 @@ export class SQLiteVectorStore implements StorageProvider {
     URL.revokeObjectURL(url);
   }
 
+  /** Get the stored chunking version, or null if not set. */
+  getChunkingVersion(): string | null {
+    if (!this._db) throw new Error('SQLite database not initialized');
+    const result = this._db.exec(
+      "SELECT value FROM kv_store WHERE key = 'chunking_version'"
+    );
+    if (result.length > 0 && result[0].values.length > 0) {
+      return result[0].values[0][0] as string;
+    }
+    return null;
+  }
+
+  /** Set the chunking version. */
+  setChunkingVersion(version: string): void {
+    if (!this._db) throw new Error('SQLite database not initialized');
+    this._db.run(
+      "INSERT OR REPLACE INTO kv_store (key, value) VALUES ('chunking_version', ?)",
+      [version]
+    );
+  }
+
   // --- Private helpers ---
 
   /** Flush with retry: retry once on failure, log error on second failure (Req 10.2) */
