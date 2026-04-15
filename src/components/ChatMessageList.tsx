@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { keyframes, styled } from '../stitches.config';
+import { CtrlLink } from './CtrlLink';
 
 export type ChatMessage = {
   id: string | number;
@@ -143,7 +144,7 @@ export default function ChatMessageList({ messages }: { messages: ChatMessage[] 
         <MessageRow key={msg.id} align={msg.sender}>
           {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
           <Bubble role={msg.sender}>
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
+            <ReactMarkdown components={{ a: CtrlLink }}>{msg.content}</ReactMarkdown>
           </Bubble>
           {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
         </MessageRow>
