@@ -154,6 +154,7 @@ export default function ChatMessageList({ messages, getBlockMetadata }: ChatMess
           {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
           <Bubble role={msg.sender}>
             <ReactMarkdown
+              transformLinkUri={(uri: string) => uri}
               components={{
                 a: ({ href, children, ...props }) => {
                   if (href?.startsWith('logseq://page/')) {

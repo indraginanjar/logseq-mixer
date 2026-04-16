@@ -2,7 +2,7 @@ import { BM25Index } from 'bm25Index';
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
-import { queryLiteLLM } from 'LLMManager';
+import { queryLiteLLM, type ChatMessage } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
@@ -156,19 +156,22 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     console.info(`[handleQuery] vectorContext preview: ${vectorContext.slice(0, 200)}...`);
   }
 
-  // Construct prompt starting with your base prompt.
-  let prompt = settings.prompt + "\n";
+  // Build the system message from the settings prompt.
+  const systemMessage = settings.prompt;
+
+  // Build the user message with context and conversation history.
+  let userMessage = "";
 
   // Append recent conversation history (limited to the most recent MAX_HISTORY_LENGTH messages)
   const recentHistory = conversationHistory.slice(-MAX_HISTORY_LENGTH);
   if (recentHistory.length > 0) {
-    prompt += "Conversation History:\n";
+    userMessage += "Conversation History:\n";
     recentHistory.forEach(entry => {
-      prompt += entry.role === "user"
+      userMessage += entry.role === "user"
         ? "User: " + entry.content + "\n"
         : "Assistant: " + entry.content + "\n";
     });
-    prompt += "\n";
+    userMessage += "\n";
   }
 
   // Try to include the current page context, but do not fail if it cannot be retrieved.
@@ -180,10 +183,10 @@ export async function handleQuery(query: string, settings: any, storageProvider:
       pageContent.forEach(element => {
         wholePageContent += "- " + element.content + "\n";
       });
-      prompt += "Current Page Context:\n";
-      prompt += `current_page_open_id: ${page.id}\n`;
-      prompt += `current_page_open_name: ${page.name}\n`;
-      prompt += `current_page_open_content: ${wholePageContent}\n\n`;
+      userMessage += "Current Page Context:\n";
+      userMessage += `current_page_open_id: ${page.id}\n`;
+      userMessage += `current_page_open_name: ${page.name}\n`;
+      userMessage += `current_page_open_content: ${wholePageContent}\n\n`;
     }
   } catch (err) {
     console.error("Failed to retrieve current page context:", err);
@@ -191,13 +194,26 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Append additional context from vector search if available.
   if (vectorContext) {
-    prompt += "Additional Context from Knowledge Base:\n";
-    prompt += vectorContext;
+    userMessage += "Additional Context from Knowledge Base:\n";
+    userMessage += vectorContext;
   }
 
-  // Query the LLM with the complete prompt.
-  const llmOutput = await queryLiteLLM(prompt, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal);
+  // Build the messages array with proper roles.
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemMessage },
+    { role: 'user', content: userMessage },
+  ];
+
+  console.info(`[handleQuery] System message length: ${systemMessage.length} chars`);
+  console.info(`[handleQuery] System message preview: ${systemMessage.slice(0, 300)}...`);
+  console.info(`[handleQuery] User message length: ${userMessage.length} chars`);
+
+  // Query the LLM with the complete messages.
+  const llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal);
   const assistantResponse = llmOutput.choices[0].message["content"];
+
+  console.info(`[handleQuery] Raw LLM response preview: ${assistantResponse.slice(0, 500)}`);
+  console.info('[handleQuery] Contains [[: ' + assistantResponse.includes('[[') + ', Contains ((: ' + assistantResponse.includes('(('));
 
   // Add the assistant's answer to the conversation history.
   conversationHistory.push({ role: "assistant", content: assistantResponse });

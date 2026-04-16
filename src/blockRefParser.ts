@@ -59,6 +59,6 @@ export function serialize(segments: BlockRefSegment[]): string {
  */
 export function transformToMarkdownLinks(input: string): string {
   return input.replaceAll(BLOCK_REF_REGEX, (_match, uuid: string) => {
-    return `[((${uuid}))](logseq://block/${uuid})`;
+    return `[block:${uuid}](logseq://block/${uuid})`;
   });
 }
