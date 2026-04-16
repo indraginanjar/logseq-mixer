@@ -52,4 +52,7 @@ export interface PerDocumentStorageProvider extends StorageProvider {
   searchByVector(queryVector: number[], limit: number, threshold: number): Promise<SearchResult[]>;
   getDocumentMeta(id: string): Promise<number | null>;
   getAllDocumentContent(): Array<{ id: string; content: string }>;
+  beginBulk?(): void;
+  endBulk?(): void;
+  persistToIndexedDB?(): Promise<void>;
 }
