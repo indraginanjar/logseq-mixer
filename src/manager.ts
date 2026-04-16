@@ -1,7 +1,7 @@
 import { BM25Index } from 'bm25Index';
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
-import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManager';
+import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
 import { queryLiteLLM } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
@@ -60,7 +60,7 @@ function ensureBM25Index(storageProvider: PerDocumentStorageProvider): BM25Index
   return bm25Index;
 }
 
-export async function indexEntireLogSeq(settings: any, storageProvider: StorageProvider) {
+export async function indexEntireLogSeq(settings: any, storageProvider: StorageProvider): Promise<IndexingResult> {
   clearRefCache();
 
   if (hasSearchByVector(storageProvider)) {
@@ -81,14 +81,16 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
       await storageProvider.clear();
       resetBM25Index();
     }
-    await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
     // Invalidate BM25 index so it rebuilds lazily from the updated store on next query
     resetBM25Index();
+    return result;
   } else {
     // Legacy Orama-based path: forceNew=true when full mode
     const forceNew = settings.indexingMode === 'full';
     const oramaDatabaseInstance = await loadVectorDatabase(settings, forceNew, settings.embeddingModel, storageProvider);
-    await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    const result = await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    return result;
   }
 }
 

@@ -1,7 +1,8 @@
 import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import { useThemeMode } from 'hooks/useThemeMode';
-import { isIndexingActive, requestPauseIndexing } from 'indexManager';
+import type { IndexingResult } from 'indexManager';
+import { getIndexingProgress, isIndexingActive, requestPauseIndexing } from 'indexManager';
 import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilValue } from 'recoil';
@@ -16,6 +17,16 @@ import type { StorageProvider } from './storage/StorageProvider';
 const slideIn = keyframes({
   '0%': { transform: 'translateX(100%)' },
   '100%': { transform: 'translateX(0)' },
+});
+
+const fadeIn = keyframes({
+  '0%': { opacity: 0, transform: 'translateY(-4px)' },
+  '100%': { opacity: 1, transform: 'translateY(0)' },
+});
+
+const fadeOut = keyframes({
+  '0%': { opacity: 1, transform: 'translateY(0)' },
+  '100%': { opacity: 0, transform: 'translateY(-4px)' },
 });
 
 const pulse = keyframes({
@@ -281,6 +292,44 @@ const Dot = styled('span', {
   },
 });
 
+const StatusIndicator = styled('span', {
+  fontSize: '11px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  padding: '2px 8px',
+  borderRadius: '6px',
+  fontWeight: 500,
+
+  '@motionSafe': {
+    animation: `${fadeIn} 0.2s ease-out`,
+  },
+
+  variants: {
+    variant: {
+      success: {
+        backgroundColor: '$green3',
+        color: '$green11',
+      },
+      paused: {
+        backgroundColor: '$amber3',
+        color: '$amber11',
+      },
+      progress: {
+        backgroundColor: 'transparent',
+        color: '$slate9',
+      },
+    },
+    dismissing: {
+      true: {
+        '@motionSafe': {
+          animation: `${fadeOut} 0.2s ease-in forwards`,
+        },
+      },
+    },
+  },
+});
+
 // --- Component ---
 
 type Props = {
@@ -308,6 +357,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [savedDraft, setSavedDraft] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
+  const [indexingStatus, setIndexingStatus] = useState<IndexingResult | null>(null);
+  const [isDismissing, setIsDismissing] = useState(false);
+  const [progressCount, setProgressCount] = useState(getIndexingProgress);
 
   // Poll document count every 10 seconds
   useEffect(() => {
@@ -327,6 +379,26 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   useEffect(() => {
     if (settings) enableAutoIndexer(settings, storageProvider);
   }, [settings]);
+
+  // Auto-dismiss success status after 4 seconds
+  useEffect(() => {
+    if (indexingStatus?.outcome !== 'completed') return;
+    const timer = setTimeout(() => {
+      setIsDismissing(true);
+      // Remove from DOM after animation completes
+      setTimeout(() => { setIndexingStatus(null); setIsDismissing(false); }, 200);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [indexingStatus]);
+
+  // Poll indexing progress every 500ms while indexing is active
+  useEffect(() => {
+    if (!isIndexing) return;
+    const interval = setInterval(() => {
+      setProgressCount(getIndexingProgress());
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isIndexing]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -430,8 +502,16 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     if (isIndexing) { requestPauseIndexing(); return; }
     setIsIndexing(true);
     setError(null);
+    setIndexingStatus(null);
+    setIsDismissing(false);
+
     try {
-      await indexEntireLogSeq(settings, storageProvider);
+      const result = await indexEntireLogSeq(settings, storageProvider);
+      if (result.outcome === 'error') {
+        setError(result.errorMessage || 'Indexing failed.');
+      } else {
+        setIndexingStatus(result);
+      }
     } catch (err: any) {
       setError(err.message || 'Indexing failed.');
     } finally {
@@ -504,9 +584,23 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             )}
           </InputWrapper>
           <ToolbarRow>
-            <StatusText>
-              {docCount !== null && <>📊 {docCount.toLocaleString()} chunks indexed</>}
-            </StatusText>
+            {isIndexing ? (
+              <StatusIndicator variant="progress">
+                Indexing… {progressCount} pages processed
+              </StatusIndicator>
+            ) : indexingStatus?.outcome === 'completed' ? (
+              <StatusIndicator variant="success" dismissing={isDismissing || undefined}>
+                ✓ Indexing complete — {docCount?.toLocaleString()} chunks indexed
+              </StatusIndicator>
+            ) : indexingStatus?.outcome === 'paused' ? (
+              <StatusIndicator variant="paused">
+                ⏸ Indexing paused
+              </StatusIndicator>
+            ) : (
+              <StatusText>
+                {docCount !== null && <>📊 {docCount.toLocaleString()} chunks indexed</>}
+              </StatusText>
+            )}
             <div style={{ display: 'flex', gap: '6px' }}>
               {storageProvider.exportToFile && (
                 <ToolbarButton onClick={() => storageProvider.exportToFile?.()}>📥 Export</ToolbarButton>
