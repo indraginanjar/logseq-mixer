@@ -5,6 +5,8 @@ Hope you find it useful! 😀👍🍀🍷
 
 ### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button). By default, only new or updated pages are indexed — this is fast even for large vaults.
 
+> **Note**: After updating to a version with clickable block references, a **full re-index** is required to populate block metadata and add block UUID annotations to your chunks.
+
 🎥 [Watch demo](https://www.youtube.com/watch?v=J0QDrz-Ccis)
 
 **Support me to help the project ❤️**
@@ -19,6 +21,7 @@ Hope you find it useful! 😀👍🍀🍷
 - Stores each document embedding as an individual row in a SQLite database (via [sql.js](https://github.com/sql-js/sql.js)), persisted to IndexedDB
 - Retrieves related notes using RAG (brute-force cosine similarity search + RRF reranking)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
+- **Clickable block references**: The LLM cites specific blocks using `((uuid))` notation, rendered as teal-colored inline links that navigate directly to the source block on click
 - Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
 - Automatically migrates existing Orama-based embeddings to the new per-document format — no re-indexing needed
 - Plugin still runs without embeddings — the currently active note will be passed as fallback context

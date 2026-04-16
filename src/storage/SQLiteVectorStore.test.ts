@@ -22,6 +22,13 @@ async function createInMemoryStore(): Promise<SQLiteVectorStore> {
       embedding BLOB NOT NULL
     )`
   );
+  db.run(
+    `CREATE TABLE IF NOT EXISTS block_metadata (
+      uuid TEXT PRIMARY KEY,
+      pageName TEXT NOT NULL,
+      contentPreview TEXT NOT NULL
+    )`
+  );
 
   const store = new SQLiteVectorStore('test-graph');
   // Inject the in-memory database directly
@@ -355,5 +362,111 @@ describe('Chunking version methods', () => {
 
     store.setChunkingVersion('2');
     expect(store.getChunkingVersion()).toBe('2');
+  });
+});
+
+// Feature: clickable-block-references, Block metadata methods
+describe('Block metadata methods', () => {
+  // **Validates: Requirements 2.1, 2.3, 2.4, 2.5**
+
+  let store: SQLiteVectorStore;
+
+  beforeEach(async () => {
+    store = await createInMemoryStore();
+  });
+
+  afterEach(() => {
+    const db = store.db;
+    if (db) db.close();
+  });
+
+  it('block_metadata table exists after initialization', () => {
+    const db = store.db!;
+    const result = db.exec(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='block_metadata'"
+    );
+    expect(result.length).toBe(1);
+    expect(result[0].values[0][0]).toBe('block_metadata');
+  });
+
+  it('upsertBlockMetadata inserts records', () => {
+    store.upsertBlockMetadata([
+      { uuid: 'aaa-111', pageName: 'Page A', contentPreview: 'Hello world' },
+      { uuid: 'bbb-222', pageName: 'Page B', contentPreview: 'Another block' },
+    ]);
+
+    const a = store.getBlockMetadata('aaa-111');
+    expect(a).toEqual({ pageName: 'Page A', contentPreview: 'Hello world' });
+
+    const b = store.getBlockMetadata('bbb-222');
+    expect(b).toEqual({ pageName: 'Page B', contentPreview: 'Another block' });
+  });
+
+  it('upsertBlockMetadata updates existing records', () => {
+    store.upsertBlockMetadata([
+      { uuid: 'aaa-111', pageName: 'Page A', contentPreview: 'Original' },
+    ]);
+
+    store.upsertBlockMetadata([
+      { uuid: 'aaa-111', pageName: 'Page A Updated', contentPreview: 'Updated preview' },
+    ]);
+
+    const result = store.getBlockMetadata('aaa-111');
+    expect(result).toEqual({ pageName: 'Page A Updated', contentPreview: 'Updated preview' });
+  });
+
+  it('deleteBlockMetadataForPage removes records for a specific page', () => {
+    store.upsertBlockMetadata([
+      { uuid: 'aaa-111', pageName: 'Page A', contentPreview: 'Block 1' },
+      { uuid: 'bbb-222', pageName: 'Page A', contentPreview: 'Block 2' },
+      { uuid: 'ccc-333', pageName: 'Page B', contentPreview: 'Block 3' },
+    ]);
+
+    store.deleteBlockMetadataForPage('Page A');
+
+    expect(store.getBlockMetadata('aaa-111')).toBeNull();
+    expect(store.getBlockMetadata('bbb-222')).toBeNull();
+    expect(store.getBlockMetadata('ccc-333')).toEqual({
+      pageName: 'Page B',
+      contentPreview: 'Block 3',
+    });
+  });
+
+  it('clearBlockMetadata removes all records', () => {
+    store.upsertBlockMetadata([
+      { uuid: 'aaa-111', pageName: 'Page A', contentPreview: 'Block 1' },
+      { uuid: 'bbb-222', pageName: 'Page B', contentPreview: 'Block 2' },
+    ]);
+
+    store.clearBlockMetadata();
+
+    expect(store.getBlockMetadata('aaa-111')).toBeNull();
+    expect(store.getBlockMetadata('bbb-222')).toBeNull();
+  });
+
+  it('getBlockMetadata returns correct record for existing UUID', () => {
+    store.upsertBlockMetadata([
+      { uuid: '64a1b2c3-d4e5-6789-abcd-ef0123456789', pageName: 'My Page', contentPreview: 'Some content here' },
+    ]);
+
+    const result = store.getBlockMetadata('64a1b2c3-d4e5-6789-abcd-ef0123456789');
+    expect(result).toEqual({ pageName: 'My Page', contentPreview: 'Some content here' });
+  });
+
+  it('getBlockMetadata returns null for missing UUID', () => {
+    const result = store.getBlockMetadata('nonexistent-uuid');
+    expect(result).toBeNull();
+  });
+
+  it('clear() also clears block_metadata', async () => {
+    store.upsertBlockMetadata([
+      { uuid: 'aaa-111', pageName: 'Page A', contentPreview: 'Block 1' },
+      { uuid: 'bbb-222', pageName: 'Page B', contentPreview: 'Block 2' },
+    ]);
+
+    await store.clear();
+
+    expect(store.getBlockMetadata('aaa-111')).toBeNull();
+    expect(store.getBlockMetadata('bbb-222')).toBeNull();
   });
 });

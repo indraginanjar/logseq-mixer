@@ -81,6 +81,9 @@ beforeAll(() => {
     App: {
       pushState: vi.fn(),
     },
+    Editor: {
+      scrollToBlockInPage: vi.fn(),
+    },
   };
 });
 
@@ -218,5 +221,117 @@ describe('ChatMessageList integration', () => {
     const ctrlLinks = container.querySelectorAll('a.ctrl-link');
     expect(ctrlLinks.length).toBe(1);
     expect(ctrlLinks[0].getAttribute('href')).toBe('https://example.com');
+  });
+
+  /**
+   * Requirement 8.1, 8.4: Assistant messages with ((uuid)) render BlockLink components
+   */
+  it('renders BlockLink for assistant messages with ((uuid)) patterns', () => {
+    const mockGetBlockMetadata = vi.fn((uuid: string) => {
+      if (uuid === 'ab-cd') {
+        return { pageName: 'Test Page', contentPreview: 'Some block content' };
+      }
+      return null;
+    });
+
+    const messages: ChatMessage[] = [
+      { id: 1, content: 'See ((ab-cd)) for details', sender: 'assistant' },
+    ];
+
+    const { container } = render(
+      <ChatMessageList messages={messages} getBlockMetadata={mockGetBlockMetadata} />
+    );
+
+    // BlockLink renders as a <span> with the children text from ReactMarkdown
+    const spans = container.querySelectorAll('span');
+    const blockLinkSpan = Array.from(spans).find((s) => s.textContent === '((ab-cd))');
+    expect(blockLinkSpan).toBeTruthy();
+
+    // Surrounding text should be present
+    expect(container.textContent).toContain('See');
+    expect(container.textContent).toContain('for details');
+  });
+
+  /**
+   * Requirement 8.1, 8.2: Messages with both [[page]] and ((uuid)) render both PageLink and BlockLink
+   */
+  it('renders both PageLink and BlockLink when message has [[page]] and ((uuid))', () => {
+    const mockGetBlockMetadata = vi.fn((uuid: string) => {
+      if (uuid === 'ab-cd') {
+        return { pageName: 'Test Page', contentPreview: 'Block preview' };
+      }
+      return null;
+    });
+
+    const messages: ChatMessage[] = [
+      { id: 1, content: 'See [[My Page]] and ((ab-cd))', sender: 'assistant' },
+    ];
+
+    const { container } = render(
+      <ChatMessageList messages={messages} getBlockMetadata={mockGetBlockMetadata} />
+    );
+
+    const spans = container.querySelectorAll('span');
+    const spanTexts = Array.from(spans).map((s) => s.textContent);
+
+    // PageLink should render for [[My Page]]
+    expect(spanTexts).toContain('My Page');
+    // BlockLink should render for ((ab-cd))
+    expect(spanTexts).toContain('((ab-cd))');
+  });
+
+  /**
+   * Requirement 8.3: User messages with ((uuid)) are NOT transformed
+   */
+  it('does not transform user messages containing ((uuid))', () => {
+    const mockGetBlockMetadata = vi.fn(() => ({
+      pageName: 'Test Page',
+      contentPreview: 'Some content',
+    }));
+
+    const messages: ChatMessage[] = [
+      { id: 1, content: 'What about ((ab-cd))?', sender: 'user' },
+    ];
+
+    const { container } = render(
+      <ChatMessageList messages={messages} getBlockMetadata={mockGetBlockMetadata} />
+    );
+
+    const text = container.textContent || '';
+
+    // User message should contain the raw ((ab-cd)) text, not a BlockLink
+    expect(text).toContain('((ab-cd))');
+
+    // getBlockMetadata should not have been called for user messages
+    expect(mockGetBlockMetadata).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Requirement 8.3: Messages with only [[page]] render identically to existing behavior (no BlockLink)
+   */
+  it('renders only PageLink when message has [[page]] but no ((uuid))', () => {
+    const mockGetBlockMetadata = vi.fn(() => null);
+
+    const messages: ChatMessage[] = [
+      { id: 1, content: 'Check out [[My Page]] for info', sender: 'assistant' },
+    ];
+
+    const { container } = render(
+      <ChatMessageList messages={messages} getBlockMetadata={mockGetBlockMetadata} />
+    );
+
+    const spans = container.querySelectorAll('span');
+    const spanTexts = Array.from(spans).map((s) => s.textContent);
+
+    // PageLink should render
+    expect(spanTexts).toContain('My Page');
+
+    // No BlockLink should be rendered — getBlockMetadata should not be called
+    // since there are no ((uuid)) patterns to trigger logseq://block/ links
+    expect(mockGetBlockMetadata).not.toHaveBeenCalled();
+
+    // Surrounding text should be intact
+    expect(container.textContent).toContain('Check out');
+    expect(container.textContent).toContain('for info');
   });
 });

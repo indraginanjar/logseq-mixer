@@ -40,6 +40,16 @@ The plugin uses a per-document SQLite storage model (`SQLiteVectorStore`) backed
 | lastUpdated | INTEGER        | Timestamp of last page update        |
 | embedding   | BLOB           | Raw Float32Array bytes (4 bytes per float) |
 
+A separate `block_metadata` table stores per-block navigation data:
+
+| Column         | Type       | Description                                      |
+|---------------|------------|--------------------------------------------------|
+| uuid          | TEXT (PK)  | Block UUID from Logseq                           |
+| pageName      | TEXT       | Parent page name                                 |
+| contentPreview| TEXT       | First 50 chars of block content (truncated with "…") |
+
+This metadata enables clickable block references in chat responses — the LLM cites blocks using `((uuid))` notation, and the UI renders them as teal-colored inline links that navigate to the source block on click.
+
 ### Persistence
 
 The sql.js in-memory database is persisted to IndexedDB as a binary ArrayBuffer. On plugin load, the database is restored from IndexedDB without any JSON parsing. If the stored data is corrupted, a fresh database is created automatically.
@@ -53,19 +63,21 @@ A legacy `SettingsStorageProvider` (Orama-based, storing a serialized JSON blob 
 Each page's content is processed block by block:
 
 1. The block tree is fetched via `logseq.Editor.getPageBlocksTree()`
-2. All blocks are recursively flattened, including nested children with indentation
-3. Block references `((uuid))` and embeds `{{embed ((uuid))}}` are resolved to actual content
-4. Blocks are grouped into chunks that respect block boundaries (see [Chunking Strategy](./chunking-strategy.md))
-5. Each chunk is prefixed with page metadata:
+2. All blocks are recursively flattened, including nested children with breadcrumb context
+3. Each block with a UUID and non-empty content is annotated with `[block:<uuid>]` for LLM citation
+4. Block references `((uuid))` and embeds `{{embed ((uuid))}}` are resolved to actual content
+5. Blocks are grouped into chunks that respect block boundaries (see [Chunking Strategy](./chunking-strategy.md))
+6. Block metadata (UUID, page name, content preview) is extracted and stored in the `block_metadata` table
+7. Each chunk is prefixed with page metadata:
 
 ```
 note_id: {page.id}
 note_name: {page.name}
 note_content:
 
-- {block 1 content}
-  - {child block content}
-- {block 2 content}
+[block:uuid-1] - {block 1 content}
+[block:uuid-2] [{block 1 content…}] {child block content}
+[block:uuid-3] - {block 2 content}
 ...
 ```
 
@@ -203,8 +215,8 @@ When using the `settings` storage backend, vector search still goes through the 
 
 | File                    | Responsibility                                              |
 |------------------------|-------------------------------------------------------------|
-| `src/embedManager.ts`  | Block flattening, reference resolution, chunk grouping, embedding generation |
-| `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search, IndexedDB persistence |
+| `src/embedManager.ts`  | Block flattening with UUID annotation, reference resolution, chunk grouping, block metadata extraction, embedding generation |
+| `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search, block metadata storage (`block_metadata` table), IndexedDB persistence |
 | `src/storage/cosineSimilarity.ts` | Embedding BLOB encode/decode, cosine similarity computation |
 | `src/storage/migrateLegacy.ts` | Migration from legacy Orama JSON blob to per-document rows |
 | `src/storage/StorageProvider.ts` | StorageProvider interface (per-document + legacy methods) |
