@@ -167,6 +167,25 @@ export class SQLiteVectorStore implements StorageProvider {
     }
   }
 
+  /** Retrieve all document IDs and content for BM25 index building. */
+  getAllDocumentContent(): Array<{ id: string; content: string }> {
+    if (!this._db) return [];
+
+    const stmt = this._db.prepare('SELECT id, content FROM documents');
+    const results: Array<{ id: string; content: string }> = [];
+
+    try {
+      while (stmt.step()) {
+        const row = stmt.get();
+        results.push({ id: row[0] as string, content: row[1] as string });
+      }
+    } finally {
+      stmt.free();
+    }
+
+    return results;
+  }
+
   async getDocumentCount(): Promise<number> {
     if (!this._db) return 0;
     const result = this._db.exec('SELECT COUNT(*) FROM documents');

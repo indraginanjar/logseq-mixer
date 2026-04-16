@@ -51,4 +51,5 @@ export interface PerDocumentStorageProvider extends StorageProvider {
   deleteDocuments(ids: string[]): Promise<void>;
   searchByVector(queryVector: number[], limit: number, threshold: number): Promise<SearchResult[]>;
   getDocumentMeta(id: string): Promise<number | null>;
+  getAllDocumentContent(): Array<{ id: string; content: string }>;
 }

@@ -2,34 +2,41 @@
 
 ## Overview
 
-Logseq Composer uses Retrieval-Augmented Generation (RAG) to provide the LLM with relevant context from the user's notes. When a user sends a query, the plugin retrieves semantically similar pages from the vector database and injects their content into the LLM prompt alongside conversation history and the currently open page.
+Logseq Composer uses Retrieval-Augmented Generation (RAG) to provide the LLM with relevant context from the user's notes. When a user sends a query, the plugin runs a hybrid search pipeline that combines BM25 keyword search with vector similarity search, merges results via Reciprocal Rank Fusion (RRF), and injects the top-ranked chunks into the LLM prompt alongside conversation history and the currently open page.
 
 ## Retrieval Pipeline
 
 ```
 User Query
     │
-    ▼
-┌──────────────────────────┐
-│ 1. Embed the query       │  useGenerateEmbedding(query)
-│    (selected model)      │
-└────────────┬─────────────┘
-             │
-             ▼
-┌──────────────────────────┐
-│ 2. Vector similarity     │  storageProvider.searchByVector()
-│    search (brute-force   │
-│    cosine similarity)    │
-│    - threshold: 0.5      │
-│    - top 5 results       │
-└────────────┬─────────────┘
-             │
-             ▼
-┌──────────────────────────┐
-│ 3. Rerank with RRF       │  rerankWithRRF(hits, query)
-└────────────┬─────────────┘
-             │
-             ▼
+    ├──────────────────────────────────┐
+    ▼                                  ▼
+┌──────────────────────────┐  ┌──────────────────────────┐
+│ 1a. Classify query       │  │ 1b. Embed the query      │  useGenerateEmbedding(query)
+│     classifyQuery(query) │  │     (selected model)     │
+│     → keyword/semantic/  │  └────────────┬─────────────┘
+│       mixed + weights    │               │
+└────────────┬─────────────┘               │
+             │                             │
+             ├─────────────┬───────────────┤
+             ▼             │               ▼
+┌──────────────────────┐   │  ┌──────────────────────────┐
+│ 2a. BM25 keyword     │   │  │ 2b. Vector similarity    │  storageProvider.searchByVector()
+│     search            │   │  │     search (brute-force  │
+│     bm25Index.search()│   │  │     cosine similarity)   │
+│     - top 5 results   │   │  │     - threshold: 0.5     │
+└──────────┬────────────┘   │  │     - top 5 results      │
+           │                │  └────────────┬──────────────┘
+           │                │               │
+           ▼                │               ▼
+┌──────────────────────────────────────────────┐
+│ 3. Merge with RRF          mergeWithRRF()    │
+│    - weighted by query classification        │
+│    - deduplicate by chunk ID                 │
+│    - top 5 fused results                     │
+└────────────────────┬─────────────────────────┘
+                     │
+                     ▼
 ┌──────────────────────────┐
 │ 4. Build LLM prompt      │
 │    - System prompt        │
@@ -44,7 +51,7 @@ User Query
 └──────────────────────────┘
 ```
 
-## Step 1: Query Embedding
+## Step 1a: Query Embedding
 
 The user's query text is embedded using the same model and API key used for indexing. The model is configurable (default: `text-embedding-3-small`), producing a 1536 or 3072-dimensional vector depending on the selected model.
 
@@ -52,11 +59,39 @@ The user's query text is embedded using the same model and API key used for inde
 - Same 30-second timeout applies
 - If embedding fails, vector search is skipped entirely and the query proceeds with only the current page as context
 
-## Step 2: Vector Search
+## Step 1b: Query Classification
 
-The query vector is searched against the stored documents using brute-force cosine similarity.
+The query is classified by `classifyQuery()` to determine how to weight BM25 vs. vector results during RRF merging. The classifier uses heuristic detection of keyword indicators:
 
-### Default Backend (SQLiteVectorStore)
+- URL patterns (`http://`, `https://`, domain-like strings)
+- File paths (`/path/to/file`, `C:\path`, `./relative`)
+- Code-like tokens (camelCase, snake_case, method calls, brackets/braces)
+- Quoted phrases (text in single or double quotes)
+- Special characters (regex-like patterns, `*`, `?`, `^`, etc.)
+
+Decision logic: ≥2 indicators → `keyword`, 1 indicator → `mixed`, 0 indicators → `semantic`.
+
+| Category   | `bm25Weight` | `vectorWeight` |
+|-----------|-------------|---------------|
+| `keyword`  | 1.5         | 0.5           |
+| `mixed`    | 1.0         | 1.0           |
+| `semantic` | 0.5         | 1.5           |
+
+If the classifier throws, the pipeline defaults to `mixed` (equal weights).
+
+## Step 2: Hybrid Search
+
+For the default backend (SQLiteVectorStore), the pipeline runs BM25 keyword search and vector similarity search in parallel, then merges results via RRF. This is orchestrated by `hybridSearch()` in `src/hybridSearch.ts`.
+
+### BM25 Keyword Search
+
+An in-memory `BM25Index` is built from all document content in the SQLite `documents` table at initialization and kept in sync via upsert/delete/clear lifecycle hooks. At query time, the query is tokenized (split on whitespace/punctuation, lowercased) and scored against the index using the BM25 (Okapi BM25) ranking formula with parameters k1=1.2, b=0.75.
+
+| Parameter | Value | Description                        |
+|----------|-------|------------------------------------|
+| limit    | 5     | Maximum number of BM25 results     |
+
+### Vector Similarity Search
 
 The `SQLiteVectorStore` reads all rows from the `documents` table, decodes each embedding BLOB to a `Float32Array`, computes cosine similarity in JavaScript, and returns the top-K results.
 
@@ -65,24 +100,40 @@ The `SQLiteVectorStore` reads all rows from the `documents` table, decodes each 
 | similarity     | 0.5     | Minimum cosine similarity threshold               |
 | limit          | 5       | Maximum number of results returned                |
 
+### RRF Merging
+
+Both result lists are passed to `mergeWithRRF()`, which fuses them using weighted Reciprocal Rank Fusion:
+
+1. All unique chunk IDs from both lists are collected
+2. Each chunk gets a rank in each list (1-indexed); chunks missing from a list receive a penalty rank of `listLength + 1`
+3. Fused score: `bm25Weight * 1/(K + rank_bm25) + vectorWeight * 1/(K + rank_vector)` (K defaults to 60)
+4. Results are deduplicated by chunk ID, sorted by fused score descending, and limited to 5
+
+### Fallback Behavior
+
+- If vector search fails → BM25 results only (warning logged)
+- If BM25 search fails → vector results only (warning logged)
+- If both fail → empty result array, LLM proceeds without additional context
+
 ### Legacy Backend (Orama via SettingsStorageProvider)
 
-When using the `settings` backend, search goes through Orama's in-memory vector index with a 0.65 similarity threshold.
+When using the `settings` backend, search goes through Orama's in-memory vector index with a 0.65 similarity threshold. The legacy path uses `rerankWithRRF()` (single-list reranking) and is not affected by the hybrid search pipeline.
 
 ### What Gets Returned
 
 Each search hit contains:
 - `id` — the document/chunk identifier
 - `content` — the full chunk text that was embedded
-- `score` — cosine similarity score
+- `score` — original similarity or BM25 score
+- `rrfScore` — fused RRF score used for final ranking
 
 ### Reranking
 
-After vector search, results are reranked using Reciprocal Rank Fusion (RRF) via `rerankWithRRF()`. This combines the vector similarity score with keyword-based scoring for improved relevance.
+For the hybrid search path (SQLiteVectorStore), results are merged and ranked by `mergeWithRRF()`, which performs dual-list RRF fusion with classification-based weights. The legacy Orama path continues to use `rerankWithRRF()` for single-list reranking that combines vector similarity rank with keyword match rank.
 
 ### No Results Scenario
 
-If no documents meet the similarity threshold, the results array is empty and no additional context is added to the prompt. The LLM still receives the system prompt, conversation history, and current page context.
+If no documents meet the similarity threshold and BM25 returns no matches, the results array is empty and no additional context is added to the prompt. The LLM still receives the system prompt, conversation history, and current page context.
 
 ## Step 3: Prompt Construction
 
@@ -164,7 +215,6 @@ This means the plugin always works — even without embeddings configured — by
 
 ## Limitations
 
-- **No hybrid search**: Only vector similarity is used (with RRF reranking for keyword boosting). No BM25 scoring.
 - **Full chunk injection**: Retrieved chunks are injected in full, which can consume significant prompt tokens for long pages.
 - **No deduplication**: The current page may appear both as "Current Page Context" and in "Additional Context" if it's a top search result.
 - **Fixed parameters**: Similarity threshold (0.5) and result limit (5) are hardcoded, not configurable via settings.
@@ -180,7 +230,10 @@ This means the plugin always works — even without embeddings configured — by
 | `src/embedManager.ts`   | `useGenerateEmbedding()` — embeds the query text         |
 | `src/storage/SQLiteVectorStore.ts` | `searchByVector()` — brute-force cosine similarity search (default backend) |
 | `src/storage/cosineSimilarity.ts` | `cosineSimilarity()` — cosine similarity computation     |
-| `src/reranker.ts`       | `rerankWithRRF()` — Reciprocal Rank Fusion reranking     |
+| `src/bm25Index.ts`      | `BM25Index` — in-memory inverted index for BM25 keyword search |
+| `src/queryClassifier.ts`| `classifyQuery()` — heuristic query classification (keyword/semantic/mixed) |
+| `src/hybridSearch.ts`   | `hybridSearch()` — hybrid search pipeline orchestration   |
+| `src/reranker.ts`       | `rerankWithRRF()` — single-list RRF reranking (legacy Orama path); `mergeWithRRF()` — dual-list RRF fusion (hybrid search) |
 | `src/VectorDBManager.ts`| `vectorSearchOramaDB()` — legacy Orama vector search (settings backend only) |
 | `src/LLMManager.ts`     | `queryLiteLLM()` — sends prompt to LLM via LiteLLM      |
 | `src/settings.ts`       | Plugin settings (model, API keys, prompt, endpoint, storage backend) |
