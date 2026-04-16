@@ -1,4 +1,6 @@
+import { BM25Index } from 'bm25Index';
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
+import { hybridSearch } from 'hybridSearch';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange } from 'indexManager';
 import { queryLiteLLM } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
@@ -27,6 +29,37 @@ function hasSearchByVector(provider: any): provider is PerDocumentStorageProvide
   return typeof provider?.searchByVector === 'function';
 }
 
+/** Module-level BM25 index, lazily initialized on first hybrid search. */
+let bm25Index: BM25Index | null = null;
+
+/** Return the current BM25 index (may be null if not yet initialized). */
+export function getBM25Index(): BM25Index | null {
+  return bm25Index;
+}
+
+/** Reset the BM25 index (used when the store is cleared). */
+export function resetBM25Index(): void {
+  bm25Index = null;
+}
+
+/**
+ * Ensure the BM25 index is initialized. If it hasn't been created yet,
+ * build it from all document content in the storage provider.
+ */
+function ensureBM25Index(storageProvider: PerDocumentStorageProvider): BM25Index {
+  if (bm25Index === null) {
+    bm25Index = new BM25Index();
+    try {
+      const docs = storageProvider.getAllDocumentContent();
+      bm25Index.buildFromDocuments(docs);
+      console.info(`[ensureBM25Index] Built BM25 index from ${docs.length} documents`);
+    } catch (err) {
+      console.warn('[ensureBM25Index] Failed to build BM25 index, starting empty:', err);
+    }
+  }
+  return bm25Index;
+}
+
 export async function indexEntireLogSeq(settings: any, storageProvider: StorageProvider) {
   clearRefCache();
 
@@ -37,6 +70,7 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
       if (storedVersion !== CURRENT_CHUNKING_VERSION) {
         console.info('[indexEntireLogSeq] Chunking version mismatch, forcing full re-index.');
         await storageProvider.clear();
+        resetBM25Index();
         storageProvider.setChunkingVersion(CURRENT_CHUNKING_VERSION);
       }
     }
@@ -45,8 +79,11 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
     if (settings.indexingMode === 'full') {
       console.info('[indexEntireLogSeq] Full mode: clearing documents table before re-index.');
       await storageProvider.clear();
+      resetBM25Index();
     }
     await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    // Invalidate BM25 index so it rebuilds lazily from the updated store on next query
+    resetBM25Index();
   } else {
     // Legacy Orama-based path: forceNew=true when full mode
     const forceNew = settings.indexingMode === 'full';
@@ -79,32 +116,33 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     console.info(`[handleQuery] Query embedding dimensions: ${queryEmbedding?.length}, model: ${settings.embeddingModel}`);
     console.info(`[handleQuery] Embedding sample (first 5): ${queryEmbedding?.slice(0, 5)}`);
 
-    let searchHits: SearchHit[];
-
     if (hasSearchByVector(storageProvider)) {
-      // Per-document path: use storageProvider.searchByVector directly
-      const results = await storageProvider.searchByVector(queryEmbedding, 5, 0.5);
-      console.info(`[handleQuery] Per-document search returned ${results.length} hits`);
-      searchHits = results.map(r => ({ id: r.id, content: r.content, score: r.score }));
+      // Per-document path: hybrid search (BM25 + vector, merged via RRF)
+      const index = ensureBM25Index(storageProvider);
+      const reranked = await hybridSearch(query, queryEmbedding, storageProvider, index);
+      console.info(`[handleQuery] Hybrid search returned ${reranked.length} results`);
+      reranked.forEach(hit => {
+        vectorContext += hit.content + "\n\n";
+      });
     } else {
       // Legacy Orama-based path
       const oramaDatabaseInstance = await getOrLoadVectorDatabase(settings, settings.embeddingModel, storageProvider);
       const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
       console.info(`[handleQuery] Vector search returned ${vectorResult.hits?.length ?? 0} hits (count: ${vectorResult.count})`);
-      searchHits = (vectorResult.hits ?? []).map(hit => ({
+      const searchHits: SearchHit[] = (vectorResult.hits ?? []).map(hit => ({
         id: hit.document.id as string,
         content: hit.document.content as string,
         score: hit.score,
       }));
-    }
 
-    // Rerank vector search results using RRF before building context.
-    if (searchHits.length > 0) {
-      const reranked = rerankWithRRF(searchHits, query);
-      console.info(`[handleQuery] After reranking: ${reranked.length} results`);
-      reranked.forEach(hit => {
-        vectorContext += hit.content + "\n\n";
-      });
+      // Rerank legacy Orama results using RRF before building context.
+      if (searchHits.length > 0) {
+        const reranked = rerankWithRRF(searchHits, query);
+        console.info(`[handleQuery] After reranking: ${reranked.length} results`);
+        reranked.forEach(hit => {
+          vectorContext += hit.content + "\n\n";
+        });
+      }
     }
   } catch (err) {
     console.error("Vector search failed, proceeding without additional context:", err);

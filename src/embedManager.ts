@@ -152,7 +152,7 @@ export async function fetchBacklinks(pageName: string): Promise<string[]> {
     }
     return names;
   } catch (err) {
-    console.error(`Failed to fetch backlinks for "${pageName}":`, err);
+    console.warn(`Failed to fetch backlinks for "${pageName}" (Logseq API issue, skipping):`, err);
     return [];
   }
 }
