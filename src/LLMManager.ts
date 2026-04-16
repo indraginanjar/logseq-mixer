@@ -1,6 +1,11 @@
 
+export type ChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
 export async function queryLiteLLM(
-  query: string,
+  messages: ChatMessage[],
   model: string,
   apiKey: string,
   endpoint: string,
@@ -14,7 +19,7 @@ export async function queryLiteLLM(
     },
     body: JSON.stringify({
       model: model,
-      messages: [{ role: 'user', content: query }],
+      messages: messages,
       "api_key":apiKey
     }),
     signal,
