@@ -205,6 +205,7 @@ This separation ensures the LLM treats formatting rules (like `[[page name]]` an
 - **Model**: Configurable via `settings.selectedModel` (default: `gpt-3.5-turbo`)
 - **Auth**: The `settings.apiKey` is passed both as a Bearer token and in the request body
 - **Message format**: Two messages — a `system` message (plugin prompt with formatting rules) and a `user` message (context + conversation history + query)
+- **Max output tokens**: Automatically set per model — GPT-4o gets 16,384, GPT-4 gets 8,192, GPT-3.5-turbo gets 4,096, etc. Unknown models fall back to 4,096. See `MODEL_MAX_TOKENS` in `LLMManager.ts`.
 - **No streaming**: The response is awaited in full before displaying
 - **Cancellable**: The user can click the stop button to abort the LLM request mid-flight via `AbortController`
 
@@ -240,6 +241,8 @@ This means the plugin always works — even without embeddings configured — by
 - **Fixed parameters**: Similarity threshold (0.5) and result limit (5) are hardcoded, not configurable via settings.
 - **Single-turn LLM call**: The full context is sent as a system + user message pair. No multi-turn chat API usage with alternating roles.
 - **No timeout on LLM call**: The `queryLiteLLM()` fetch has no built-in timeout, but the user can cancel it via the stop button in the chat UI.
+- **No streaming**: Responses are awaited in full before displaying. Long responses may take several seconds to appear.
+- **Model-specific output limits**: Each model has a hardcoded max output token limit (e.g., 16,384 for GPT-4o). Responses that exceed this limit are truncated by the API.
 - **Brute-force search**: The SQLite backend scans all document embeddings for every query. This is fast for typical graph sizes but scales linearly with document count.
 
 ## File Reference
@@ -255,7 +258,7 @@ This means the plugin always works — even without embeddings configured — by
 | `src/hybridSearch.ts`   | `hybridSearch()` — hybrid search pipeline orchestration   |
 | `src/reranker.ts`       | `rerankWithRRF()` — single-list RRF reranking (legacy Orama path); `mergeWithRRF()` — dual-list RRF fusion (hybrid search) |
 | `src/VectorDBManager.ts`| `vectorSearchOramaDB()` — legacy Orama vector search (settings backend only) |
-| `src/LLMManager.ts`     | `queryLiteLLM()` — sends system + user messages to LLM via LiteLLM; `ChatMessage` type for message role typing |
+| `src/LLMManager.ts`     | `queryLiteLLM()` — sends system + user messages to LLM via LiteLLM; `ChatMessage` type for message role typing; `MODEL_MAX_TOKENS` — per-model output token limits; `getMaxTokensForModel()` — lookup function |
 | `src/blockRefParser.ts` | `parse()`, `serialize()`, `transformToMarkdownLinks()` — detects and transforms `((uuid))` block references in LLM responses |
 | `src/components/BlockLink.tsx` | `BlockLink` — clickable inline component for block references (teal, navigates to block via `scrollToBlockInPage`) |
 | `src/components/ChatMessageList.tsx` | Chat message rendering with page link and block reference transformation pipeline |
