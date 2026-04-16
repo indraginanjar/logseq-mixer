@@ -30,14 +30,16 @@ Top-level block B
 Becomes:
 
 ```
-- Block A content
-  - Block A.1 content
-    - Block A.1.1 content
-  - Block A.2 content
-- Block B content
+[block:uuid-a] - Block A content
+[block:uuid-a1] [Block A content…] Block A.1 content
+[block:uuid-a11] [Block A content… > Block A.1 content…] Block A.1.1 content
+[block:uuid-a2] [Block A content…] Block A.2 content
+[block:uuid-b] - Block B content
 ```
 
-Indentation uses two spaces per depth level, preserving the hierarchy visually.
+Each block line is prefixed with a `[block:<uuid>]` annotation when the block has a UUID and non-empty content. Child blocks include a breadcrumb trail showing their parent context. These annotations are embedded in the chunk text so that when chunks are retrieved during search, the LLM can see which block each piece of content came from and cite it using `((uuid))` notation.
+
+Blocks without a UUID or with empty content do not receive an annotation.
 
 ## Block Reference Resolution
 
@@ -93,12 +95,24 @@ note_content:
 
 This ensures the embedding model and LLM know which page the blocks belong to, even when viewing a chunk in isolation.
 
+## Block Metadata Storage
+
+During indexing, the plugin also populates a `block_metadata` table that maps each block's UUID to its parent page name and a short content preview (first 50 characters, truncated with "…"). This metadata is used at render time to display meaningful labels on clickable block references and to navigate to the correct page when a block reference is clicked.
+
+| Column         | Type       | Description                                      |
+|---------------|------------|--------------------------------------------------|
+| uuid          | TEXT (PK)  | Block UUID from Logseq                           |
+| pageName      | TEXT       | Parent page name                                 |
+| contentPreview| TEXT       | First 50 chars of block content (truncated with "…") |
+
+When a page is re-indexed, its old block metadata is deleted before new records are inserted. A full re-index clears all block metadata.
+
 ## What Gets Chunked
 
 | Content Type              | Handling                                              |
 |--------------------------|-------------------------------------------------------|
-| Top-level blocks         | Included with `- ` prefix                             |
-| Nested/child blocks      | Included with indentation reflecting depth             |
+| Top-level blocks         | Included with `- ` prefix and `[block:uuid]` annotation |
+| Nested/child blocks      | Included with breadcrumb context and `[block:uuid]` annotation |
 | Block references `(())`  | Resolved to actual referenced block content            |
 | Block embeds `{{embed}}` | Resolved to actual embedded block content              |
 | Journal pages            | Included (individual journal entries like "Apr 15th")  |
@@ -127,6 +141,6 @@ Not currently exposed as a plugin setting.
 
 | File                   | Relevant Code                                                |
 |-----------------------|--------------------------------------------------------------|
-| `src/embedManager.ts` | `flattenBlocks()` (recursive block traversal), `resolveBlockReferences()` (reference resolution), `groupBlocksIntoChunks()` (chunk grouping), `getEmbedingsAllNotes()` (full indexing), `getEmbeddingsForPage()` (incremental indexing) |
-| `src/indexManager.ts`  | `checkAndIndexUpdatedPages()` (incremental indexing with chunk cleanup via `deleteDocuments` + `upsertDocuments`) |
-| `src/storage/SQLiteVectorStore.ts` | Per-document storage of chunks (each chunk is a row in the `documents` table) |
+| `src/embedManager.ts` | `flattenBlocks()` (recursive block traversal with UUID annotation), `resolveBlockReferences()` (reference resolution), `groupBlocksIntoChunks()` (chunk grouping), `createContentPreview()` (block metadata preview truncation), `getEmbedingsAllNotes()` (full indexing), `getEmbeddingsForPage()` (incremental indexing, returns embeddings + block metadata) |
+| `src/indexManager.ts`  | `checkAndIndexUpdatedPages()` (incremental indexing with chunk cleanup via `deleteDocuments` + `upsertDocuments`, block metadata via `upsertBlockMetadata` + `deleteBlockMetadataForPage`) |
+| `src/storage/SQLiteVectorStore.ts` | Per-document storage of chunks (each chunk is a row in the `documents` table), block metadata storage (`block_metadata` table with `upsertBlockMetadata`, `deleteBlockMetadataForPage`, `clearBlockMetadata`, `getBlockMetadata`) |

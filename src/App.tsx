@@ -545,7 +545,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         </Header>
 
         <MessagesContainer id="messages-container" className={ctrlHeld ? 'ctrl-held' : ''}>
-          <ChatMessageList messages={messages} />
+          <ChatMessageList
+            messages={messages}
+            getBlockMetadata={(uuid) => {
+              const provider = storageProvider as any;
+              return provider.getBlockMetadata?.(uuid) ?? null;
+            }}
+          />
           {loading && (
             <TypingIndicator>
               <Dot delay={0} /><Dot delay={1} /><Dot delay={2} />

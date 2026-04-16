@@ -56,9 +56,10 @@ describe('Property 1: Bug Condition - Per-Page Double Flush and No Yielding Duri
     mockFetchBacklinks.mockResolvedValue([]);
     mockGetEmbeddingsForPage.mockImplementation(
       (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
-        return Promise.resolve([
-          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
-        ]);
+        return Promise.resolve({
+          embeddings: [{ id: pageId, content: 'test', lastUpdated, embedding: [0.1] }],
+          blockMetadata: [],
+        });
       }
     );
 
@@ -182,6 +183,13 @@ async function createInMemoryStore(): Promise<SQLiteVectorStore> {
       content TEXT NOT NULL,
       lastUpdated INTEGER NOT NULL,
       embedding BLOB NOT NULL
+    )`
+  );
+  db.run(
+    `CREATE TABLE IF NOT EXISTS block_metadata (
+      uuid TEXT PRIMARY KEY,
+      pageName TEXT NOT NULL,
+      contentPreview TEXT NOT NULL
     )`
   );
 
@@ -361,9 +369,10 @@ describe('Preservation Property 2c: Pause behavior - indexing stops after at mos
     mockFetchBacklinks.mockResolvedValue([]);
     mockGetEmbeddingsForPage.mockImplementation(
       (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
-        return Promise.resolve([
-          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
-        ]);
+        return Promise.resolve({
+          embeddings: [{ id: pageId, content: 'test', lastUpdated, embedding: [0.1] }],
+          blockMetadata: [],
+        });
       }
     );
 
@@ -470,9 +479,10 @@ describe('Feature: indexing-status-feedback, Property 2: Paused indexing returns
     mockFetchBacklinks.mockResolvedValue([]);
     mockGetEmbeddingsForPage.mockImplementation(
       (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
-        return Promise.resolve([
-          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
-        ]);
+        return Promise.resolve({
+          embeddings: [{ id: pageId, content: 'test', lastUpdated, embedding: [0.1] }],
+          blockMetadata: [],
+        });
       }
     );
 
@@ -581,9 +591,10 @@ describe('Feature: indexing-status-feedback, Property 1: Completed indexing retu
     mockFetchBacklinks.mockResolvedValue([]);
     mockGetEmbeddingsForPage.mockImplementation(
       (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
-        return Promise.resolve([
-          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
-        ]);
+        return Promise.resolve({
+          embeddings: [{ id: pageId, content: 'test', lastUpdated, embedding: [0.1] }],
+          blockMetadata: [],
+        });
       }
     );
 
@@ -727,9 +738,10 @@ describe('Feature: indexing-status-feedback, Property 3: Error indexing returns 
     mockFetchBacklinks.mockResolvedValue([]);
     mockGetEmbeddingsForPage.mockImplementation(
       (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
-        return Promise.resolve([
-          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
-        ]);
+        return Promise.resolve({
+          embeddings: [{ id: pageId, content: 'test', lastUpdated, embedding: [0.1] }],
+          blockMetadata: [],
+        });
       }
     );
 
@@ -813,9 +825,10 @@ describe('Feature: indexing-status-feedback, Property 5: Progress getter reflect
     mockFetchBacklinks.mockResolvedValue([]);
     mockGetEmbeddingsForPage.mockImplementation(
       (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
-        return Promise.resolve([
-          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
-        ]);
+        return Promise.resolve({
+          embeddings: [{ id: pageId, content: 'test', lastUpdated, embedding: [0.1] }],
+          blockMetadata: [],
+        });
       }
     );
 

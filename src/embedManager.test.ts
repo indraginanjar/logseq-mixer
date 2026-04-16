@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { BlockLine, buildPageHeader, extractOutgoingLinks, groupBlocksIntoChunks, identifySemanticGroups, MAX_OVERLAP_BUDGET, OVERLAP_FRACTION, PageLinkData } from './embedManager';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { BlockLine, buildPageHeader, clearRefCache, createContentPreview, extractOutgoingLinks, flattenBlocks, groupBlocksIntoChunks, identifySemanticGroups, MAX_OVERLAP_BUDGET, OVERLAP_FRACTION, PageLinkData } from './embedManager';
 import { countTokens, decode, encode } from './tokenizer';
 
 describe('identifySemanticGroups', () => {
@@ -836,6 +836,262 @@ describe('Property 5: Safety truncation correctness', () => {
           const inputTokenCount = countTokens(inputText);
           if (inputTokenCount <= maxTokens && output !== inputText) {
             return false;
+          }
+
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+describe('flattenBlocks annotation behavior', () => {
+  beforeAll(() => {
+    (globalThis as any).logseq = {
+      Editor: {
+        getBlock: vi.fn().mockResolvedValue(null),
+      },
+    };
+  });
+
+  afterAll(() => {
+    delete (globalThis as any).logseq;
+  });
+
+  it('block with UUID gets [block:uuid] annotation', async () => {
+    clearRefCache();
+    const blocks = [
+      { content: 'Hello world', uuid: 'abc-123', children: [] },
+    ];
+    const result = await flattenBlocks(blocks, [], 'TestPage');
+    expect(result.lines).toHaveLength(1);
+    expect(result.lines[0]).toBe('[block:abc-123] - Hello world');
+  });
+
+  it('block without UUID has no annotation', async () => {
+    clearRefCache();
+    const blocks = [
+      { content: 'No uuid here', children: [] },
+    ];
+    const result = await flattenBlocks(blocks, [], 'TestPage');
+    expect(result.lines).toHaveLength(1);
+    expect(result.lines[0]).toBe('- No uuid here');
+    expect(result.lines[0]).not.toContain('[block:');
+  });
+
+  it('block with empty content is skipped', async () => {
+    clearRefCache();
+    const blocks = [
+      { content: '', uuid: 'skip-me', children: [] },
+      { content: 'visible', uuid: 'visible-id', children: [] },
+    ];
+    const result = await flattenBlocks(blocks, [], 'TestPage');
+    expect(result.lines).toHaveLength(1);
+    expect(result.lines[0]).toContain('visible');
+    expect(result.lines.some((l: string) => l.includes('skip-me'))).toBe(false);
+  });
+
+  it('collects block metadata with correct pageName and contentPreview', async () => {
+    clearRefCache();
+    const blocks = [
+      { content: 'Short content', uuid: 'meta-uuid', children: [] },
+    ];
+    const result = await flattenBlocks(blocks, [], 'MyPage');
+    expect(result.metadata).toHaveLength(1);
+    expect(result.metadata[0]).toEqual({
+      uuid: 'meta-uuid',
+      pageName: 'MyPage',
+      contentPreview: 'Short content',
+    });
+  });
+});
+
+
+describe('createContentPreview', () => {
+  it('returns content unchanged when 50 chars or fewer', () => {
+    const short = 'Hello world';
+    expect(createContentPreview(short)).toBe(short);
+  });
+
+  it('returns content unchanged at exactly 50 chars', () => {
+    const exact50 = 'a'.repeat(50);
+    expect(createContentPreview(exact50)).toBe(exact50);
+    expect(createContentPreview(exact50).length).toBe(50);
+  });
+
+  it('truncates content longer than 50 chars with ellipsis', () => {
+    const long = 'a'.repeat(100);
+    const preview = createContentPreview(long);
+    expect(preview.length).toBe(50);
+    expect(preview).toBe('a'.repeat(49) + '…');
+  });
+
+  it('truncates at 50 chars total (49 content chars + ellipsis)', () => {
+    const input = 'This is a string that is definitely longer than fifty characters in total length';
+    const preview = createContentPreview(input);
+    expect(preview.length).toBe(50);
+    expect(preview.endsWith('…')).toBe(true);
+    expect(preview.slice(0, 49)).toBe(input.slice(0, 49));
+  });
+});
+
+
+/**
+ * Feature: clickable-block-references, Property 1: Block UUID Annotation Completeness
+ *
+ * Validates: Requirements 1.1, 1.2, 1.3, 1.4
+ *
+ * For any block tree where each block has a UUID and non-empty content, the flattened
+ * output lines SHALL each contain a `[block:<uuid>]` annotation matching that block's UUID,
+ * and blocks without a UUID or with empty content SHALL have no annotation.
+ */
+describe('Property 1: Block UUID Annotation Completeness', () => {
+  beforeAll(() => {
+    (globalThis as any).logseq = {
+      Editor: {
+        getBlock: vi.fn().mockResolvedValue(null),
+      },
+    };
+  });
+
+  afterAll(() => {
+    delete (globalThis as any).logseq;
+  });
+
+  /** Generate a hex string of a given length */
+  function hexStringArb(len: number): fc.Arbitrary<string> {
+    return fc.array(
+      fc.constantFrom('0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'),
+      { minLength: len, maxLength: len }
+    ).map(chars => chars.join(''));
+  }
+
+  /** Generate a valid UUID-like string (hex chars and hyphens) */
+  const uuidArb = fc.tuple(
+    hexStringArb(8),
+    hexStringArb(4),
+    hexStringArb(4),
+    hexStringArb(4),
+    hexStringArb(12),
+  ).map(([a, b, c, d, e]) => `${a}-${b}-${c}-${d}-${e}`);
+
+  /** Generate block content: either empty string or non-empty ASCII text */
+  const contentArb = fc.oneof(
+    fc.constant(''),
+    fc.string({ minLength: 1, maxLength: 40 }).filter(s => !s.includes('((') && !s.includes('{{embed'))
+  );
+
+  /** Generate a single block node with optional uuid, content, and children */
+  const blockNodeArb: fc.Arbitrary<any> = fc.letrec(tie => ({
+    node: fc.record({
+      uuid: fc.oneof(uuidArb, fc.constant(undefined)),
+      content: contentArb,
+      children: fc.oneof(
+        { depthSize: 'small', withCrossShrink: true },
+        fc.constant([]),
+        fc.array(tie('node'), { minLength: 0, maxLength: 3 })
+      ),
+    }),
+  })).node;
+
+  /** Generate a block tree (array of block nodes) */
+  const blockTreeArb = fc.array(blockNodeArb, { minLength: 1, maxLength: 5 });
+
+  /** Recursively collect all blocks from a tree (flattened list) */
+  function collectAllBlocks(blocks: any[]): any[] {
+    const result: any[] = [];
+    for (const block of blocks) {
+      result.push(block);
+      if (block.children && block.children.length > 0) {
+        result.push(...collectAllBlocks(block.children));
+      }
+    }
+    return result;
+  }
+
+  it('blocks with UUID and non-empty content have [block:uuid] annotation; blocks without do not', () => {
+    fc.assert(
+      fc.asyncProperty(
+        blockTreeArb,
+        async (blocks) => {
+          clearRefCache();
+          const { lines } = await flattenBlocks(blocks, [], 'TestPage');
+          const allBlocks = collectAllBlocks(blocks);
+
+          // Check blocks WITH uuid AND non-empty content: annotation must exist in output
+          for (const block of allBlocks) {
+            if (block.uuid && block.content) {
+              const annotation = `[block:${block.uuid}]`;
+              const hasAnnotation = lines.some((line: string) => line.includes(annotation));
+              if (!hasAnnotation) {
+                return false;
+              }
+            }
+          }
+
+          // Check blocks WITHOUT uuid OR with empty content: no annotation for them
+          for (const block of allBlocks) {
+            if (!block.uuid && block.content) {
+              // Block without uuid but with content: no [block:undefined] or similar
+              const badAnnotation = '[block:undefined]';
+              const hasBadAnnotation = lines.some((line: string) => line.includes(badAnnotation));
+              if (hasBadAnnotation) {
+                return false;
+              }
+            }
+            if (block.uuid && !block.content) {
+              // Block with uuid but empty content: should not appear in output at all
+              const annotation = `[block:${block.uuid}]`;
+              const hasAnnotation = lines.some((line: string) => line.includes(annotation));
+              if (hasAnnotation) {
+                return false;
+              }
+            }
+          }
+
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+/**
+ * Feature: clickable-block-references, Property 2: Content Preview Truncation Invariant
+ *
+ * Validates: Requirements 2.3
+ *
+ * For any non-empty string, the content preview function SHALL produce a string of at most
+ * 50 characters. If the input string has more than 50 characters, the output SHALL end with
+ * "…" and have length exactly 50. If the input string has 50 or fewer characters, the output
+ * SHALL equal the input.
+ */
+describe('Property 2: Content Preview Truncation Invariant', () => {
+  it('content preview output is at most 50 chars with correct truncation behavior', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 200 }),
+        (input) => {
+          const output = createContentPreview(input);
+
+          // Output must never exceed 50 characters
+          if (output.length > 50) {
+            return false;
+          }
+
+          // If input has more than 50 characters, output must end with "…" and have length exactly 50
+          if (input.length > 50) {
+            if (output.length !== 50) return false;
+            if (!output.endsWith('…')) return false;
+          }
+
+          // If input has 50 or fewer characters, output must equal the input
+          if (input.length <= 50) {
+            if (output !== input) return false;
           }
 
           return true;

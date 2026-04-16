@@ -1,7 +1,9 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { transformToMarkdownLinks } from '../pageLinkParser';
+import { transformToMarkdownLinks as transformBlockRefs } from '../blockRefParser';
+import { transformToMarkdownLinks as transformPageLinks } from '../pageLinkParser';
 import { keyframes, styled } from '../stitches.config';
+import { BlockLink } from './BlockLink';
 import { CtrlLink } from './CtrlLink';
 import { PageLink } from './PageLink';
 
@@ -127,7 +129,12 @@ const EmptyIcon = styled('div', {
   marginBottom: '4px',
 });
 
-export default function ChatMessageList({ messages }: { messages: ChatMessage[] }) {
+type ChatMessageListProps = {
+  messages: ChatMessage[];
+  getBlockMetadata?: (uuid: string) => { pageName: string; contentPreview: string } | null;
+};
+
+export default function ChatMessageList({ messages, getBlockMetadata }: ChatMessageListProps) {
   if (messages.length === 0) {
     return (
       <EmptyState>
@@ -153,12 +160,25 @@ export default function ChatMessageList({ messages }: { messages: ChatMessage[] 
                     const pageName = decodeURIComponent(href.replace('logseq://page/', ''));
                     return <PageLink pageName={pageName}>{children}</PageLink>;
                   }
+                  if (href?.startsWith('logseq://block/')) {
+                    const uuid = href.replace('logseq://block/', '');
+                    const metadata = getBlockMetadata?.(uuid) ?? null;
+                    return (
+                      <BlockLink
+                        blockUuid={uuid}
+                        label={metadata?.contentPreview}
+                        pageName={metadata?.pageName}
+                      >
+                        {children}
+                      </BlockLink>
+                    );
+                  }
                   return <CtrlLink href={href} {...props}>{children}</CtrlLink>;
                 },
               }}
             >
               {msg.sender === 'assistant'
-                ? transformToMarkdownLinks(msg.content)
+                ? transformBlockRefs(transformPageLinks(msg.content))
                 : msg.content}
             </ReactMarkdown>
           </Bubble>

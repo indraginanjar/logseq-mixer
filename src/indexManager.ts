@@ -149,7 +149,10 @@ export async function checkAndIndexUpdatedPages(
           const backlinks = await fetchBacklinks(page.name);
           const linkData: PageLinkData = { outgoingLinks, backlinks };
 
-          const newEmbeddings = await getEmbeddingsForPage(
+          // Delete old block metadata for this page before re-indexing
+          storageProvider.deleteBlockMetadataForPage?.(page.name);
+
+          const { embeddings: newEmbeddings, blockMetadata } = await getEmbeddingsForPage(
             pageIdStr,
             blocks,
             page.name,
@@ -175,6 +178,11 @@ export async function checkAndIndexUpdatedPages(
             embedding: e.embedding,
           }));
           await storageProvider.upsertDocuments(docs);
+
+          // Upsert block metadata after successful indexing
+          if (blockMetadata.length > 0) {
+            storageProvider.upsertBlockMetadata?.(blockMetadata);
+          }
           _pagesProcessed++;
 
           pagesInBatch++;
@@ -206,7 +214,7 @@ export async function checkAndIndexUpdatedPages(
           const backlinks = await fetchBacklinks(page.name);
           const linkData: PageLinkData = { outgoingLinks, backlinks };
 
-          const newEmbeddings = await getEmbeddingsForPage(
+          const { embeddings: newEmbeddings } = await getEmbeddingsForPage(
             pageIdStr,
             blocks,
             page.name,

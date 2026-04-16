@@ -55,4 +55,13 @@ export interface PerDocumentStorageProvider extends StorageProvider {
   beginBulk?(): void;
   endBulk?(): void;
   persistToIndexedDB?(): Promise<void>;
+
+  /** Upsert block metadata records. */
+  upsertBlockMetadata?(entries: Array<{ uuid: string; pageName: string; contentPreview: string }>): void;
+  /** Delete block metadata for a page. */
+  deleteBlockMetadataForPage?(pageName: string): void;
+  /** Clear all block metadata. */
+  clearBlockMetadata?(): void;
+  /** Look up block metadata by UUID. */
+  getBlockMetadata?(uuid: string): { pageName: string; contentPreview: string } | null;
 }

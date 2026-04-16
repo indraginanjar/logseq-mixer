@@ -62,6 +62,13 @@ export class SQLiteVectorStore implements StorageProvider {
         embedding BLOB NOT NULL
       )`
     );
+    this._db.run(
+      `CREATE TABLE IF NOT EXISTS block_metadata (
+        uuid TEXT PRIMARY KEY,
+        pageName TEXT NOT NULL,
+        contentPreview TEXT NOT NULL
+      )`
+    );
 
     // Migrate legacy Orama blob if present (Req 6.1, 8.3)
     try {
@@ -218,9 +225,54 @@ export class SQLiteVectorStore implements StorageProvider {
   async clear(): Promise<void> {
     if (!this._db) throw new Error('SQLite database not initialized');
     this._db.run('DELETE FROM documents');
+    this._db.run('DELETE FROM block_metadata');
     // Reclaim disk space so the exported file reflects the actual data size
     this._db.run('VACUUM');
     await this.flushWithRetry();
+  }
+
+  /** Upsert block metadata records (called during indexing). */
+  upsertBlockMetadata(entries: Array<{ uuid: string; pageName: string; contentPreview: string }>): void {
+    if (!this._db) throw new Error('SQLite database not initialized');
+    if (entries.length === 0) return;
+
+    this._db.run('BEGIN TRANSACTION');
+    for (const entry of entries) {
+      this._db.run(
+        'INSERT OR REPLACE INTO block_metadata (uuid, pageName, contentPreview) VALUES (?, ?, ?)',
+        [entry.uuid, entry.pageName, entry.contentPreview]
+      );
+    }
+    this._db.run('COMMIT');
+  }
+
+  /** Delete all block metadata for a given page (called before re-indexing a page). */
+  deleteBlockMetadataForPage(pageName: string): void {
+    if (!this._db) throw new Error('SQLite database not initialized');
+    this._db.run('DELETE FROM block_metadata WHERE pageName = ?', [pageName]);
+  }
+
+  /** Clear all block metadata (called on full re-index). */
+  clearBlockMetadata(): void {
+    if (!this._db) throw new Error('SQLite database not initialized');
+    this._db.run('DELETE FROM block_metadata');
+  }
+
+  /** Look up a single block's metadata by UUID. Returns null if not found. */
+  getBlockMetadata(uuid: string): { pageName: string; contentPreview: string } | null {
+    if (!this._db) throw new Error('SQLite database not initialized');
+
+    const stmt = this._db.prepare('SELECT pageName, contentPreview FROM block_metadata WHERE uuid = ?');
+    try {
+      stmt.bind([uuid]);
+      if (stmt.step()) {
+        const row = stmt.get();
+        return { pageName: row[0] as string, contentPreview: row[1] as string };
+      }
+      return null;
+    } finally {
+      stmt.free();
+    }
   }
 
   /** Export the SQLite database as a file download (vectors.sqlite) */

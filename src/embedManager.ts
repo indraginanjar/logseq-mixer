@@ -33,6 +33,12 @@ export function isValidEmbeddingModel(model: string): boolean {
   return model in EMBEDDING_MODELS;
 }
 
+export interface BlockMetadataEntry {
+  uuid: string;
+  pageName: string;
+  contentPreview: string;
+}
+
 export interface BlockLine {
   content: string;
   isHeading: boolean;
@@ -238,36 +244,70 @@ function formatBlockProperties(properties?: Record<string, any>): string {
 }
 
 /**
+ * Truncate content to at most 50 characters for use as a content preview.
+ * Appends "…" if the content is truncated.
+ */
+export function createContentPreview(content: string): string {
+  if (content.length <= 50) return content;
+  return content.slice(0, 49) + '…';
+}
+
+export interface FlattenResult {
+  lines: string[];
+  metadata: BlockMetadataEntry[];
+}
+
+/**
  * Recursively flatten a block tree into a list of content strings.
  * Preserves Logseq's block hierarchy by prefixing each child block
  * with its parent chain as a breadcrumb (e.g. "parent > child > grandchild").
  * This makes each block line self-contained with full context.
  * Appends block properties (priority, status, etc.) when present.
  * Resolves block references ((uuid)) and embeds {{embed ((uuid))}} to actual content.
+ * Also collects block metadata entries (uuid, pageName, contentPreview) for blocks with UUIDs.
  */
-async function flattenBlocks(blocks: any[], parentChain: string[] = []): Promise<string[]> {
+export async function flattenBlocks(blocks: any[], parentChain: string[] = [], pageName?: string): Promise<FlattenResult> {
   const lines: string[] = [];
+  const metadata: BlockMetadataEntry[] = [];
   for (const block of blocks) {
     if (block.content) {
       const resolvedContent = await resolveBlockReferences(block.content);
       const props = formatBlockProperties(block.properties);
+      let line: string;
       if (parentChain.length > 0) {
         const breadcrumb = parentChain.join(' > ');
-        lines.push(`[${breadcrumb}] ${resolvedContent}${props}`);
+        line = `[${breadcrumb}] ${resolvedContent}${props}`;
       } else {
-        lines.push(`- ${resolvedContent}${props}`);
+        line = `- ${resolvedContent}${props}`;
       }
+      // Prepend block UUID annotation when the block has a uuid property
+      if (block.uuid) {
+        line = `[block:${block.uuid}] ${line}`;
+        // Collect block metadata for storage
+        if (pageName) {
+          metadata.push({
+            uuid: block.uuid,
+            pageName,
+            contentPreview: createContentPreview(resolvedContent),
+          });
+        }
+      }
+      lines.push(line);
       if (block.children && block.children.length > 0) {
         const shortContent = resolvedContent.length > 60
           ? resolvedContent.slice(0, 60) + '…'
           : resolvedContent;
-        lines.push(...await flattenBlocks(block.children, [...parentChain, shortContent]));
+        const childResult = await flattenBlocks(block.children, [...parentChain, shortContent], pageName);
+        lines.push(...childResult.lines);
+        metadata.push(...childResult.metadata);
       }
     } else if (block.children && block.children.length > 0) {
-      lines.push(...await flattenBlocks(block.children, parentChain));
+      const childResult = await flattenBlocks(block.children, parentChain, pageName);
+      lines.push(...childResult.lines);
+      metadata.push(...childResult.metadata);
     }
   }
-  return lines;
+  return { lines, metadata };
 }
 
 /**
@@ -563,7 +603,7 @@ export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAU
       batch.map(async (page) => {
         try {
           const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
-          const originalLines = await flattenBlocks(blocks);
+          const { lines: originalLines } = await flattenBlocks(blocks);
 
           // Normalize block content (strip markdown formatting)
           const normalizedLines = originalLines.map((line) => normalizeBlockContent(line));
@@ -655,8 +695,8 @@ export async function getEmbeddingsForPage(
   model: string = DEFAULT_EMBEDDING_MODEL,
   properties?: Record<string, any>,
   linkData?: PageLinkData
-): Promise<VectorDBSchemaDynamic[]> {
-  const originalLines = await flattenBlocks(blocks);
+): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[] }> {
+  const { lines: originalLines, metadata: blockMetadata } = await flattenBlocks(blocks, [], pageName);
 
   // Normalize block content (strip markdown formatting)
   const normalizedLines = originalLines.map((line) => normalizeBlockContent(line));
@@ -703,5 +743,5 @@ export async function getEmbeddingsForPage(
     embeddings.push(embedding);
   }
 
-  return embeddings;
+  return { embeddings, blockMetadata };
 }

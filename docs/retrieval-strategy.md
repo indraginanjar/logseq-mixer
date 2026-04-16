@@ -140,7 +140,7 @@ If no documents meet the similarity threshold and BM25 returns no matches, the r
 The LLM prompt is assembled in this order:
 
 ```
-{settings.prompt}                          ← System prompt from settings
+{settings.prompt}                          ← System prompt from settings (includes block citation instructions)
 
 Conversation History:                      ← Last 6 messages (if any)
 User: {message 1}
@@ -151,16 +151,18 @@ User: {message 2}
 Current Page Context:                      ← Currently open page (if available)
 current_page_open_id: {page.id}
 current_page_open_name: {page.name}
-current_page_open_content: {block contents}
+current_page_open_content: {block contents with [block:uuid] annotations}
 
 Additional Context from Knowledge Base:    ← Retrieved documents (if any)
-{hit 1 full page content}
+{hit 1 full page content with [block:uuid] annotations}
 
-{hit 2 full page content}
+{hit 2 full page content with [block:uuid] annotations}
 
-{hit 3 full page content}
+{hit 3 full page content with [block:uuid] annotations}
 ...
 ```
+
+The system prompt instructs the LLM to cite specific blocks using `((block-uuid))` notation, using only UUIDs from the `[block:uuid]` annotations in the provided context. The LLM should not fabricate UUIDs.
 
 ### Prompt Components
 
@@ -203,6 +205,19 @@ The assembled prompt is sent to the LLM via LiteLLM.
 
 The assistant's response is added to the conversation history for future context.
 
+## Step 5: Response Rendering
+
+When the LLM response contains `((block-uuid))` patterns, the chat renderer:
+
+1. Applies `pageLinkParser.transformToMarkdownLinks()` to convert `[[page]]` patterns to markdown links
+2. Applies `blockRefParser.transformToMarkdownLinks()` to convert `((uuid))` patterns to `[((uuid))](logseq://block/uuid)` markdown links
+3. ReactMarkdown renders the response, with custom `components.a` overrides that:
+   - Detect `logseq://page/` links → render as `PageLink` components (blue, navigates to page)
+   - Detect `logseq://block/` links → render as `BlockLink` components (teal, navigates to block)
+   - All other links → render as `CtrlLink` (external links)
+
+The `BlockLink` component looks up the block's metadata (page name, content preview) from the `block_metadata` table to display a meaningful label. If no metadata is found, it falls back to showing the first 8 characters of the UUID. Clicking a block reference calls `logseq.Editor.scrollToBlockInPage()` to navigate Logseq to that block.
+
 ## Fallback Behavior
 
 The retrieval pipeline is wrapped in a try/catch. If any step fails (embedding, search, or database load), the query still proceeds:
@@ -236,4 +251,7 @@ This means the plugin always works — even without embeddings configured — by
 | `src/reranker.ts`       | `rerankWithRRF()` — single-list RRF reranking (legacy Orama path); `mergeWithRRF()` — dual-list RRF fusion (hybrid search) |
 | `src/VectorDBManager.ts`| `vectorSearchOramaDB()` — legacy Orama vector search (settings backend only) |
 | `src/LLMManager.ts`     | `queryLiteLLM()` — sends prompt to LLM via LiteLLM      |
-| `src/settings.ts`       | Plugin settings (model, API keys, prompt, endpoint, storage backend) |
+| `src/blockRefParser.ts` | `parse()`, `serialize()`, `transformToMarkdownLinks()` — detects and transforms `((uuid))` block references in LLM responses |
+| `src/components/BlockLink.tsx` | `BlockLink` — clickable inline component for block references (teal, navigates to block via `scrollToBlockInPage`) |
+| `src/components/ChatMessageList.tsx` | Chat message rendering with page link and block reference transformation pipeline |
+| `src/settings.ts`       | Plugin settings (model, API keys, prompt with block citation instructions, endpoint, storage backend) |
