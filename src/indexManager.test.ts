@@ -27,7 +27,7 @@ vi.mock('@orama/orama', () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 import initSqlJs from 'sql.js';
-import { checkAndIndexUpdatedPages, requestPauseIndexing } from './indexManager';
+import { checkAndIndexUpdatedPages, getIndexingProgress, requestPauseIndexing } from './indexManager';
 import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
 
 const BATCH_SIZE = 5;
@@ -449,4 +449,462 @@ describe('Preservation Property 2c: Pause behavior - indexing stops after at mos
       { numRuns: 20 }
     );
   });
+});
+
+
+/**
+ * Feature: indexing-status-feedback, Property 2: Paused indexing returns correct outcome and page count
+ *
+ * **Validates: Requirements 1.2, 1.5**
+ *
+ * For any list of non-internal stale Logseq pages and any pause point,
+ * when requestPauseIndexing() is called during page N's processing,
+ * the returned IndexingResult SHALL have outcome === 'paused' and
+ * pagesProcessed SHALL equal the number of pages processed before the loop stopped.
+ */
+describe('Feature: indexing-status-feedback, Property 2: Paused indexing returns correct outcome and page count', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    mockExtractOutgoingLinks.mockReturnValue([]);
+    mockFetchBacklinks.mockResolvedValue([]);
+    mockGetEmbeddingsForPage.mockImplementation(
+      (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
+        return Promise.resolve([
+          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
+        ]);
+      }
+    );
+
+    (globalThis as any).logseq = {
+      Editor: {
+        getAllPages: vi.fn(),
+        getPageBlocksTree: vi.fn().mockResolvedValue([{ content: 'test', children: [] }]),
+        getPageLinkedReferences: vi.fn().mockResolvedValue([]),
+      },
+      DB: { onChanged: vi.fn() },
+      baseInfo: { path: '' },
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as any).logseq;
+    vi.restoreAllMocks();
+    mockGetEmbeddingsForPage.mockReset();
+    mockFetchBacklinks.mockReset();
+    mockExtractOutgoingLinks.mockReset();
+  });
+
+  it('outcome is paused and pagesProcessed equals pages processed before pause', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        // Generate page count (3–30) then a pause point (1..pageCount-1)
+        fc.integer({ min: 3, max: 30 }).chain((n) =>
+          fc.tuple(
+            fc.constant(n),
+            fc.integer({ min: 1, max: n - 1 })
+          )
+        ),
+        async ([pageCount, pauseAtPage]) => {
+          // Build non-internal stale pages (all prefixed with 'ext_' to avoid isInternalPage)
+          const pages = Array.from({ length: pageCount }, (_, i) => ({
+            id: i + 1,
+            name: `ext_page_${i}`,
+            uuid: `uuid-${i}`,
+            updatedAt: Date.now(),
+          }));
+
+          (globalThis as any).logseq.Editor.getAllPages.mockResolvedValue(pages);
+
+          let upsertCallCount = 0;
+
+          const mockProvider: PerDocumentStorageProvider = {
+            upsertDocuments: vi.fn().mockImplementation(async (_docs: DocumentRecord[]) => {
+              upsertCallCount++;
+              // Request pause after processing pauseAtPage pages
+              if (upsertCallCount === pauseAtPage) {
+                requestPauseIndexing();
+              }
+            }),
+            deleteDocuments: vi.fn().mockResolvedValue(undefined),
+            searchByVector: vi.fn().mockResolvedValue([] as SearchResult[]),
+            getDocumentMeta: vi.fn().mockResolvedValue(null), // all pages are stale
+            getAllDocumentContent: vi.fn().mockReturnValue([]),
+            clear: vi.fn().mockResolvedValue(undefined),
+            beginBulk: vi.fn(),
+            endBulk: vi.fn(),
+            persistToIndexedDB: vi.fn().mockResolvedValue(undefined),
+          };
+
+          const result = await checkAndIndexUpdatedPages(
+            'test-api-key',
+            undefined,
+            'test-embedding-key',
+            'text-embedding-3-small',
+            mockProvider
+          );
+
+          // Advance timers to clear the 1-second indexingInProgress cooldown
+          await vi.advanceTimersByTimeAsync(1500);
+
+          // The pause check happens at the START of each loop iteration.
+          // We request pause during page N's upsert (after _pagesProcessed is incremented).
+          // The next iteration sees _pauseRequested and breaks before processing page N+1.
+          // So pagesProcessed should equal exactly pauseAtPage.
+          expect(result.outcome).toBe('paused');
+          expect(result.pagesProcessed).toBe(pauseAtPage);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+/**
+ * Feature: indexing-status-feedback, Property 1: Completed indexing returns correct outcome and page count
+ *
+ * **Validates: Requirements 1.1, 1.5**
+ *
+ * For any list of Logseq pages (with varying internal/external pages and
+ * up-to-date/stale timestamps), when checkAndIndexUpdatedPages runs to
+ * completion without pause or unrecoverable error, the returned IndexingResult
+ * SHALL have outcome === 'completed' and pagesProcessed SHALL equal the number
+ * of non-internal, stale pages that were actually processed.
+ */
+describe('Feature: indexing-status-feedback, Property 1: Completed indexing returns correct outcome and page count', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    mockExtractOutgoingLinks.mockReturnValue([]);
+    mockFetchBacklinks.mockResolvedValue([]);
+    mockGetEmbeddingsForPage.mockImplementation(
+      (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
+        return Promise.resolve([
+          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
+        ]);
+      }
+    );
+
+    (globalThis as any).logseq = {
+      Editor: {
+        getAllPages: vi.fn(),
+        getPageBlocksTree: vi.fn().mockResolvedValue([{ content: 'test', children: [] }]),
+        getPageLinkedReferences: vi.fn().mockResolvedValue([]),
+      },
+      DB: { onChanged: vi.fn() },
+      baseInfo: { path: '' },
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as any).logseq;
+    vi.restoreAllMocks();
+    mockGetEmbeddingsForPage.mockReset();
+    mockFetchBacklinks.mockReset();
+    mockExtractOutgoingLinks.mockReset();
+  });
+
+  /** Internal page name prefixes/exact matches from isInternalPage in indexManager.ts */
+  const INTERNAL_NAMES = ['card', 'card_review', 'contents', 'contents/sub', 'favorites', 'favorites/sub', '__template', 'journals'];
+
+  /** Arbitrary that produces a page name — either internal or external */
+  const pageNameArb = fc.oneof(
+    // ~40% internal pages
+    { weight: 2, arbitrary: fc.constantFrom(...INTERNAL_NAMES) },
+    // ~60% external pages (prefixed with 'ext_' to guarantee non-internal)
+    { weight: 3, arbitrary: fc.stringMatching(/^ext_[a-z0-9]{1,20}$/) }
+  );
+
+  /** Returns true when a name matches the isInternalPage logic */
+  function isInternal(name: string): boolean {
+    return name.startsWith('card') ||
+           name.startsWith('contents') ||
+           name.startsWith('favorites') ||
+           name.startsWith('__') ||
+           name === 'journals' ||
+           name === 'contents' ||
+           name === 'favorites';
+  }
+
+  /**
+   * Arbitrary for a single page entry with:
+   * - random name (internal or external)
+   * - random updatedAt timestamp
+   * - random staleness flag (true = stale, false = up-to-date)
+   */
+  const pageEntryArb = fc.record({
+    name: pageNameArb,
+    updatedAt: fc.integer({ min: 1, max: 1_000_000_000 }),
+    isStale: fc.boolean(),
+  });
+
+  it('outcome is completed and pagesProcessed equals non-internal stale page count', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(pageEntryArb, { minLength: 0, maxLength: 30 }),
+        async (pageEntries) => {
+          // Build the page list with unique IDs
+          const pages = pageEntries.map((entry, i) => ({
+            id: i + 1,
+            name: entry.name,
+            uuid: `uuid-${i}`,
+            updatedAt: entry.updatedAt,
+          }));
+
+          // Build a map of pageId -> stored lastUpdated for getDocumentMeta
+          const storedTimestamps = new Map<string, number | null>();
+          for (let i = 0; i < pageEntries.length; i++) {
+            const entry = pageEntries[i];
+            const pageIdStr = (i + 1).toString();
+            if (entry.isStale) {
+              // Stale: stored timestamp is less than updatedAt (or null for never-indexed)
+              storedTimestamps.set(pageIdStr, entry.updatedAt > 1 ? entry.updatedAt - 1 : null);
+            } else {
+              // Up-to-date: stored timestamp >= updatedAt
+              storedTimestamps.set(pageIdStr, entry.updatedAt);
+            }
+          }
+
+          // Calculate expected pagesProcessed: non-internal AND stale
+          const expectedProcessed = pageEntries.filter(
+            (entry) => !isInternal(entry.name) && entry.isStale
+          ).length;
+
+          (globalThis as any).logseq.Editor.getAllPages.mockResolvedValue(pages);
+
+          const mockProvider: PerDocumentStorageProvider = {
+            upsertDocuments: vi.fn().mockResolvedValue(undefined),
+            deleteDocuments: vi.fn().mockResolvedValue(undefined),
+            searchByVector: vi.fn().mockResolvedValue([] as SearchResult[]),
+            getDocumentMeta: vi.fn().mockImplementation(async (pageId: string) => {
+              return storedTimestamps.get(pageId) ?? null;
+            }),
+            getAllDocumentContent: vi.fn().mockReturnValue([]),
+            clear: vi.fn().mockResolvedValue(undefined),
+            beginBulk: vi.fn(),
+            endBulk: vi.fn(),
+            persistToIndexedDB: vi.fn().mockResolvedValue(undefined),
+          };
+
+          const result = await checkAndIndexUpdatedPages(
+            'test-api-key',
+            undefined,
+            'test-embedding-key',
+            'text-embedding-3-small',
+            mockProvider
+          );
+
+          // Advance timers to clear the 1-second indexingInProgress cooldown
+          await vi.advanceTimersByTimeAsync(1500);
+
+          expect(result.outcome).toBe('completed');
+          expect(result.pagesProcessed).toBe(expectedProcessed);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+/**
+ * Feature: indexing-status-feedback, Property 3: Error indexing returns error outcome with message
+ *
+ * **Validates: Requirements 1.3**
+ *
+ * For any unrecoverable error thrown during the indexing loop, the returned
+ * IndexingResult SHALL have outcome === 'error' and errorMessage SHALL contain
+ * the thrown error's message string.
+ */
+describe('Feature: indexing-status-feedback, Property 3: Error indexing returns error outcome with message', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    mockExtractOutgoingLinks.mockReturnValue([]);
+    mockFetchBacklinks.mockResolvedValue([]);
+    mockGetEmbeddingsForPage.mockImplementation(
+      (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
+        return Promise.resolve([
+          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
+        ]);
+      }
+    );
+
+    (globalThis as any).logseq = {
+      Editor: {
+        getAllPages: vi.fn(),
+        getPageBlocksTree: vi.fn().mockResolvedValue([{ content: 'test', children: [] }]),
+        getPageLinkedReferences: vi.fn().mockResolvedValue([]),
+      },
+      DB: { onChanged: vi.fn() },
+      baseInfo: { path: '' },
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as any).logseq;
+    vi.restoreAllMocks();
+    mockGetEmbeddingsForPage.mockReset();
+    mockFetchBacklinks.mockReset();
+    mockExtractOutgoingLinks.mockReset();
+  });
+
+  it('outcome is error and errorMessage contains the thrown error message', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        // Generate random non-empty error messages
+        fc.string({ minLength: 1, maxLength: 200 }),
+        async (errorMsg) => {
+          // Make getAllPages throw an unrecoverable error with the random message
+          (globalThis as any).logseq.Editor.getAllPages.mockRejectedValue(
+            new Error(errorMsg)
+          );
+
+          const mockProvider: PerDocumentStorageProvider = {
+            upsertDocuments: vi.fn().mockResolvedValue(undefined),
+            deleteDocuments: vi.fn().mockResolvedValue(undefined),
+            searchByVector: vi.fn().mockResolvedValue([] as SearchResult[]),
+            getDocumentMeta: vi.fn().mockResolvedValue(null),
+            getAllDocumentContent: vi.fn().mockReturnValue([]),
+            clear: vi.fn().mockResolvedValue(undefined),
+            beginBulk: vi.fn(),
+            endBulk: vi.fn(),
+            persistToIndexedDB: vi.fn().mockResolvedValue(undefined),
+          };
+
+          const result = await checkAndIndexUpdatedPages(
+            'test-api-key',
+            undefined,
+            'test-embedding-key',
+            'text-embedding-3-small',
+            mockProvider
+          );
+
+          // Advance timers to clear the 1-second indexingInProgress cooldown
+          await vi.advanceTimersByTimeAsync(1500);
+
+          expect(result.outcome).toBe('error');
+          expect(result.errorMessage).toContain(errorMsg);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+/**
+ * Feature: indexing-status-feedback, Property 5: Progress getter reflects pages processed so far
+ *
+ * **Validates: Requirements 6.1, 6.2**
+ *
+ * For any sequence of N successfully processed pages during an active indexing run,
+ * calling getIndexingProgress() after the Kth page (0 ≤ K ≤ N) SHALL return K.
+ */
+describe('Feature: indexing-status-feedback, Property 5: Progress getter reflects pages processed so far', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    mockExtractOutgoingLinks.mockReturnValue([]);
+    mockFetchBacklinks.mockResolvedValue([]);
+    mockGetEmbeddingsForPage.mockImplementation(
+      (pageId: string, _blocks: any[], _pageName: string, lastUpdated: number) => {
+        return Promise.resolve([
+          { id: pageId, content: 'test', lastUpdated, embedding: [0.1] },
+        ]);
+      }
+    );
+
+    (globalThis as any).logseq = {
+      Editor: {
+        getAllPages: vi.fn(),
+        getPageBlocksTree: vi.fn().mockResolvedValue([{ content: 'test', children: [] }]),
+        getPageLinkedReferences: vi.fn().mockResolvedValue([]),
+      },
+      DB: { onChanged: vi.fn() },
+      baseInfo: { path: '' },
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as any).logseq;
+    vi.restoreAllMocks();
+    mockGetEmbeddingsForPage.mockReset();
+    mockFetchBacklinks.mockReset();
+    mockExtractOutgoingLinks.mockReset();
+  });
+
+  it('getIndexingProgress() returns K after K pages have been processed', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.integer({ min: 1, max: 30 }),
+        async (pageCount) => {
+          // Build non-internal stale pages
+          const pages = Array.from({ length: pageCount }, (_, i) => ({
+            id: i + 1,
+            name: `ext_page_${i}`,
+            uuid: `uuid-${i}`,
+            updatedAt: Date.now(),
+          }));
+
+          (globalThis as any).logseq.Editor.getAllPages.mockResolvedValue(pages);
+
+          // Track progress by hooking into the upsertDocuments mock.
+          // In the source, _pagesProcessed++ happens right after upsertDocuments resolves.
+          // We use deleteDocuments (called right before upsertDocuments for each page)
+          // to observe the progress counter BEFORE the current page is counted.
+          const progressAtDelete: number[] = [];
+
+          const mockProvider: PerDocumentStorageProvider = {
+            upsertDocuments: vi.fn().mockResolvedValue(undefined),
+            deleteDocuments: vi.fn().mockImplementation(async (_ids: string[]) => {
+              progressAtDelete.push(getIndexingProgress());
+            }),
+            searchByVector: vi.fn().mockResolvedValue([] as SearchResult[]),
+            getDocumentMeta: vi.fn().mockResolvedValue(null), // all pages are stale
+            getAllDocumentContent: vi.fn().mockReturnValue([]),
+            clear: vi.fn().mockResolvedValue(undefined),
+            beginBulk: vi.fn(),
+            endBulk: vi.fn(),
+            persistToIndexedDB: vi.fn().mockResolvedValue(undefined),
+          };
+
+          const result = await checkAndIndexUpdatedPages(
+            'test-api-key',
+            undefined,
+            'test-embedding-key',
+            'text-embedding-3-small',
+            mockProvider
+          );
+
+          // Advance timers to clear the 1-second indexingInProgress cooldown
+          await vi.advanceTimersByTimeAsync(1500);
+
+          expect(result.outcome).toBe('completed');
+          expect(result.pagesProcessed).toBe(pageCount);
+
+          // After all pages are processed, progress should equal pageCount
+          expect(getIndexingProgress()).toBe(pageCount);
+
+          // Verify intermediate progress: deleteDocuments is called once per page
+          // BEFORE upsertDocuments (and thus before _pagesProcessed++).
+          // When deleteDocuments is called for the Kth page (0-indexed),
+          // K pages have already been fully processed.
+          // progressAtDelete[0] = 0 (no pages processed yet)
+          // progressAtDelete[1] = 1 (first page processed)
+          // progressAtDelete[K] = K
+          expect(progressAtDelete.length).toBe(pageCount);
+          for (let k = 0; k < progressAtDelete.length; k++) {
+            expect(progressAtDelete[k]).toBe(k);
+          }
+        }
+      ),
+      { numRuns: 100 }
+    );
+  }, 60_000);
 });

@@ -1,5 +1,13 @@
 // File: IndexManager.ts
 
+export type IndexingOutcome = 'completed' | 'paused' | 'error';
+
+export interface IndexingResult {
+  outcome: IndexingOutcome;
+  pagesProcessed: number;
+  errorMessage?: string;
+}
+
 import { getByID, remove } from "@orama/orama";
 import { DEFAULT_EMBEDDING_MODEL, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
@@ -15,6 +23,7 @@ let currentOramaInstance: OramaInstance | undefined;
 let currentStorageProvider: StorageProvider;
 let indexingInProgress = false;
 let _pauseRequested = false;
+let _pagesProcessed = 0;
 
 /**
  * Request the current indexing run to pause after the current page finishes.
@@ -29,6 +38,13 @@ export function requestPauseIndexing(): void {
  */
 export function isIndexingActive(): boolean {
   return indexingInProgress;
+}
+
+/**
+ * Returns the number of pages processed so far in the current (or most recent) indexing run.
+ */
+export function getIndexingProgress(): number {
+  return _pagesProcessed;
 }
 
 let _isUpdatingSettings = false;
@@ -82,11 +98,14 @@ export async function checkAndIndexUpdatedPages(
   embeddingApiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
   storageProvider: StorageProvider
-): Promise<void> {
-  if (indexingInProgress) return;
+): Promise<IndexingResult> {
+  if (indexingInProgress) return { outcome: 'completed', pagesProcessed: 0 };
 
   indexingInProgress = true;
   _pauseRequested = false;
+  _pagesProcessed = 0;
+
+  let result: IndexingResult;
 
   try {
     const pages = (await logseq.Editor.getAllPages()) ?? [];
@@ -98,6 +117,7 @@ export async function checkAndIndexUpdatedPages(
     }
 
     let pagesInBatch = 0;
+    let pausedByUser = false;
 
     for (const page of pages) {
       // Check for pause request between pages
@@ -107,6 +127,7 @@ export async function checkAndIndexUpdatedPages(
           storageProvider.endBulk!();
           await storageProvider.persistToIndexedDB!();
         }
+        pausedByUser = true;
         break;
       }
 
@@ -154,6 +175,7 @@ export async function checkAndIndexUpdatedPages(
             embedding: e.embedding,
           }));
           await storageProvider.upsertDocuments(docs);
+          _pagesProcessed++;
 
           pagesInBatch++;
           if (pagesInBatch >= BATCH_SIZE) {
@@ -207,6 +229,7 @@ export async function checkAndIndexUpdatedPages(
           }
 
           await batchInsertEmbeddings(oramaInstance, newEmbeddings, storageProvider);
+          _pagesProcessed++;
         } catch (error) {
           console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
         }
@@ -214,15 +237,27 @@ export async function checkAndIndexUpdatedPages(
     }
 
     // Ensure final batch is persisted after loop completes
-    if (supportsBulk) {
+    if (!pausedByUser && supportsBulk) {
       storageProvider.endBulk!();
       await storageProvider.persistToIndexedDB!();
     }
+
+    result = pausedByUser
+      ? { outcome: 'paused', pagesProcessed: _pagesProcessed }
+      : { outcome: 'completed', pagesProcessed: _pagesProcessed };
+  } catch (error: any) {
+    result = {
+      outcome: 'error',
+      pagesProcessed: _pagesProcessed,
+      errorMessage: error?.message ?? String(error),
+    };
   } finally {
     setTimeout(() => {
       indexingInProgress = false;
     }, 1000); // 1 second cooldown
   }
+
+  return result;
 }
 
 export function startPageIndexingOnChange(

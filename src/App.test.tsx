@@ -27,6 +27,7 @@ const flushPromises = () => act(() => new Promise((r) => setTimeout(r, 0)));
 vi.mock('./indexManager', () => ({
   isIndexingActive: vi.fn(() => false),
   requestPauseIndexing: vi.fn(),
+  getIndexingProgress: vi.fn(() => 0),
 }));
 
 // Mock manager
@@ -34,7 +35,7 @@ vi.mock('./manager', () => ({
   clearConversationHistory: vi.fn(),
   enableAutoIndexer: vi.fn(),
   handleQuery: vi.fn(),
-  indexEntireLogSeq: vi.fn(() => Promise.resolve()),
+  indexEntireLogSeq: vi.fn(() => Promise.resolve({ outcome: 'completed', pagesProcessed: 0 })),
 }));
 
 // Mock useAppVisible to always return true so the component renders
@@ -247,7 +248,7 @@ describe('Preservation: Visible-panel indexing lifecycle unchanged', () => {
           cleanup();
           vi.clearAllMocks();
           mockIsIndexingActive.mockReturnValue(false);
-          mockIndexEntireLogSeq.mockImplementation(() => Promise.resolve());
+          mockIndexEntireLogSeq.mockImplementation(() => Promise.resolve({ outcome: 'completed', pagesProcessed: 0 }));
 
           const { container } = render(
             <App themeMode="light" storageProvider={mockStorageProvider as any} />
@@ -286,8 +287,8 @@ describe('Preservation: Visible-panel indexing lifecycle unchanged', () => {
 
           // Create a controllable promise for indexEntireLogSeq
           let resolveIndexing!: () => void;
-          const indexingPromise = new Promise<void>((resolve) => {
-            resolveIndexing = resolve;
+          const indexingPromise = new Promise<{ outcome: string; pagesProcessed: number }>((resolve) => {
+            resolveIndexing = () => resolve({ outcome: 'completed', pagesProcessed: 0 });
           });
           mockIndexEntireLogSeq.mockImplementation(() => indexingPromise);
 
@@ -428,5 +429,324 @@ describe('Preservation: Visible-panel indexing lifecycle unchanged', () => {
       ),
       { numRuns: 10 }
     );
+  });
+});
+
+describe('Feature: indexing-status-feedback, Property 4: Success StatusIndicator displays correct text with page count', () => {
+  /**
+   * Property 4: Success StatusIndicator displays correct text with page count
+   *
+   * For any IndexingResult with outcome 'completed' and any non-negative
+   * pagesProcessed value, the rendered StatusIndicator SHALL contain the text
+   * "Indexing complete" and the numeric chunk count (docCount from storage provider).
+   *
+   * **Validates: Requirements 2.1**
+   */
+  it('property: success StatusIndicator displays "Indexing complete" and the chunk count', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.integer({ min: 0, max: 10000 }),
+        fc.integer({ min: 0, max: 100000 }),
+        async (pagesProcessed, docCount) => {
+          cleanup();
+          vi.clearAllMocks();
+          mockIsIndexingActive.mockReturnValue(false);
+
+          // Mock indexEntireLogSeq to return completed with the random pagesProcessed
+          mockIndexEntireLogSeq.mockImplementation(() =>
+            Promise.resolve({ outcome: 'completed', pagesProcessed })
+          );
+
+          // Mock storage provider with the random docCount
+          const provider = {
+            clear: vi.fn(() => Promise.resolve()),
+            getDocumentCount: vi.fn(() => Promise.resolve(docCount)),
+          };
+
+          const { container } = render(
+            <App themeMode="light" storageProvider={provider as any} />
+          );
+
+          // Wait for initial docCount fetch to settle
+          await flushPromises();
+
+          // Find and click the Re-Index button
+          const findButton = () => {
+            const buttons = container.querySelectorAll('button');
+            return Array.from(buttons).find(
+              (btn) => btn.textContent?.includes('Stop') || btn.textContent?.includes('Re-Index')
+            );
+          };
+
+          const reindexButton = findButton();
+          expect(reindexButton).toBeDefined();
+          fireEvent.click(reindexButton!);
+
+          // Wait for indexing to complete and status to render
+          await flushPromises();
+
+          const text = container.textContent || '';
+
+          // The success message must contain "Indexing complete"
+          expect(text).toContain('Indexing complete');
+
+          // The success message must contain the formatted chunk count (docCount)
+          const expectedCount = docCount.toLocaleString();
+          expect(text).toContain(expectedCount);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+describe('StatusIndicator unit tests', () => {
+  /**
+   * Test paused outcome renders "Indexing paused" (Req 2.2)
+   */
+  it('renders "Indexing paused" when indexing result has paused outcome', async () => {
+    mockIsIndexingActive.mockReturnValue(false);
+    mockIndexEntireLogSeq.mockImplementation(() =>
+      Promise.resolve({ outcome: 'paused', pagesProcessed: 5 })
+    );
+
+    const { container } = render(
+      <App themeMode="light" storageProvider={mockStorageProvider as any} />
+    );
+
+    // Click Re-Index to trigger indexing
+    const buttons = container.querySelectorAll('button');
+    const reindexButton = Array.from(buttons).find(
+      (btn) => btn.textContent?.includes('Re-Index')
+    );
+    expect(reindexButton).toBeDefined();
+    fireEvent.click(reindexButton!);
+
+    await flushPromises();
+
+    expect(container.textContent).toContain('Indexing paused');
+  });
+
+  /**
+   * Test error outcome routes to ErrorBanner, not StatusIndicator (Req 2.3, 7.3)
+   */
+  it('routes error outcome to ErrorBanner, not StatusIndicator', async () => {
+    mockIsIndexingActive.mockReturnValue(false);
+    mockIndexEntireLogSeq.mockImplementation(() =>
+      Promise.resolve({ outcome: 'error', pagesProcessed: 0, errorMessage: 'Test error' })
+    );
+
+    const { container } = render(
+      <App themeMode="light" storageProvider={mockStorageProvider as any} />
+    );
+
+    const buttons = container.querySelectorAll('button');
+    const reindexButton = Array.from(buttons).find(
+      (btn) => btn.textContent?.includes('Re-Index')
+    );
+    fireEvent.click(reindexButton!);
+
+    await flushPromises();
+
+    // Error should appear in the ErrorBanner
+    expect(container.textContent).toContain('Test error');
+    // StatusIndicator messages should NOT appear
+    expect(container.textContent).not.toContain('Indexing complete');
+    expect(container.textContent).not.toContain('Indexing paused');
+  });
+
+  /**
+   * Test auto-dismiss fires after 4 seconds for success (Req 3.1)
+   */
+  it('auto-dismisses success status after 4 seconds', async () => {
+    vi.useFakeTimers();
+
+    mockIsIndexingActive.mockReturnValue(false);
+    mockIndexEntireLogSeq.mockImplementation(() =>
+      Promise.resolve({ outcome: 'completed', pagesProcessed: 10 })
+    );
+
+    const { container } = render(
+      <App themeMode="light" storageProvider={mockStorageProvider as any} />
+    );
+
+    const buttons = container.querySelectorAll('button');
+    const reindexButton = Array.from(buttons).find(
+      (btn) => btn.textContent?.includes('Re-Index')
+    );
+    fireEvent.click(reindexButton!);
+
+    // Flush the indexing promise by advancing a small amount and letting microtasks settle
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    // Success message should be visible initially
+    expect(container.textContent).toContain('Indexing complete');
+
+    // Advance past the 4-second auto-dismiss timer
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+    });
+
+    // Advance past the 200ms fade-out animation delay
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+
+    // Success message should be gone
+    expect(container.textContent).not.toContain('Indexing complete');
+
+    vi.useRealTimers();
+  });
+
+  /**
+   * Test paused message persists until new indexing run (Req 3.2)
+   */
+  it('paused message persists until a new indexing run begins', async () => {
+    vi.useFakeTimers();
+
+    mockIsIndexingActive.mockReturnValue(false);
+    mockIndexEntireLogSeq.mockImplementation(() =>
+      Promise.resolve({ outcome: 'paused', pagesProcessed: 5 })
+    );
+
+    const { container } = render(
+      <App themeMode="light" storageProvider={mockStorageProvider as any} />
+    );
+
+    const findReindexButton = () => {
+      const buttons = container.querySelectorAll('button');
+      return Array.from(buttons).find(
+        (btn) => btn.textContent?.includes('Re-Index') || btn.textContent?.includes('Stop')
+      );
+    };
+
+    fireEvent.click(findReindexButton()!);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(container.textContent).toContain('Indexing paused');
+
+    // Wait a long time — paused message should still be there (no auto-dismiss)
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+    });
+
+    expect(container.textContent).toContain('Indexing paused');
+
+    // Now start a new indexing run — paused message should clear
+    mockIndexEntireLogSeq.mockImplementation(() =>
+      new Promise(() => {}) // never resolves — simulates ongoing indexing
+    );
+
+    fireEvent.click(findReindexButton()!);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    // Paused message should be cleared when new indexing starts
+    expect(container.textContent).not.toContain('Indexing paused');
+
+    vi.useRealTimers();
+  });
+
+  /**
+   * Test new indexing run clears previous status (Req 3.3)
+   */
+  it('clears previous status when a new indexing run begins', async () => {
+    vi.useFakeTimers();
+
+    mockIsIndexingActive.mockReturnValue(false);
+    mockIndexEntireLogSeq.mockImplementation(() =>
+      Promise.resolve({ outcome: 'completed', pagesProcessed: 10 })
+    );
+
+    const { container } = render(
+      <App themeMode="light" storageProvider={mockStorageProvider as any} />
+    );
+
+    const findReindexButton = () => {
+      const buttons = container.querySelectorAll('button');
+      return Array.from(buttons).find(
+        (btn) => btn.textContent?.includes('Re-Index') || btn.textContent?.includes('Stop')
+      );
+    };
+
+    // First indexing run
+    fireEvent.click(findReindexButton()!);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(container.textContent).toContain('Indexing complete');
+
+    // Start a second indexing run (never resolves)
+    mockIndexEntireLogSeq.mockImplementation(() => new Promise(() => {}));
+
+    fireEvent.click(findReindexButton()!);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    // Previous success status should be cleared
+    expect(container.textContent).not.toContain('Indexing complete');
+
+    vi.useRealTimers();
+  });
+
+  /**
+   * Test no progress message when not indexing (Req 6.3)
+   */
+  it('does not show progress message when not indexing', () => {
+    mockIsIndexingActive.mockReturnValue(false);
+
+    const { container } = render(
+      <App themeMode="light" storageProvider={mockStorageProvider as any} />
+    );
+
+    expect(container.textContent).not.toContain('pages processed');
+  });
+
+  /**
+   * Test ErrorBanner still renders when error state is non-null (Req 7.1)
+   */
+  it('renders ErrorBanner when error state is non-null after indexing error', async () => {
+    mockIsIndexingActive.mockReturnValue(false);
+
+    let resolveIndexing!: (value: any) => void;
+    mockIndexEntireLogSeq.mockImplementation(() =>
+      new Promise((resolve) => {
+        resolveIndexing = resolve;
+      })
+    );
+
+    const { container } = render(
+      <App themeMode="light" storageProvider={mockStorageProvider as any} />
+    );
+
+    const buttons = container.querySelectorAll('button');
+    const reindexButton = Array.from(buttons).find(
+      (btn) => btn.textContent?.includes('Re-Index')
+    );
+    fireEvent.click(reindexButton!);
+
+    // Resolve with error outcome
+    await act(async () => {
+      resolveIndexing({ outcome: 'error', pagesProcessed: 0, errorMessage: 'Storage failure' });
+    });
+
+    await flushPromises();
+
+    // ErrorBanner should render with the error message
+    expect(container.textContent).toContain('Storage failure');
+    // The ⚠️ icon is part of ErrorBanner
+    expect(container.textContent).toContain('⚠️');
   });
 });
