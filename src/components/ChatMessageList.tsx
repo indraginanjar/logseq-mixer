@@ -1,7 +1,9 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import { transformToMarkdownLinks } from '../pageLinkParser';
 import { keyframes, styled } from '../stitches.config';
 import { CtrlLink } from './CtrlLink';
+import { PageLink } from './PageLink';
 
 export type ChatMessage = {
   id: string | number;
@@ -144,7 +146,21 @@ export default function ChatMessageList({ messages }: { messages: ChatMessage[] 
         <MessageRow key={msg.id} align={msg.sender}>
           {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
           <Bubble role={msg.sender}>
-            <ReactMarkdown components={{ a: CtrlLink }}>{msg.content}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                a: ({ href, children, ...props }) => {
+                  if (href?.startsWith('logseq://page/')) {
+                    const pageName = decodeURIComponent(href.replace('logseq://page/', ''));
+                    return <PageLink pageName={pageName}>{children}</PageLink>;
+                  }
+                  return <CtrlLink href={href} {...props}>{children}</CtrlLink>;
+                },
+              }}
+            >
+              {msg.sender === 'assistant'
+                ? transformToMarkdownLinks(msg.content)
+                : msg.content}
+            </ReactMarkdown>
           </Bubble>
           {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
         </MessageRow>
