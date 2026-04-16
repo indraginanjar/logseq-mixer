@@ -194,12 +194,18 @@ The system prompt instructs the LLM to cite specific blocks using `((block-uuid)
 
 ## Step 4: LLM Query
 
-The assembled prompt is sent to the LLM via LiteLLM.
+The assembled prompt is sent to the LLM via LiteLLM using proper message roles:
+
+- **System message**: The plugin settings prompt (formatting rules, citation instructions)
+- **User message**: Conversation history + current page context + retrieved documents
+
+This separation ensures the LLM treats formatting rules (like `[[page name]]` and `((block-uuid))` notation) as authoritative system instructions rather than casual user text.
 
 - **Endpoint**: Configurable via `settings.LiteLLMLink` (default: public LiteLLM instance)
 - **Model**: Configurable via `settings.selectedModel` (default: `gpt-3.5-turbo`)
 - **Auth**: The `settings.apiKey` is passed both as a Bearer token and in the request body
-- **Message format**: Single user message containing the full assembled prompt
+- **Message format**: Two messages — a `system` message (plugin prompt with formatting rules) and a `user` message (context + conversation history + query)
+- **Max output tokens**: Automatically set per model — GPT-4o gets 16,384, GPT-4 gets 8,192, GPT-3.5-turbo gets 4,096, etc. Unknown models fall back to 4,096. See `MODEL_MAX_TOKENS` in `LLMManager.ts`.
 - **No streaming**: The response is awaited in full before displaying
 - **Cancellable**: The user can click the stop button to abort the LLM request mid-flight via `AbortController`
 
@@ -211,7 +217,7 @@ When the LLM response contains `((block-uuid))` patterns, the chat renderer:
 
 1. Applies `pageLinkParser.transformToMarkdownLinks()` to convert `[[page]]` patterns to markdown links
 2. Applies `blockRefParser.transformToMarkdownLinks()` to convert `((uuid))` patterns to `[((uuid))](logseq://block/uuid)` markdown links
-3. ReactMarkdown renders the response, with custom `components.a` overrides that:
+3. ReactMarkdown renders the response with `transformLinkUri` set to passthrough (disabling default URL sanitization that would strip the `logseq://` protocol), and custom `components.a` overrides that:
    - Detect `logseq://page/` links → render as `PageLink` components (blue, navigates to page)
    - Detect `logseq://block/` links → render as `BlockLink` components (teal, navigates to block)
    - All other links → render as `CtrlLink` (external links)
@@ -233,8 +239,10 @@ This means the plugin always works — even without embeddings configured — by
 - **Full chunk injection**: Retrieved chunks are injected in full, which can consume significant prompt tokens for long pages.
 - **No deduplication**: The current page may appear both as "Current Page Context" and in "Additional Context" if it's a top search result.
 - **Fixed parameters**: Similarity threshold (0.5) and result limit (5) are hardcoded, not configurable via settings.
-- **Single-turn LLM call**: The full prompt is sent as one user message. No system/user message separation or multi-turn chat API usage.
+- **Single-turn LLM call**: The full context is sent as a system + user message pair. No multi-turn chat API usage with alternating roles.
 - **No timeout on LLM call**: The `queryLiteLLM()` fetch has no built-in timeout, but the user can cancel it via the stop button in the chat UI.
+- **No streaming**: Responses are awaited in full before displaying. Long responses may take several seconds to appear.
+- **Model-specific output limits**: Each model has a hardcoded max output token limit (e.g., 16,384 for GPT-4o). Responses that exceed this limit are truncated by the API.
 - **Brute-force search**: The SQLite backend scans all document embeddings for every query. This is fast for typical graph sizes but scales linearly with document count.
 
 ## File Reference
@@ -250,7 +258,7 @@ This means the plugin always works — even without embeddings configured — by
 | `src/hybridSearch.ts`   | `hybridSearch()` — hybrid search pipeline orchestration   |
 | `src/reranker.ts`       | `rerankWithRRF()` — single-list RRF reranking (legacy Orama path); `mergeWithRRF()` — dual-list RRF fusion (hybrid search) |
 | `src/VectorDBManager.ts`| `vectorSearchOramaDB()` — legacy Orama vector search (settings backend only) |
-| `src/LLMManager.ts`     | `queryLiteLLM()` — sends prompt to LLM via LiteLLM      |
+| `src/LLMManager.ts`     | `queryLiteLLM()` — sends system + user messages to LLM via LiteLLM; `ChatMessage` type for message role typing; `MODEL_MAX_TOKENS` — per-model output token limits; `getMaxTokensForModel()` — lookup function |
 | `src/blockRefParser.ts` | `parse()`, `serialize()`, `transformToMarkdownLinks()` — detects and transforms `((uuid))` block references in LLM responses |
 | `src/components/BlockLink.tsx` | `BlockLink` — clickable inline component for block references (teal, navigates to block via `scrollToBlockInPage`) |
 | `src/components/ChatMessageList.tsx` | Chat message rendering with page link and block reference transformation pipeline |

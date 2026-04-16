@@ -244,7 +244,7 @@ describe('ChatMessageList integration', () => {
 
     // BlockLink renders as a <span> with the children text from ReactMarkdown
     const spans = container.querySelectorAll('span');
-    const blockLinkSpan = Array.from(spans).find((s) => s.textContent === '((ab-cd))');
+    const blockLinkSpan = Array.from(spans).find((s) => s.textContent === 'block:ab-cd');
     expect(blockLinkSpan).toBeTruthy();
 
     // Surrounding text should be present
@@ -277,7 +277,7 @@ describe('ChatMessageList integration', () => {
     // PageLink should render for [[My Page]]
     expect(spanTexts).toContain('My Page');
     // BlockLink should render for ((ab-cd))
-    expect(spanTexts).toContain('((ab-cd))');
+    expect(spanTexts).toContain('block:ab-cd');
   });
 
   /**
