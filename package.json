@@ -5,12 +5,14 @@
   "description": "Plugin that connects all of your notes with any LLM",
   "main": "index.html",
   "effect": "true",
-  "sponsors": ["https://buymeacoffee.com/martinminarik"],
+  "sponsors": [
+    "https://buymeacoffee.com/martinminarik"
+  ],
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "postbuild": "if [ \"$CI\" != \"true\" ]; then cp -r dist/* ~/.logseq/plugins/logseq-bradder-plugin/; fi",
+    "postbuild": "node -e \"const fs=require('fs'),p=require('path');fs.copyFileSync('package.json','dist/package.json');if(fs.existsSync('README.md'))fs.copyFileSync('README.md','dist/README.md');if(fs.existsSync('logseq.png'))fs.copyFileSync('logseq.png','dist/logseq.png');if(process.env.CI!=='true'){const d=p.join(require('os').homedir(),'.logseq/plugins/logseq-bradder-plugin');fs.mkdirSync(d,{recursive:true});fs.cpSync('dist',d,{recursive:true})}\"",
     "dev": "yarn && yarn build && yarn postbuild"
   },
   "dependencies": {
@@ -26,19 +28,27 @@
     "@radix-ui/react-toolbar": "^0.1.4",
     "@stitches/react": "^1.2.6",
     "apache-arrow": "18.1.0",
+    "js-tiktoken": "^1.0.21",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-markdown": "8.0.7",
-    "recoil": "^0.7.7"
+    "recoil": "^0.7.7",
+    "sql.js": "^1.14.1"
   },
   "devDependencies": {
+    "@logseq/libs": "^0.0.1-alpha.29",
+    "@testing-library/jest-dom": "^5",
+    "@testing-library/react": "^12",
     "@types/react": "^17.0.33",
     "@types/react-dom": "^17.0.10",
     "@vitejs/plugin-react": "^1.0.7",
+    "fast-check": "^4.6.0",
+    "happy-dom": "^20.9.0",
+    "jsdom": "^29.0.2",
     "typescript": "^4.5.4",
     "vite": "^2.7.2",
     "vite-tsconfig-paths": "^3.3.17",
-    "@logseq/libs": "^0.0.1-alpha.29"
+    "vitest": "^0.34.6"
   },
   "browserslist": [
     "chrome 80"
