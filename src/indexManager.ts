@@ -5,6 +5,8 @@ import { DEFAULT_EMBEDDING_MODEL, extractOutgoingLinks, fetchBacklinks, getEmbed
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
 import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "./storage/StorageProvider";
 
+const BATCH_SIZE = 5;
+
 let hasHooked = false;
 let currentApiKey = '';
 let currentEmbeddingKey = '';
@@ -89,10 +91,22 @@ export async function checkAndIndexUpdatedPages(
   try {
     const pages = (await logseq.Editor.getAllPages()) ?? [];
 
+    const isPerDoc = isPerDocumentProvider(storageProvider);
+    const supportsBulk = isPerDoc && typeof storageProvider.beginBulk === 'function';
+    if (supportsBulk) {
+      storageProvider.beginBulk!();
+    }
+
+    let pagesInBatch = 0;
+
     for (const page of pages) {
       // Check for pause request between pages
       if (_pauseRequested) {
         console.info('[indexManager] Indexing paused by user.');
+        if (supportsBulk) {
+          storageProvider.endBulk!();
+          await storageProvider.persistToIndexedDB!();
+        }
         break;
       }
 
@@ -101,7 +115,7 @@ export async function checkAndIndexUpdatedPages(
       const pageIdStr = page.id.toString();
       const lastUpdated: number = page.updatedAt ?? 0;
 
-      if (isPerDocumentProvider(storageProvider)) {
+      if (isPerDoc) {
         // --- Per-document path (SQLiteVectorStore) ---
         const storedLastUpdated = await storageProvider.getDocumentMeta(pageIdStr);
         if (storedLastUpdated !== null && storedLastUpdated >= lastUpdated) continue;
@@ -140,6 +154,15 @@ export async function checkAndIndexUpdatedPages(
             embedding: e.embedding,
           }));
           await storageProvider.upsertDocuments(docs);
+
+          pagesInBatch++;
+          if (pagesInBatch >= BATCH_SIZE) {
+            if (supportsBulk) {
+              await storageProvider.persistToIndexedDB!();
+            }
+            await new Promise(resolve => setTimeout(resolve, 0));
+            pagesInBatch = 0;
+          }
         } catch (error) {
           console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
         }
@@ -188,6 +211,12 @@ export async function checkAndIndexUpdatedPages(
           console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
         }
       }
+    }
+
+    // Ensure final batch is persisted after loop completes
+    if (supportsBulk) {
+      storageProvider.endBulk!();
+      await storageProvider.persistToIndexedDB!();
     }
   } finally {
     setTimeout(() => {

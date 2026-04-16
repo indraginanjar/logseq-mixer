@@ -12,6 +12,7 @@ import { migrateLegacyOrama } from './migrateLegacy';
  */
 export class SQLiteVectorStore implements StorageProvider {
   private _db: Database | null = null;
+  private _bulkMode: boolean = false;
   private readonly idbKey: string;
   private static readonly DB_NAME = 'logseq-composer-vectors';
   private static readonly STORE_NAME = 'sqlite';
@@ -78,6 +79,21 @@ export class SQLiteVectorStore implements StorageProvider {
     }
   }
 
+  /** Enable bulk mode: upsertDocuments and deleteDocuments will skip flushing to IndexedDB. */
+  beginBulk(): void {
+    this._bulkMode = true;
+  }
+
+  /** Disable bulk mode: upsertDocuments and deleteDocuments will resume flushing to IndexedDB. */
+  endBulk(): void {
+    this._bulkMode = false;
+  }
+
+  /** Explicitly persist the in-memory database to IndexedDB. */
+  async persistToIndexedDB(): Promise<void> {
+    await this.flushWithRetry();
+  }
+
   async upsertDocuments(docs: DocumentRecord[]): Promise<void> {
     if (!this._db) throw new Error('SQLite database not initialized');
     if (docs.length === 0) return;
@@ -96,7 +112,9 @@ export class SQLiteVectorStore implements StorageProvider {
       }
     }
     this._db.run('COMMIT');
-    await this.flushWithRetry();
+    if (!this._bulkMode) {
+      await this.flushWithRetry();
+    }
   }
 
   async deleteDocuments(ids: string[]): Promise<void> {
@@ -105,7 +123,9 @@ export class SQLiteVectorStore implements StorageProvider {
 
     const placeholders = ids.map(() => '?').join(', ');
     this._db.run(`DELETE FROM documents WHERE id IN (${placeholders})`, ids);
-    await this.flushWithRetry();
+    if (!this._bulkMode) {
+      await this.flushWithRetry();
+    }
   }
 
   async searchByVector(
