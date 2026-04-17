@@ -131,9 +131,7 @@ When a page is re-indexed, its old block metadata is deleted before new records 
 
 | Parameter       | Value   | Location              | Description                          |
 |----------------|---------|----------------------|--------------------------------------|
-| CHARS_PER_TOKEN | 2       | `src/embedManager.ts` | Conservative chars-per-token ratio    |
-| maxTokens      | 8191    | `src/embedManager.ts` | Model token limit (all 3 models)      |
-| Max chunk chars | ~16,382 | Derived               | `maxTokens × CHARS_PER_TOKEN`         |
+| maxTokens      | varies  | `src/embedManager.ts` | Model token limit from EMBEDDING_MODELS registry (8,191 for OpenAI models, 8,192/512/256 for Ollama models) |
 
 Not currently exposed as a plugin setting.
 
