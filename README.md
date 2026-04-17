@@ -17,7 +17,7 @@ Hope you find it useful! 😀👍🍀🍷
 
 ### ⚙️ How It Works
 
-- Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) for semantic vector search
+- Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) or local [Ollama](https://ollama.com/) models for semantic vector search
 - Stores each document embedding as an individual row in a SQLite database (via [sql.js](https://github.com/sql-js/sql.js)), persisted to IndexedDB
 - Retrieves related notes using RAG (brute-force cosine similarity search + RRF reranking)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
@@ -54,9 +54,26 @@ You can configure these in the Logseq plugin UI:
 
 - **`EmbeddingApiKey`**  
   - Used for generating vector embeddings of your notes (for semantic search).  
-  - Supports OpenAI embedding models: `text-embedding-3-small` (default), `text-embedding-ada-002`, and `text-embedding-3-large`.  
-  - If not set, vector search is skipped and only the current Logseq note is passed as context.  
-  - You do **not** need this if you're okay with simpler functionality.
+  - Required for OpenAI embedding models. Not needed when using Ollama (local models).  
+  - If not set and provider is OpenAI, vector search is skipped and only the current Logseq note is passed as context.  
+  - You do **not** need this if you're using Ollama or if you're okay with simpler functionality.
+
+- **`embeddingModel`**  
+  - Choose the embedding model for vector search.  
+  - OpenAI models: `text-embedding-3-small` (default), `text-embedding-ada-002`, `text-embedding-3-large`.  
+  - Ollama models: `nomic-embed-text` (768d, 8192 tokens), `mxbai-embed-large` (1024d, 512 tokens), `all-minilm` (384d, 256 tokens).  
+  - Changing this will re-create the vector database.
+
+- **`embeddingProvider`**  
+  - Choose between `"openai"` (default) and `"ollama"`.  
+  - **openai**: Cloud-based embeddings via the OpenAI API. Requires an API key.  
+  - **ollama**: Local embeddings via a running Ollama instance. No API key needed.
+
+- **`embeddingEndpoint`**  
+  - The URL for embedding API requests.  
+  - Default: `https://api.openai.com/v1/embeddings`  
+  - For Ollama, set to `http://localhost:11434/api/embeddings`.  
+  - Leave empty to use the default OpenAI endpoint.
 
 - **`LiteLLMLink`**   
   - The full endpoint to your LiteLLM instance.  

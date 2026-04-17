@@ -81,7 +81,7 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
       await storageProvider.clear();
       resetBM25Index();
     }
-    const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider);
     // Invalidate BM25 index so it rebuilds lazily from the updated store on next query
     resetBM25Index();
     return result;
@@ -89,7 +89,7 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
     // Legacy Orama-based path: forceNew=true when full mode
     const forceNew = settings.indexingMode === 'full';
     const oramaDatabaseInstance = await loadVectorDatabase(settings, forceNew, settings.embeddingModel, storageProvider);
-    const result = await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    const result = await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider);
     return result;
   }
 }
@@ -97,11 +97,11 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
 export async function enableAutoIndexer(settings: any, storageProvider: StorageProvider) {
   if (hasSearchByVector(storageProvider)) {
     // Per-document path: no Orama instance needed
-    startPageIndexingOnChange(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    startPageIndexingOnChange(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider);
   } else {
     // Legacy Orama-based path
     const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
-    startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider);
+    startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider);
   }
 }
 
@@ -113,7 +113,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Wrap vector search in try/catch to prevent indexing issues from blocking LLM query.
   try {
-    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel);
+    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider);
 
     console.info(`[handleQuery] Query embedding dimensions: ${queryEmbedding?.length}, model: ${settings.embeddingModel}`);
     console.info(`[handleQuery] Embedding sample (first 5): ${queryEmbedding?.slice(0, 5)}`);

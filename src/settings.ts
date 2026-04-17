@@ -40,8 +40,27 @@ const settings: SettingSchemaDesc[] = [
     title: 'Embedding Model',
     description: 'Choose the OpenAI embedding model. Changing this will re-create the vector database.',
     default: 'text-embedding-3-small',
-    enumChoices: ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'],
+    enumChoices: [
+      'text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large',
+      'nomic-embed-text', 'mxbai-embed-large', 'all-minilm'
+    ],
     enumPicker: 'select',
+  },
+  {
+    key: 'embeddingProvider',
+    type: 'enum',
+    title: 'Embedding Provider',
+    description: 'Choose OpenAI for cloud-based embeddings or Ollama for local embeddings. Ollama requires a running local instance.',
+    default: 'openai',
+    enumChoices: ['openai', 'ollama'],
+    enumPicker: 'select',
+  },
+  {
+    key: 'embeddingEndpoint',
+    type: 'string',
+    title: 'Embedding API Endpoint',
+    description: 'The URL for embedding API requests. For Ollama, set to http://localhost:11434/api/embeddings. Leave empty to use the default OpenAI endpoint.',
+    default: 'https://api.openai.com/v1/embeddings',
   },
   {
     key: 'LiteLLMLink',
