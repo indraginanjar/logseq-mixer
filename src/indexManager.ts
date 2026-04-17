@@ -9,7 +9,7 @@ export interface IndexingResult {
 }
 
 import { getByID, remove } from "@orama/orama";
-import { DEFAULT_EMBEDDING_MODEL, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
+import { DEFAULT_EMBEDDING_MODEL, EmbeddingProvider, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
 import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "./storage/StorageProvider";
 
@@ -19,6 +19,8 @@ let hasHooked = false;
 let currentApiKey = '';
 let currentEmbeddingKey = '';
 let currentModel = '';
+let currentEmbeddingEndpoint = '';
+let currentEmbeddingProvider: EmbeddingProvider = 'openai';
 let currentOramaInstance: OramaInstance | undefined;
 let currentStorageProvider: StorageProvider;
 let indexingInProgress = false;
@@ -97,7 +99,9 @@ export async function checkAndIndexUpdatedPages(
   oramaInstance: OramaInstance | undefined,
   embeddingApiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
-  storageProvider: StorageProvider
+  storageProvider: StorageProvider,
+  embeddingEndpoint?: string,
+  embeddingProvider?: EmbeddingProvider
 ): Promise<IndexingResult> {
   if (indexingInProgress) return { outcome: 'completed', pagesProcessed: 0 };
 
@@ -160,7 +164,9 @@ export async function checkAndIndexUpdatedPages(
             embeddingApiKey,
             model,
             page.properties,
-            linkData
+            linkData,
+            embeddingEndpoint,
+            embeddingProvider
           );
 
           // Delete old chunks for this page
@@ -222,7 +228,9 @@ export async function checkAndIndexUpdatedPages(
             embeddingApiKey,
             model,
             page.properties,
-            linkData
+            linkData,
+            embeddingEndpoint,
+            embeddingProvider
           );
 
           // Remove old record and any existing chunks for this page
@@ -273,13 +281,17 @@ export function startPageIndexingOnChange(
   oramaInstance: OramaInstance | undefined,
   embeddingApiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
-  storageProvider: StorageProvider
+  storageProvider: StorageProvider,
+  embeddingEndpoint?: string,
+  embeddingProvider?: EmbeddingProvider
 ): void {
   currentApiKey = apiKey;
   currentEmbeddingKey = embeddingApiKey;
   currentModel = model;
   currentOramaInstance = oramaInstance;
   currentStorageProvider = storageProvider;
+  currentEmbeddingEndpoint = embeddingEndpoint ?? '';
+  currentEmbeddingProvider = embeddingProvider ?? 'openai';
 
   if (hasHooked) return;
   hasHooked = true;
@@ -287,7 +299,7 @@ export function startPageIndexingOnChange(
   logseq.DB.onChanged(async () => {
     if (getIsUpdatingSettings()) return;
     try {
-      await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider);
+      await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider);
     } catch (err) {
       console.error('Error indexing updated pages:', err);
     }
