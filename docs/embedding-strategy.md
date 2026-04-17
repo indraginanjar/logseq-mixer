@@ -178,12 +178,15 @@ A per-run cache prevents redundant `logseq.Editor.getBlock()` calls for the same
 When the user sends a query:
 
 1. The query text is embedded using the selected embedding model
-2. The embedding is searched against the `documents` table using brute-force cosine similarity in JavaScript
+2. The embedding is searched against the in-memory HNSW index via `VectorSearchAccelerator` for fast approximate nearest neighbor search (sub-5ms at 20k+ chunks). If the HNSW index is not ready, the search falls back to brute-force cosine similarity in `SQLiteVectorStore`.
 3. Search parameters:
    - **Similarity threshold**: 0.5 (minimum cosine similarity)
    - **Result limit**: 5 most similar chunks
+   - **HNSW efSearch**: 64 (query-time search depth, ≥95% recall vs exact search)
 4. Results are reranked using Reciprocal Rank Fusion (RRF) before being injected into the LLM prompt
 5. The content of matching chunks is appended to the LLM prompt as "Additional Context from Knowledge Base"
+
+The HNSW index is built from all embeddings in the SQLite `documents` table at startup using [hnswlib-wasm](https://github.com/nicktobey/hnswlib-wasm) (a WebAssembly build of hnswlib). It is volatile (in-memory only) — SQLite remains the source of truth. Incremental updates keep the index synchronized during a session, and a full rebuild is triggered when the embedding dimension changes or tombstone accumulation exceeds 20%.
 
 If vector search fails for any reason, the query proceeds without additional context — only the current page context is used as fallback.
 
@@ -248,6 +251,12 @@ When using the `settings` storage backend, vector search still goes through the 
  │  - block_metadata table               │
  │  - Persisted to IndexedDB as binary   │
  │                                       │
+ │  VectorSearchAccelerator (HNSW)       │
+ │  - In-memory HNSW index (hnswlib-wasm)│
+ │  - Sub-5ms queries at 20k+ chunks     │
+ │  - Auto-fallback to brute-force       │
+ │  - Rebuilt from SQLite on startup     │
+ │                                       │
  │  Legacy fallback: Orama + Settings    │
  └───────────────────────────────────────┘
 ```
@@ -257,7 +266,9 @@ When using the `settings` storage backend, vector search still goes through the 
 | File                    | Responsibility                                              |
 |------------------------|-------------------------------------------------------------|
 | `src/embedManager.ts`  | Block flattening with UUID annotation, reference resolution, chunk grouping, block metadata extraction, provider-aware embedding generation (OpenAI + Ollama), endpoint resolution |
-| `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search, block metadata storage (`block_metadata` table), IndexedDB persistence |
+| `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search (brute-force fallback), `getAllEmbeddings()` for HNSW index construction, block metadata storage (`block_metadata` table), IndexedDB persistence |
+| `src/storage/VectorSearchAccelerator.ts` | In-memory HNSW index for fast approximate nearest neighbor search; wraps SQLiteVectorStore with automatic fallback |
+| `src/storage/VectorSearchAccelerator.types.ts` | Configuration interfaces and default HNSW parameters |
 | `src/storage/cosineSimilarity.ts` | Embedding BLOB encode/decode, cosine similarity computation |
 | `src/storage/migrateLegacy.ts` | Migration from legacy Orama JSON blob to per-document rows |
 | `src/storage/StorageProvider.ts` | StorageProvider interface (per-document + legacy methods) |

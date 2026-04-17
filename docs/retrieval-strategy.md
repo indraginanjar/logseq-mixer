@@ -21,11 +21,12 @@ User Query
              ├─────────────┬───────────────┤
              ▼             │               ▼
 ┌──────────────────────┐   │  ┌──────────────────────────┐
-│ 2a. BM25 keyword     │   │  │ 2b. Vector similarity    │  storageProvider.searchByVector()
-│     search            │   │  │     search (brute-force  │
-│     bm25Index.search()│   │  │     cosine similarity)   │
-│     - top 5 results   │   │  │     - threshold: 0.5     │
-└──────────┬────────────┘   │  │     - top 5 results      │
+│ 2a. BM25 keyword     │   │  │ 2b. Vector similarity    │  accelerator.searchByVector()
+│     search            │   │  │     search (HNSW index   │
+│     bm25Index.search()│   │  │     or brute-force       │
+│     - top 5 results   │   │  │     fallback)            │
+└──────────┬────────────┘   │  │     - threshold: 0.5     │
+           │                │  │     - top 5 results      │
            │                │  └────────────┬──────────────┘
            │                │               │
            ▼                │               ▼
@@ -94,12 +95,16 @@ An in-memory `BM25Index` is built from all document content in the SQLite `docum
 
 ### Vector Similarity Search
 
-The `SQLiteVectorStore` reads all rows from the `documents` table, decodes each embedding BLOB to a `Float32Array`, computes cosine similarity in JavaScript, and returns the top-K results.
+The `VectorSearchAccelerator` wraps an in-memory HNSW (Hierarchical Navigable Small World) index built from all embeddings in the SQLite `documents` table at startup. When the HNSW index is ready, queries are routed through it for sub-5ms approximate nearest neighbor search. When the index is not ready (during construction, after an error, or if the WASM backend fails to load), queries fall back transparently to the brute-force cosine similarity scan in `SQLiteVectorStore`.
 
 | Parameter       | Value   | Description                                      |
 |----------------|---------|--------------------------------------------------|
 | similarity     | 0.5     | Minimum cosine similarity threshold               |
 | limit          | 5       | Maximum number of results returned                |
+| efSearch       | 64      | HNSW query-time search depth (controls recall vs speed) |
+| M              | 16      | HNSW graph connectivity (bi-directional links per node) |
+
+The HNSW index is volatile — it lives only in memory and is rebuilt from SQLite on each plugin startup. Incremental updates (add/remove/upsert) keep it synchronized during a session. A full rebuild is triggered automatically when the embedding dimension changes (model switch) or when tombstone accumulation exceeds 20% of capacity.
 
 ### RRF Merging
 
@@ -112,7 +117,8 @@ Both result lists are passed to `mergeWithRRF()`, which fuses them using weighte
 
 ### Fallback Behavior
 
-- If vector search fails → BM25 results only (warning logged)
+- If the HNSW index is not ready → vector search falls back to brute-force cosine similarity in SQLiteVectorStore (warning logged)
+- If vector search fails entirely → BM25 results only (warning logged)
 - If BM25 search fails → vector results only (warning logged)
 - If both fail → empty result array, LLM proceeds without additional context
 
@@ -244,7 +250,7 @@ This means the plugin always works — even without embeddings configured — by
 - **No timeout on LLM call**: The `queryLiteLLM()` fetch has no built-in timeout, but the user can cancel it via the stop button in the chat UI.
 - **No streaming**: Responses are awaited in full before displaying. Long responses may take several seconds to appear.
 - **Model-specific output limits**: Each model has a hardcoded max output token limit (e.g., 16,384 for GPT-4o). Responses that exceed this limit are truncated by the API.
-- **Brute-force search**: The SQLite backend scans all document embeddings for every query. This is fast for typical graph sizes but scales linearly with document count.
+- **Brute-force fallback**: When the HNSW index is unavailable (WASM load failure, during rebuild), the SQLite backend falls back to scanning all document embeddings. This is fast for typical graph sizes but scales linearly with document count. The HNSW index provides sub-5ms queries at 20k+ chunks.
 
 ## File Reference
 
@@ -252,7 +258,9 @@ This means the plugin always works — even without embeddings configured — by
 |-------------------------|---------------------------------------------------------|
 | `src/manager.ts`        | `handleQuery()` — orchestrates the full retrieval pipeline |
 | `src/embedManager.ts`   | `useGenerateEmbedding()` — embeds the query text (provider-aware: OpenAI or Ollama) |
-| `src/storage/SQLiteVectorStore.ts` | `searchByVector()` — brute-force cosine similarity search (default backend) |
+| `src/storage/SQLiteVectorStore.ts` | `searchByVector()` — brute-force cosine similarity search (fallback); `getAllEmbeddings()` — bulk read for HNSW index construction |
+| `src/storage/VectorSearchAccelerator.ts` | `VectorSearchAccelerator` — in-memory HNSW index for fast approximate nearest neighbor search with automatic brute-force fallback |
+| `src/storage/VectorSearchAccelerator.types.ts` | Configuration and type definitions for the HNSW accelerator |
 | `src/storage/cosineSimilarity.ts` | `cosineSimilarity()` — cosine similarity computation     |
 | `src/bm25Index.ts`      | `BM25Index` — in-memory inverted index for BM25 keyword search |
 | `src/queryClassifier.ts`| `classifyQuery()` — heuristic query classification (keyword/semantic/mixed) |
