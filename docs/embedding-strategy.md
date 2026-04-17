@@ -2,11 +2,24 @@
 
 ## Overview
 
-Logseq Composer uses OpenAI embedding models to generate vector embeddings for all user notes. The embedding model is configurable via plugin settings, with three supported models to balance cost, speed, and quality. These embeddings power semantic search via RAG (Retrieval-Augmented Generation), allowing the LLM to find and reference relevant notes when answering queries.
+Logseq Composer uses embedding models to generate vector embeddings for all user notes. The plugin supports both cloud-based OpenAI models and local Ollama models, configurable via plugin settings. Users can choose between six embedding models across two providers to balance cost, speed, privacy, and quality. These embeddings power semantic search via RAG (Retrieval-Augmented Generation), allowing the LLM to find and reference relevant notes when answering queries.
 
-## Embedding Model
+## Embedding Providers
 
-The plugin supports three OpenAI embedding models:
+The plugin supports two embedding providers, configurable via the `embeddingProvider` setting:
+
+| Provider | Description | Auth Required | Default Endpoint |
+|----------|-------------|---------------|------------------|
+| `openai` (default) | Cloud-based OpenAI embedding API | Yes (API key) | `https://api.openai.com/v1/embeddings` |
+| `ollama` | Local Ollama instance | No | `http://localhost:11434/api/embeddings` |
+
+When using Ollama, no API key is needed — the plugin sends requests directly to the local Ollama instance without an Authorization header.
+
+## Embedding Models
+
+The plugin supports six embedding models across both providers:
+
+### OpenAI Models
 
 | Model | Dimensions | Max Tokens | Cost (per 1M tokens) |
 |-------|-----------|------------|---------------------|
@@ -14,9 +27,31 @@ The plugin supports three OpenAI embedding models:
 | text-embedding-3-small (default) | 1536 | 8,191 | ~$0.02 |
 | text-embedding-3-large | 3072 | 8,191 | ~$0.13 |
 
+### Ollama Models
+
+| Model | Dimensions | Max Tokens | Cost |
+|-------|-----------|------------|------|
+| nomic-embed-text | 768 | 8,192 | Free (local) |
+| mxbai-embed-large | 1024 | 512 | Free (local) |
+| all-minilm | 384 | 256 | Free (local) |
+
 The model is configurable via the `embeddingModel` plugin setting. The default is `text-embedding-3-small`.
 
-- **Max input chars**: ~16,000 characters per chunk (derived from 8,191 tokens × 2 chars/token, conservative ratio for mixed content)
+- **Max input chars**: Varies by model. For OpenAI models: ~16,000 characters per chunk (derived from 8,191 tokens × 2 chars/token). For Ollama models, the token limit varies (see table above).
+
+## Provider-Specific Request Handling
+
+The `useGenerateEmbedding()` function branches on the `embeddingProvider` setting:
+
+| Aspect | OpenAI | Ollama |
+|--------|--------|--------|
+| Endpoint | Configurable (default: `https://api.openai.com/v1/embeddings`) | Configurable (default: `http://localhost:11434/api/embeddings`) |
+| Auth header | `Authorization: Bearer <apiKey>` | None |
+| Request body | `{ model, input: text }` | `{ model, prompt: text }` |
+| Response path | `response.data[0].embedding` | `response.embedding` |
+| API key required | Yes | No |
+
+If the `embeddingEndpoint` setting is empty or whitespace-only, it falls back to the OpenAI default endpoint.
 
 ## Model Change Behavior
 
@@ -158,9 +193,12 @@ When using the `settings` storage backend, vector search still goes through the 
 
 ## Error Handling
 
-- **API errors**: The actual error message from OpenAI is surfaced to the user, including the page name that failed
-- **Timeout**: Requests that exceed 30 seconds are aborted with "Embedding API request timed out after 30 seconds"
-- **Token limit**: Input is capped at ~16,000 characters per chunk (8,191 tokens × 2 chars/token); block-based chunking ensures most content fits naturally
+- **API errors**: The actual error message from the provider is surfaced to the user, including the HTTP status code and response body
+- **Timeout**: Requests that exceed 30 seconds are aborted with "Embedding API request timed out after 30 seconds" (both providers)
+- **Ollama unreachable**: When the Ollama endpoint is unreachable (connection refused), a descriptive error is thrown: "Ollama embedding endpoint is not reachable at {endpoint}. Please verify Ollama is running."
+- **Missing API key**: For OpenAI, an error is thrown if the API key is empty. For Ollama, no API key validation is performed.
+- **Malformed response**: If the embedding field is missing from the response, a descriptive error is thrown: "Unexpected embedding response format from {provider}: missing embedding data"
+- **Token limit**: Input is safety-truncated to the model's `maxTokens` limit before sending; block-based chunking ensures most content fits naturally
 - **Database corruption**: If the persisted database can't be restored, a fresh database is created automatically
 - **Per-page resilience** (auto-indexer): If embedding fails for one page during auto-indexing, the error is logged and indexing continues for remaining pages
 - **Reference resolution failure**: If a block reference can't be fetched, the original `((uuid))` syntax is kept
@@ -195,9 +233,11 @@ When using the `settings` storage backend, vector search still goes through the 
      ▼                    ▼
  ┌───────────────────────────────────────┐
  │      useGenerateEmbedding()           │
- │  (OpenAI — selected model)            │
+ │  (provider-aware: OpenAI or Ollama)   │
+ │  - OpenAI: Bearer auth, input field   │
+ │  - Ollama: no auth, prompt field      │
  │  - 30s timeout                        │
- │  - ~16,000 char safety limit          │
+ │  - Safety truncation per model limit  │
  └──────────────┬────────────────────────┘
                 │
                 ▼
@@ -216,13 +256,13 @@ When using the `settings` storage backend, vector search still goes through the 
 
 | File                    | Responsibility                                              |
 |------------------------|-------------------------------------------------------------|
-| `src/embedManager.ts`  | Block flattening with UUID annotation, reference resolution, chunk grouping, block metadata extraction, embedding generation |
+| `src/embedManager.ts`  | Block flattening with UUID annotation, reference resolution, chunk grouping, block metadata extraction, provider-aware embedding generation (OpenAI + Ollama), endpoint resolution |
 | `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search, block metadata storage (`block_metadata` table), IndexedDB persistence |
 | `src/storage/cosineSimilarity.ts` | Embedding BLOB encode/decode, cosine similarity computation |
 | `src/storage/migrateLegacy.ts` | Migration from legacy Orama JSON blob to per-document rows |
 | `src/storage/StorageProvider.ts` | StorageProvider interface (per-document + legacy methods) |
 | `src/storage/createStorageProvider.ts` | Factory: creates SQLiteVectorStore or SettingsStorageProvider based on backend setting |
-| `src/indexManager.ts`  | Incremental indexing, auto-index on change, re-index guard   |
-| `src/manager.ts`       | Orchestration: manual re-index, auto-indexer, query handling |
+| `src/indexManager.ts`  | Incremental indexing, auto-index on change, re-index guard, threads embeddingEndpoint/embeddingProvider to embedding calls |
+| `src/manager.ts`       | Orchestration: manual re-index, auto-indexer, query handling, passes provider settings to all embedding calls |
 | `src/VectorDBManager.ts` | Legacy Orama database CRUD, persistence, vector search (settings backend only) |
-| `src/settings.ts`      | Plugin settings schema including indexing mode, embedding model, and storage backend |
+| `src/settings.ts`      | Plugin settings schema including indexing mode, embedding model, embedding provider, embedding endpoint, and storage backend |
