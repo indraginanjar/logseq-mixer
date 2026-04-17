@@ -53,10 +53,11 @@ User Query
 
 ## Step 1a: Query Embedding
 
-The user's query text is embedded using the same model and API key used for indexing. The model is configurable (default: `text-embedding-3-small`), producing a 1536 or 3072-dimensional vector depending on the selected model.
+The user's query text is embedded using the same model, provider, and endpoint used for indexing. The model is configurable (default: `text-embedding-3-small`), producing a vector whose dimensions depend on the selected model (384 to 3072 dimensions).
 
-- Same truncation rules apply (~16,000 char limit), though queries are typically short
+- Same truncation rules apply (safety truncation to the model's maxTokens limit), though queries are typically short
 - Same 30-second timeout applies
+- Provider-specific request format is used (OpenAI: `input` field with auth header; Ollama: `prompt` field without auth)
 - If embedding fails, vector search is skipped entirely and the query proceeds with only the current page as context
 
 ## Step 1b: Query Classification
@@ -250,7 +251,7 @@ This means the plugin always works — even without embeddings configured — by
 | File                     | Responsibility                                          |
 |-------------------------|---------------------------------------------------------|
 | `src/manager.ts`        | `handleQuery()` — orchestrates the full retrieval pipeline |
-| `src/embedManager.ts`   | `useGenerateEmbedding()` — embeds the query text         |
+| `src/embedManager.ts`   | `useGenerateEmbedding()` — embeds the query text (provider-aware: OpenAI or Ollama) |
 | `src/storage/SQLiteVectorStore.ts` | `searchByVector()` — brute-force cosine similarity search (default backend) |
 | `src/storage/cosineSimilarity.ts` | `cosineSimilarity()` — cosine similarity computation     |
 | `src/bm25Index.ts`      | `BM25Index` — in-memory inverted index for BM25 keyword search |
@@ -262,4 +263,4 @@ This means the plugin always works — even without embeddings configured — by
 | `src/blockRefParser.ts` | `parse()`, `serialize()`, `transformToMarkdownLinks()` — detects and transforms `((uuid))` block references in LLM responses |
 | `src/components/BlockLink.tsx` | `BlockLink` — clickable inline component for block references (teal, navigates to block via `scrollToBlockInPage`) |
 | `src/components/ChatMessageList.tsx` | Chat message rendering with page link and block reference transformation pipeline |
-| `src/settings.ts`       | Plugin settings (model, API keys, prompt with block citation instructions, endpoint, storage backend) |
+| `src/settings.ts`       | Plugin settings (model, provider, endpoint, API keys, prompt with block citation instructions, storage backend) |
