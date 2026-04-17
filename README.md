@@ -3,7 +3,9 @@
 **Logseq Composer** is a plugin that connects your Logseq notes with any LLM using Retrieval-Augmented Generation (RAG).  
 Hope you find it useful! 😀👍🍀🍷
 
-### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button, it may take a while depending on the size of the notes)
+### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button). By default, only new or updated pages are indexed — this is fast even for large vaults.
+
+> **Note**: After updating to a version with clickable block references, a **full re-index** is required to populate block metadata and add block UUID annotations to your chunks.
 
 🎥 [Watch demo](https://www.youtube.com/watch?v=J0QDrz-Ccis)
 
@@ -16,9 +18,12 @@ Hope you find it useful! 😀👍🍀🍷
 ### ⚙️ How It Works
 
 - Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) for semantic vector search
-- Retrieves related notes using RAG (vector similarity search for now)
+- Stores each document embedding as an individual row in a SQLite database (via [sql.js](https://github.com/sql-js/sql.js)), persisted to IndexedDB
+- Retrieves related notes using RAG (brute-force cosine similarity search + RRF reranking)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
+- **Clickable block references**: The LLM cites specific blocks using `((uuid))` notation, rendered as teal-colored inline links that navigate directly to the source block on click
 - Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
+- Automatically migrates existing Orama-based embeddings to the new per-document format — no re-indexing needed
 - Plugin still runs without embeddings — the currently active note will be passed as fallback context
 
 ---
@@ -48,7 +53,7 @@ You can configure these in the Logseq plugin UI:
 
 - **`EmbeddingApiKey`**  
   - Used for generating vector embeddings of your notes (for semantic search).  
-  - Currently only supports OpenAI’s `text-embedding-ada-002` model.  
+  - Supports OpenAI embedding models: `text-embedding-3-small` (default), `text-embedding-ada-002`, and `text-embedding-3-large`.  
   - If not set, vector search is skipped and only the current Logseq note is passed as context.  
   - You do **not** need this if you're okay with simpler functionality.
 
@@ -65,6 +70,16 @@ You can configure these in the Logseq plugin UI:
   - The API key used to authenticate your request with the actual LLM provider (OpenAI, Anthropic, Google, etc.).  
   - This key is passed to LiteLLM which handles routing and forwarding it properly.  
   - **Keep this secure**, especially if using shared or public LiteLLM endpoints.
+
+- **`indexingMode`**  
+  - Choose between `"incremental"` (default) and `"full"`.  
+  - **Incremental**: Only embeds pages that are new or have been updated since the last index. Fast and cost-efficient.  
+  - **Full**: Wipes the vector database and re-embeds every page from scratch. Use this if you suspect the index is corrupted or want a clean rebuild.
+
+- **`storageBackend`**  
+  - Choose between `"sqlite"` (default) and `"settings"`.  
+  - **sqlite**: Per-document storage in a sql.js SQLite database persisted to IndexedDB. Scales to large graphs without memory issues.  
+  - **settings**: Legacy Orama-based storage in Logseq plugin settings. Suitable for small graphs only.
 
 ---
 
@@ -83,7 +98,7 @@ You can configure these in the Logseq plugin UI:
 ### 📄 License
 
 This project is open-source and licensed under the **MIT License**.  
-You’re free to:
+You're free to:
 - Use
 - Copy
 - Modify
