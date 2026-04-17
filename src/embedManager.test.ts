@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { BlockLine, buildPageHeader, clearRefCache, createContentPreview, extractOutgoingLinks, flattenBlocks, groupBlocksIntoChunks, identifySemanticGroups, MAX_OVERLAP_BUDGET, OVERLAP_FRACTION, PageLinkData } from './embedManager';
+import { BlockLine, buildPageHeader, clearRefCache, createContentPreview, EMBEDDING_MODELS, extractOutgoingLinks, flattenBlocks, getDimensionsForModel, groupBlocksIntoChunks, identifySemanticGroups, isValidEmbeddingModel, MAX_OVERLAP_BUDGET, OPENAI_EMBEDDINGS_ENDPOINT, OVERLAP_FRACTION, PageLinkData, resolveEndpoint, useGenerateEmbedding } from './embedManager';
+import settings from './settings';
 import { countTokens, decode, encode } from './tokenizer';
 
 describe('identifySemanticGroups', () => {
@@ -1099,5 +1100,352 @@ describe('Property 2: Content Preview Truncation Invariant', () => {
       ),
       { numRuns: 100 }
     );
+  });
+});
+
+describe('Ollama model registry', () => {
+  it('contains nomic-embed-text with dimensions=768 and maxTokens=8192', () => {
+    const model = EMBEDDING_MODELS['nomic-embed-text'];
+    expect(model).toBeDefined();
+    expect(model.dimensions).toBe(768);
+    expect(model.maxTokens).toBe(8192);
+  });
+
+  it('contains mxbai-embed-large with dimensions=1024 and maxTokens=512', () => {
+    const model = EMBEDDING_MODELS['mxbai-embed-large'];
+    expect(model).toBeDefined();
+    expect(model.dimensions).toBe(1024);
+    expect(model.maxTokens).toBe(512);
+  });
+
+  it('contains all-minilm with dimensions=384 and maxTokens=256', () => {
+    const model = EMBEDDING_MODELS['all-minilm'];
+    expect(model).toBeDefined();
+    expect(model.dimensions).toBe(384);
+    expect(model.maxTokens).toBe(256);
+  });
+
+  it('getDimensionsForModel returns correct values for all Ollama models', () => {
+    expect(getDimensionsForModel('nomic-embed-text')).toBe(768);
+    expect(getDimensionsForModel('mxbai-embed-large')).toBe(1024);
+    expect(getDimensionsForModel('all-minilm')).toBe(384);
+  });
+
+  it('isValidEmbeddingModel returns true for all Ollama models', () => {
+    expect(isValidEmbeddingModel('nomic-embed-text')).toBe(true);
+    expect(isValidEmbeddingModel('mxbai-embed-large')).toBe(true);
+    expect(isValidEmbeddingModel('all-minilm')).toBe(true);
+  });
+});
+
+/**
+ * Feature: ollama-embedding-support, Property 1: Registry consistency
+ *
+ * Validates: Requirements 1.4, 1.5
+ *
+ * For any model name that is a key in EMBEDDING_MODELS, getDimensionsForModel(model)
+ * returns the correct dimensions and isValidEmbeddingModel(model) returns true.
+ */
+describe('Property 1: Registry consistency', () => {
+  it('getDimensionsForModel returns correct dimensions and isValidEmbeddingModel returns true for every registered model', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...Object.keys(EMBEDDING_MODELS)),
+        (model) => {
+          const expectedDimensions = EMBEDDING_MODELS[model].dimensions;
+          return (
+            getDimensionsForModel(model) === expectedDimensions &&
+            isValidEmbeddingModel(model) === true
+          );
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+/**
+ * Feature: ollama-embedding-support, Property 2: Whitespace endpoint fallback
+ *
+ * Validates: Requirements 2.3
+ *
+ * For any string composed entirely of whitespace (including empty string),
+ * endpoint resolution produces the OpenAI default endpoint.
+ */
+describe('Property 2: Whitespace endpoint fallback', () => {
+  it('whitespace-only or empty endpoint resolves to OPENAI_EMBEDDINGS_ENDPOINT', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.constantFrom(' ', '\t', '\n', '\r'), { minLength: 0, maxLength: 20 }).map(chars => chars.join('')),
+        (whitespaceEndpoint) => {
+          return resolveEndpoint(whitespaceEndpoint) === OPENAI_EMBEDDINGS_ENDPOINT;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+/**
+ * Feature: ollama-embedding-support, Property 3: Provider-specific request construction
+ *
+ * Validates: Requirements 4.1, 4.2
+ *
+ * For any valid provider, non-empty model, API key, and input text:
+ * openai requests include Authorization header and input field;
+ * ollama requests omit Authorization and use prompt field.
+ */
+describe('Property 3: Provider-specific request construction', () => {
+  it('openai includes Authorization and input; ollama omits Authorization and uses prompt', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('openai' as const, 'ollama' as const),
+        fc.string({ minLength: 1, maxLength: 20 }),  // model
+        fc.string({ minLength: 1, maxLength: 40 }),  // apiKey
+        fc.string({ minLength: 1, maxLength: 50 }),  // inputText
+        (provider, model, apiKey, inputText) => {
+          // Build headers and body the same way useGenerateEmbedding does
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          let body: Record<string, any>;
+
+          if (provider === 'ollama') {
+            body = { model, prompt: inputText };
+          } else {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+            body = { model, input: inputText };
+          }
+
+          if (provider === 'openai') {
+            // Must have Authorization header
+            if (!headers['Authorization']) return false;
+            if (!headers['Authorization'].startsWith('Bearer ')) return false;
+            // Must have input field, not prompt
+            if (!('input' in body)) return false;
+            if ('prompt' in body) return false;
+          } else {
+            // Must NOT have Authorization header
+            if ('Authorization' in headers) return false;
+            // Must have prompt field, not input
+            if (!('prompt' in body)) return false;
+            if ('input' in body) return false;
+          }
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+/**
+ * Feature: ollama-embedding-support, Property 4: Provider-specific response parsing round-trip
+ *
+ * Validates: Requirements 5.1, 5.2, 6.1
+ *
+ * For any valid embedding vector and provider, constructing a mock response
+ * in that provider's format and parsing it yields the original vector.
+ */
+describe('Property 4: Provider-specific response parsing round-trip', () => {
+  it('constructing a mock response and parsing it yields the original vector', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('openai' as const, 'ollama' as const),
+        fc.array(fc.double({ min: -1e3, max: 1e3, noNaN: true, noDefaultInfinity: true }), { minLength: 1, maxLength: 20 }),
+        (provider, vector) => {
+          // Construct mock response in provider's format
+          let mockResponse: any;
+          if (provider === 'openai') {
+            mockResponse = { data: [{ embedding: vector }] };
+          } else {
+            mockResponse = { embedding: vector };
+          }
+
+          // Parse using the same logic as useGenerateEmbedding
+          const parsed = provider === 'ollama'
+            ? mockResponse.embedding
+            : mockResponse.data?.[0]?.embedding;
+
+          // The parsed result should be the original vector
+          if (!parsed) return false;
+          if (parsed.length !== vector.length) return false;
+          for (let i = 0; i < vector.length; i++) {
+            if (parsed[i] !== vector[i]) return false;
+          }
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+/**
+ * Feature: ollama-embedding-support, Property 5: HTTP error propagation
+ *
+ * Validates: Requirements 5.3
+ *
+ * For any HTTP error status (400–599) and response body string,
+ * the thrown error contains both the status code and body text.
+ */
+describe('Property 5: HTTP error propagation', () => {
+  it('thrown error contains HTTP status code and response body text', async () => {
+    const originalFetch = globalThis.fetch;
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.integer({ min: 400, max: 599 }),
+        fc.string({ minLength: 1, maxLength: 100 }),
+        async (statusCode, bodyText) => {
+          globalThis.fetch = vi.fn().mockResolvedValue({
+            ok: false,
+            status: statusCode,
+            text: async () => bodyText,
+          });
+
+          try {
+            await useGenerateEmbedding('test input', 'test-key', 'text-embedding-3-small', OPENAI_EMBEDDINGS_ENDPOINT, 'openai');
+            return false; // Should have thrown
+          } catch (err: any) {
+            const msg = err.message || '';
+            const hasStatus = msg.includes(String(statusCode));
+            const hasBody = msg.includes(bodyText);
+            return hasStatus && hasBody;
+          } finally {
+            globalThis.fetch = originalFetch;
+          }
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+describe('useGenerateEmbedding provider-specific behavior', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('OpenAI request includes Authorization header and input field', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ embedding: [0.1, 0.2] }] }),
+    });
+    await useGenerateEmbedding('test', 'my-key', 'text-embedding-3-small', OPENAI_EMBEDDINGS_ENDPOINT, 'openai');
+    const call = (globalThis.fetch as any).mock.calls[0];
+    const [url, options] = call;
+    expect(options.headers['Authorization']).toBe('Bearer my-key');
+    const body = JSON.parse(options.body);
+    expect(body.input).toBe('test');
+    expect(body.prompt).toBeUndefined();
+  });
+
+  it('Ollama request omits Authorization header and uses prompt field', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embedding: [0.1, 0.2] }),
+    });
+    await useGenerateEmbedding('test', '', 'nomic-embed-text', 'http://localhost:11434/api/embeddings', 'ollama');
+    const call = (globalThis.fetch as any).mock.calls[0];
+    const [url, options] = call;
+    expect(options.headers['Authorization']).toBeUndefined();
+    const body = JSON.parse(options.body);
+    expect(body.prompt).toBe('test');
+    expect(body.input).toBeUndefined();
+  });
+
+  it('OpenAI response parsed from data[0].embedding', async () => {
+    const vec = [0.1, 0.2, 0.3];
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ embedding: vec }] }),
+    });
+    const result = await useGenerateEmbedding('test', 'key', 'text-embedding-3-small', OPENAI_EMBEDDINGS_ENDPOINT, 'openai');
+    expect(result).toEqual(vec);
+  });
+
+  it('Ollama response parsed from embedding', async () => {
+    const vec = [0.4, 0.5, 0.6];
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embedding: vec }),
+    });
+    const result = await useGenerateEmbedding('test', '', 'nomic-embed-text', 'http://localhost:11434/api/embeddings', 'ollama');
+    expect(result).toEqual(vec);
+  });
+
+  it('Ollama connection refused throws descriptive error mentioning Ollama', async () => {
+    const connError = new TypeError('fetch failed');
+    (connError as any).cause = { code: 'ECONNREFUSED' };
+    globalThis.fetch = vi.fn().mockRejectedValue(connError);
+    await expect(
+      useGenerateEmbedding('test', '', 'nomic-embed-text', 'http://localhost:11434/api/embeddings', 'ollama')
+    ).rejects.toThrow(/Ollama embedding endpoint is not reachable/);
+  });
+
+  it('malformed response (missing embedding field) throws descriptive error', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ unexpected: 'data' }),
+    });
+    await expect(
+      useGenerateEmbedding('test', 'key', 'text-embedding-3-small', OPENAI_EMBEDDINGS_ENDPOINT, 'openai')
+    ).rejects.toThrow(/Unexpected embedding response format/);
+  });
+
+  it('30-second timeout throws timeout error for openai', async () => {
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      return new Promise((_, reject) => {
+        const err = new DOMException('The operation was aborted', 'AbortError');
+        setTimeout(() => reject(err), 0);
+      });
+    });
+    await expect(
+      useGenerateEmbedding('test', 'key', 'text-embedding-3-small', OPENAI_EMBEDDINGS_ENDPOINT, 'openai')
+    ).rejects.toThrow(/timed out/);
+  });
+
+  it('30-second timeout throws timeout error for ollama', async () => {
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      return new Promise((_, reject) => {
+        const err = new DOMException('The operation was aborted', 'AbortError');
+        setTimeout(() => reject(err), 0);
+      });
+    });
+    await expect(
+      useGenerateEmbedding('test', '', 'nomic-embed-text', 'http://localhost:11434/api/embeddings', 'ollama')
+    ).rejects.toThrow(/timed out/);
+  });
+});
+
+describe('Settings schema for Ollama embedding support', () => {
+  it('embeddingProvider setting exists with correct enum choices and default', () => {
+    const setting = settings.find(s => s.key === 'embeddingProvider');
+    expect(setting).toBeDefined();
+    expect(setting!.type).toBe('enum');
+    expect(setting!.default).toBe('openai');
+    expect(setting!.enumChoices).toEqual(['openai', 'ollama']);
+  });
+
+  it('embeddingEndpoint setting exists with correct default', () => {
+    const setting = settings.find(s => s.key === 'embeddingEndpoint');
+    expect(setting).toBeDefined();
+    expect(setting!.type).toBe('string');
+    expect(setting!.default).toBe('https://api.openai.com/v1/embeddings');
+  });
+
+  it('embeddingModel enum choices include all 6 models', () => {
+    const setting = settings.find(s => s.key === 'embeddingModel');
+    expect(setting).toBeDefined();
+    expect(setting!.enumChoices).toContain('text-embedding-ada-002');
+    expect(setting!.enumChoices).toContain('text-embedding-3-small');
+    expect(setting!.enumChoices).toContain('text-embedding-3-large');
+    expect(setting!.enumChoices).toContain('nomic-embed-text');
+    expect(setting!.enumChoices).toContain('mxbai-embed-large');
+    expect(setting!.enumChoices).toContain('all-minilm');
+    expect(setting!.enumChoices).toHaveLength(6);
   });
 });

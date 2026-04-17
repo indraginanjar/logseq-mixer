@@ -15,10 +15,17 @@ export interface EmbeddingModelConfig {
   maxTokens: number;
 }
 
+export type EmbeddingProvider = 'openai' | 'ollama';
+
+export const OPENAI_EMBEDDINGS_ENDPOINT = 'https://api.openai.com/v1/embeddings';
+
 export const EMBEDDING_MODELS: Record<string, EmbeddingModelConfig> = {
   'text-embedding-ada-002': { name: 'text-embedding-ada-002', dimensions: 1536, maxTokens: 8191 },
   'text-embedding-3-small': { name: 'text-embedding-3-small', dimensions: 1536, maxTokens: 8191 },
   'text-embedding-3-large': { name: 'text-embedding-3-large', dimensions: 3072, maxTokens: 8191 },
+  'nomic-embed-text':       { name: 'nomic-embed-text',       dimensions: 768,  maxTokens: 8192 },
+  'mxbai-embed-large':      { name: 'mxbai-embed-large',      dimensions: 1024, maxTokens: 512  },
+  'all-minilm':             { name: 'all-minilm',             dimensions: 384,  maxTokens: 256  },
 };
 
 export const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -507,10 +514,22 @@ export function groupBlocksIntoChunks(
   return finalChunks;
 }
 
-export async function useGenerateEmbedding(inputText: string, apiKey: string, model: string = DEFAULT_EMBEDDING_MODEL): Promise<number[]> {
-  if (!apiKey || !apiKey.trim()) {
+export function resolveEndpoint(endpoint?: string): string {
+  return endpoint?.trim() || OPENAI_EMBEDDINGS_ENDPOINT;
+}
+
+export async function useGenerateEmbedding(
+  inputText: string,
+  apiKey: string,
+  model: string = DEFAULT_EMBEDDING_MODEL,
+  endpoint: string = OPENAI_EMBEDDINGS_ENDPOINT,
+  provider: EmbeddingProvider = 'openai'
+): Promise<number[]> {
+  if (provider === 'openai' && !apiKey?.trim()) {
     throw new Error('Embedding API key is not configured. Please set your OpenAI API key in the plugin settings.');
   }
+
+  const resolvedEndpoint = resolveEndpoint(endpoint);
 
   // Safety truncation for any single chunk that still exceeds the model's limit
   const config = EMBEDDING_MODELS[model];
@@ -519,37 +538,50 @@ export async function useGenerateEmbedding(inputText: string, apiKey: string, mo
     ? decode(tokens.slice(0, config.maxTokens))
     : inputText;
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  let body: string;
+
+  if (provider === 'ollama') {
+    body = JSON.stringify({ model, prompt: text });
+  } else {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    body = JSON.stringify({ model, input: text });
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const res = await fetch('https://api.openai.com/v1/embeddings', {
+    const res = await fetch(resolvedEndpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        input: text,
-      }),
+      headers,
+      body,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
-    const json = await res.json();
-
-    if (!res.ok || json.error) {
-      console.error('Embedding API error:', json.error);
-      throw new Error(json.error?.message || 'Failed to generate embedding.');
+    if (!res.ok) {
+      const bodyText = await res.text();
+      throw new Error(`Embedding API error (HTTP ${res.status}): ${bodyText}`);
     }
 
-    return json.data[0].embedding;
+    const json = await res.json();
+
+    const embedding = provider === 'ollama' ? json.embedding : json.data?.[0]?.embedding;
+
+    if (!embedding) {
+      throw new Error(`Unexpected embedding response format from ${provider}: missing embedding data`);
+    }
+
+    return embedding;
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
       throw new Error('Embedding API request timed out after 30 seconds');
+    }
+    if (provider === 'ollama' && (err.cause?.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED') || err.message?.includes('fetch failed') || err.type === 'system')) {
+      throw new Error(`Ollama embedding endpoint is not reachable at ${resolvedEndpoint}. Please verify Ollama is running.`);
     }
     throw err;
   }
@@ -694,7 +726,9 @@ export async function getEmbeddingsForPage(
   apiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
   properties?: Record<string, any>,
-  linkData?: PageLinkData
+  linkData?: PageLinkData,
+  endpoint?: string,
+  provider?: EmbeddingProvider
 ): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[] }> {
   const { lines: originalLines, metadata: blockMetadata } = await flattenBlocks(blocks, [], pageName);
 
@@ -738,7 +772,7 @@ export async function getEmbeddingsForPage(
       id: chunkId,
       lastUpdated,
       content: chunks[c],
-      embedding: await useGenerateEmbedding(chunks[c], apiKey, model)
+      embedding: await useGenerateEmbedding(chunks[c], apiKey, model, endpoint, provider)
     };
     embeddings.push(embedding);
   }
