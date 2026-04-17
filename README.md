@@ -19,7 +19,7 @@ Hope you find it useful! 😀👍🍀🍷
 
 - Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) or local [Ollama](https://ollama.com/) models for semantic vector search
 - Stores each document embedding as an individual row in a SQLite database (via [sql.js](https://github.com/sql-js/sql.js)), persisted to IndexedDB
-- Retrieves related notes using RAG (brute-force cosine similarity search + RRF reranking)
+- Retrieves related notes using RAG (HNSW-accelerated vector search + BM25 keyword search + RRF reranking)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
 - **Clickable block references**: The LLM cites specific blocks using `((uuid))` notation, rendered as teal-colored inline links that navigate directly to the source block on click
 - **Clickable page links**: Page names in `[[double brackets]]` are rendered as blue inline links that open the page in Logseq on click

@@ -194,6 +194,52 @@ export class SQLiteVectorStore implements StorageProvider {
     }
   }
 
+  /** Retrieve all document IDs, content, and raw embedding BLOBs for HNSW index construction. */
+  getAllEmbeddings(): Array<{ id: string; content: string; embedding: Uint8Array }> {
+    if (!this._db) return [];
+
+    const stmt = this._db.prepare('SELECT id, content, embedding FROM documents');
+    const results: Array<{ id: string; content: string; embedding: Uint8Array }> = [];
+
+    try {
+      while (stmt.step()) {
+        const row = stmt.get();
+        results.push({
+          id: row[0] as string,
+          content: row[1] as string,
+          embedding: row[2] as Uint8Array,
+        });
+      }
+    } finally {
+      stmt.free();
+    }
+
+    return results;
+  }
+
+  /** Fetch document content by IDs (used if content cache needs refresh). */
+  getDocumentContent(ids: string[]): Map<string, string> {
+    if (!this._db || ids.length === 0) return new Map();
+
+    const placeholders = ids.map(() => '?').join(', ');
+    const stmt = this._db.prepare(
+      `SELECT id, content FROM documents WHERE id IN (${placeholders})`
+    );
+    const result = new Map<string, string>();
+
+    try {
+      stmt.bind(ids);
+      while (stmt.step()) {
+        const row = stmt.get();
+        result.set(row[0] as string, row[1] as string);
+      }
+    } finally {
+      stmt.free();
+    }
+
+    return result;
+  }
+
   /** Retrieve all document IDs and content for BM25 index building. */
   getAllDocumentContent(): Array<{ id: string; content: string }> {
     if (!this._db) return [];

@@ -12,6 +12,7 @@ import { getByID, remove } from "@orama/orama";
 import { DEFAULT_EMBEDDING_MODEL, EmbeddingProvider, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
 import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "./storage/StorageProvider";
+import type { VectorSearchAccelerator } from "./storage/VectorSearchAccelerator";
 
 const BATCH_SIZE = 5;
 
@@ -23,6 +24,7 @@ let currentEmbeddingEndpoint = '';
 let currentEmbeddingProvider: EmbeddingProvider = 'openai';
 let currentOramaInstance: OramaInstance | undefined;
 let currentStorageProvider: StorageProvider;
+let currentAccelerator: VectorSearchAccelerator | undefined;
 let indexingInProgress = false;
 let _pauseRequested = false;
 let _pagesProcessed = 0;
@@ -101,7 +103,8 @@ export async function checkAndIndexUpdatedPages(
   model: string = DEFAULT_EMBEDDING_MODEL,
   storageProvider: StorageProvider,
   embeddingEndpoint?: string,
-  embeddingProvider?: EmbeddingProvider
+  embeddingProvider?: EmbeddingProvider,
+  accelerator?: VectorSearchAccelerator
 ): Promise<IndexingResult> {
   if (indexingInProgress) return { outcome: 'completed', pagesProcessed: 0 };
 
@@ -175,6 +178,7 @@ export async function checkAndIndexUpdatedPages(
             oldChunkIds.push(`${page.id}_chunk_${c}`);
           }
           await storageProvider.deleteDocuments(oldChunkIds);
+          accelerator?.removeVectors(oldChunkIds);
 
           // Map embeddings to DocumentRecord[] and upsert
           const docs: DocumentRecord[] = newEmbeddings.map(e => ({
@@ -184,6 +188,7 @@ export async function checkAndIndexUpdatedPages(
             embedding: e.embedding,
           }));
           await storageProvider.upsertDocuments(docs);
+          accelerator?.addVectors(docs.map(d => ({ id: d.id, content: d.content, embedding: d.embedding })));
 
           // Upsert block metadata after successful indexing
           if (blockMetadata.length > 0) {
@@ -286,7 +291,8 @@ export function startPageIndexingOnChange(
   model: string = DEFAULT_EMBEDDING_MODEL,
   storageProvider: StorageProvider,
   embeddingEndpoint?: string,
-  embeddingProvider?: EmbeddingProvider
+  embeddingProvider?: EmbeddingProvider,
+  accelerator?: VectorSearchAccelerator
 ): void {
   currentApiKey = apiKey;
   currentEmbeddingKey = embeddingApiKey;
@@ -295,6 +301,7 @@ export function startPageIndexingOnChange(
   currentStorageProvider = storageProvider;
   currentEmbeddingEndpoint = embeddingEndpoint ?? '';
   currentEmbeddingProvider = embeddingProvider ?? 'openai';
+  currentAccelerator = accelerator;
 
   if (hasHooked) return;
   hasHooked = true;
@@ -312,7 +319,7 @@ export function startPageIndexingOnChange(
     debounceTimer = setTimeout(async () => {
       debounceTimer = null;
       try {
-        await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider);
+        await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider, currentAccelerator);
       } catch (err) {
         console.error('Error indexing updated pages:', err);
       }
