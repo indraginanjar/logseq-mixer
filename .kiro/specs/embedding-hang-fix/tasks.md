@@ -1,0 +1,80 @@
+# Implementation Plan
+
+- [x] 1. Fix missing `await` keywords in `VectorDBManager.ts`
+  - [x] 1.1 Add `await` to `insertMultiple()` in `batchInsertEmbeddings()`
+    - Change `insertMultiple(oramaDBInstance, Embedings)` to `await insertMultiple(oramaDBInstance, Embedings)`
+    - Ensures data is fully inserted before `persist()` serializes the database
+    - _Bug_Condition: batchInsertEmbeddings calls insertMultiple without await, causing persist() to run before data is inserted_
+    - _Expected_Behavior: insertMultiple() completes before persist() is called, so persisted JSON contains all new embeddings_
+    - _Requirements: 2.2_
+  - [x] 1.2 Add `await` to `search()` in `vectorSearchOramaDB()`
+    - Change `const results = search(...)` to `const results = await search(...)`
+    - Ensures the function returns resolved search results instead of an unresolved Promise
+    - _Bug_Condition: vectorSearchOramaDB calls search() without await, returning a Promise instead of results_
+    - _Expected_Behavior: search() resolves before returning, so callers receive actual search result objects with .hits_
+    - _Requirements: 2.8_
+
+- [x] 2. Fix missing `await` keywords and add re-indexing guard in `indexManager.ts`
+  - [x] 2.1 Add `await` to `remove()` in `checkAndIndexUpdatedPages()`
+    - Change `remove(oramaInstance, dbRecord.id)` to `await remove(oramaInstance, dbRecord.id)`
+    - Ensures removal completes before the subsequent insert operation
+    - _Bug_Condition: remove() is called without await, so insert may conflict with incomplete removal_
+    - _Expected_Behavior: remove() completes before batchInsertEmbeddings() is called_
+    - _Requirements: 2.7_
+  - [x] 2.2 Add `await` to `batchInsertEmbeddings()` in `checkAndIndexUpdatedPages()`
+    - Change `batchInsertEmbeddings(oramaInstance, [newEmbedding])` to `await batchInsertEmbeddings(oramaInstance, [newEmbedding])`
+    - Ensures the `finally` block only resets `indexingInProgress` after all database operations complete
+    - _Bug_Condition: batchInsertEmbeddings() is not awaited, so finally resets indexingInProgress prematurely_
+    - _Expected_Behavior: batchInsertEmbeddings() completes before finally block runs_
+    - _Requirements: 2.5_
+  - [x] 2.3 Add guard flag against self-triggered `onChanged` events in `startPageIndexingOnChange()`
+    - Introduce an `isUpdatingSettings` boolean flag
+    - Export a setter so `batchInsertEmbeddings()` (or a wrapper) can set the flag before/after `logseq.updateSettings()`
+    - In the `onChanged` callback, skip `checkAndIndexUpdatedPages()` if `isUpdatingSettings` is true
+    - Prevents cascading re-indexing loops caused by the plugin's own settings updates
+    - _Bug_Condition: batchInsertEmbeddings() calls logseq.updateSettings() which fires onChanged, re-triggering checkAndIndexUpdatedPages()_
+    - _Expected_Behavior: onChanged events caused by own settings updates are ignored; legitimate DB changes still trigger indexing_
+    - _Preservation: startPageIndexingOnChange() must continue to register onChanged listener for legitimate changes_
+    - _Requirements: 2.4, 2.5, 3.5_
+
+- [x] 3. Add `await` to `batchInsertEmbeddings()` in `manager.ts`
+  - Change `batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings)` to `await batchInsertEmbeddings(oramaDatabaseInstance, AllEmbeddings)` in `indexEntireLogSeq()`
+  - Ensures embeddings are fully persisted before the function returns
+  - _Bug_Condition: indexEntireLogSeq() does not await batchInsertEmbeddings(), returning before embeddings are persisted_
+  - _Expected_Behavior: batchInsertEmbeddings() completes before indexEntireLogSeq() returns_
+  - _Requirements: 2.3_
+
+- [x] 4. Add timeout and batched concurrency to `embedManager.ts`
+  - [x] 4.1 Add `AbortController` with 30s timeout to `useGenerateEmbedding()`
+    - Create an `AbortController` and pass its `signal` to the `fetch()` call
+    - Set a 30-second `setTimeout` that calls `controller.abort()`
+    - Clear the timeout on successful response
+    - Throw a descriptive error on abort (e.g., "Embedding API request timed out after 30 seconds")
+    - _Bug_Condition: fetch() has no timeout, hanging indefinitely if the API is unresponsive_
+    - _Expected_Behavior: fetch() aborts after 30 seconds with a clear error message_
+    - _Requirements: 2.6_
+  - [x] 4.2 Replace sequential loop with batched concurrency in `getEmbedingsAllNotes()`
+    - Replace the sequential `for` loop with a batched approach processing 5 pages at a time
+    - Use `Promise.all()` on each batch of pages to allow concurrent API calls within the batch
+    - Each call inherits the 30-second timeout from the fixed `useGenerateEmbedding()`
+    - Preserve existing error handling (catch per page, report page name, throw with API key message)
+    - _Bug_Condition: sequential for loop makes one API call per page with no concurrency control_
+    - _Expected_Behavior: pages are processed in batches of 5 with concurrent API calls per batch_
+    - _Preservation: error reporting per page must remain unchanged_
+    - _Requirements: 2.1, 3.6_
+
+- [x] 5. Remove duplicate `useGenerateEmbedding()` and consolidate imports
+  - [x] 5.1 Remove duplicate function in `src/hooks/useGenerateEmbedding.ts`
+    - Delete the duplicate `useGenerateEmbedding()` function body or the entire file
+    - The canonical version with error handling and timeout lives in `src/embedManager.ts`
+    - _Requirements: 2.6_
+  - [x] 5.2 Update import in `src/hooks/useVectorDBIndexed.ts`
+    - Change `import { useGenerateEmbedding } from './useGenerateEmbedding'` to `import { useGenerateEmbedding } from '../embedManager'`
+    - Ensures all consumers use the single canonical implementation with timeout and error handling
+    - _Requirements: 2.6_
+
+- [x] 6. Checkpoint — verify all changes compile and work together
+  - Run `tsc --noEmit` or equivalent type check to ensure no compile errors
+  - Manually verify: index a vault, confirm no hang, confirm no cascading re-indexing, confirm search returns results
+  - _Preservation: LLM query flow, database load/restore, legitimate onChanged indexing, and error reporting must all remain unchanged_
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_

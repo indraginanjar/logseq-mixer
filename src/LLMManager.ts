@@ -3,11 +3,9 @@ export async function queryLiteLLM(
   query: string,
   model: string,
   apiKey: string,
-  endpoint: string
+  endpoint: string,
+  signal?: AbortSignal
 ): Promise<any> {
-  // Adjust this URL to match your LiteLLM server endpoint.
-  //const endpoint = 'http://localhost:4000/chat/completions';
-
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -15,11 +13,11 @@ export async function queryLiteLLM(
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: model, // Use the model from settings
+      model: model,
       messages: [{ role: 'user', content: query }],
       "api_key":apiKey
-      
     }),
+    signal,
   });
 
   if (!response.ok) {

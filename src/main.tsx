@@ -5,17 +5,22 @@ import { RecoilRoot } from 'recoil';
 import 'VectorDBManager';
 import App from './App';
 import settings from './settings';
+import { createStorageProvider } from './storage/createStorageProvider';
 
 async function main() {
   const key = logseq.baseInfo.id;
   console.info(`${key}: MAIN`);
+
+  // Read storage backend setting (default to 'sqlite' on first run)
+  const storageBackend = (logseq.settings?.storageBackend as 'sqlite' | 'settings') ?? 'sqlite';
+  const storageProvider = await createStorageProvider(storageBackend);
 
   const { preferredThemeMode } = await logseq.App.getUserConfigs();
 
   ReactDOM.render(
     <React.StrictMode>
       <RecoilRoot>
-        <App themeMode={preferredThemeMode} />
+        <App themeMode={preferredThemeMode} storageProvider={storageProvider} />
       </RecoilRoot>
     </React.StrictMode>,
     document.getElementById('root'),
