@@ -25,3 +25,8 @@ export const settingsState = atom<IPluginSettings>({
   default: settings.reduce((result, item) => ({ ...result, [item.key]: item.default }), {}) as IPluginSettings,
   effects: [settingsChangedEffect],
 });
+
+export const aiEditModeState = atom<boolean>({
+  key: 'aiEditMode',
+  default: false,
+});
