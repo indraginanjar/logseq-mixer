@@ -276,6 +276,9 @@ export async function checkAndIndexUpdatedPages(
   return result;
 }
 
+/** Debounce delay for auto-indexing on DB changes (ms). */
+const AUTO_INDEX_DEBOUNCE_MS = 30_000;
+
 export function startPageIndexingOnChange(
   apiKey: string,
   oramaInstance: OramaInstance | undefined,
@@ -296,12 +299,23 @@ export function startPageIndexingOnChange(
   if (hasHooked) return;
   hasHooked = true;
 
-  logseq.DB.onChanged(async () => {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  logseq.DB.onChanged(() => {
     if (getIsUpdatingSettings()) return;
-    try {
-      await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider);
-    } catch (err) {
-      console.error('Error indexing updated pages:', err);
+
+    // Clear any pending debounce timer and restart the wait
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
     }
+
+    debounceTimer = setTimeout(async () => {
+      debounceTimer = null;
+      try {
+        await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider);
+      } catch (err) {
+        console.error('Error indexing updated pages:', err);
+      }
+    }, AUTO_INDEX_DEBOUNCE_MS);
   });
 }
