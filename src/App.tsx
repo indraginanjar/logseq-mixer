@@ -5,12 +5,17 @@ import type { IndexingResult } from 'indexManager';
 import { getIndexingProgress, isIndexingActive, requestPauseIndexing } from 'indexManager';
 import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { useRecoilValue } from 'recoil';
+import { useRecoilState, useRecoilValue } from 'recoil';
+import { executeAll } from './blockExecutor';
+import { getActivePageContext } from './blockTreeFormatter';
+import { ChangeSummary } from './components/ChangeSummary';
+import { EditToggle } from './components/EditToggle';
 import { useAppVisible } from './hooks/useAppVisible';
 import { useCtrlKey } from './hooks/useCtrlKey';
-import { settingsState } from './state/settings';
+import { aiEditModeState, settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
+import type { ExecutionResult } from './types/editTypes';
 
 // --- Animations ---
 
@@ -345,12 +350,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const themeMode = useThemeMode(initialThemeMode);
   const ctrlHeld = useCtrlKey();
   const settings = useRecoilValue(settingsState);
+  const [aiEditMode, setAiEditMode] = useRecoilState(aiEditModeState);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isIndexing, setIsIndexing] = useState(isIndexingActive());
+  const [editResults, setEditResults] = useState<Map<string | number, ExecutionResult>>(new Map());
 
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -432,13 +439,44 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     try {
       const controller = new AbortController();
       abortControllerRef.current = controller;
-      const resp = await handleQuery(inputMessage.trim(), settings, storageProvider, controller.signal);
+
+      // When edit mode is on, check for an active page first
+      let effectiveEditMode = aiEditMode || undefined;
+      if (aiEditMode) {
+        const pageCtx = await getActivePageContext();
+        if (!pageCtx) {
+          effectiveEditMode = undefined;
+          setMessages(prev => [...prev, {
+            id: Date.now() + '_warning',
+            content: '⚠️ No active page is open. Edit mode requires an open page to work. Sending query without edit context.',
+            sender: 'assistant',
+          }]);
+        }
+      }
+
+      const resp = await handleQuery(inputMessage.trim(), settings, storageProvider, controller.signal, effectiveEditMode);
       abortControllerRef.current = null;
-      setMessages(prev => [...prev, {
-        id: Date.now() + '_assistant',
-        content: resp,
-        sender: 'assistant',
-      }]);
+
+      if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
+        const editResp = resp;
+        const assistantMsgId = Date.now() + '_assistant';
+        setMessages(prev => [...prev, {
+          id: assistantMsgId,
+          content: editResp.text,
+          sender: 'assistant',
+        }]);
+
+        if (editResp.commands.length > 0) {
+          const result = await executeAll(editResp.commands);
+          setEditResults(prev => new Map(prev).set(assistantMsgId, result));
+        }
+      } else {
+        setMessages(prev => [...prev, {
+          id: Date.now() + '_assistant',
+          content: typeof resp === 'string' ? resp : resp.text,
+          sender: 'assistant',
+        }]);
+      }
     } catch (err: any) {
       abortControllerRef.current = null;
       if (err.name === 'AbortError') {
@@ -523,6 +561,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setMessages([]);
     setInputMessage('');
     setError(null);
+    setAiEditMode(false);
+    setEditResults(new Map());
     clearConversationHistory();
   };
 
@@ -552,6 +592,17 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               return provider.getBlockMetadata?.(uuid) ?? null;
             }}
           />
+          {messages.map((msg) => {
+            const result = editResults.get(msg.id);
+            return result ? (
+              <div key={`summary-${msg.id}`} style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '12px' }}>
+                <div style={{ width: '28px', flexShrink: 0 }} />
+                <div style={{ maxWidth: '80%' }}>
+                  <ChangeSummary result={result} />
+                </div>
+              </div>
+            ) : null;
+          })}
           {loading && (
             <TypingIndicator>
               <Dot delay={0} /><Dot delay={1} /><Dot delay={2} />
@@ -607,7 +658,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 {docCount !== null && <>📊 {docCount.toLocaleString()} chunks indexed</>}
               </StatusText>
             )}
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
               {storageProvider.exportToFile && (
                 <ToolbarButton onClick={() => storageProvider.exportToFile?.()}>📥 Export</ToolbarButton>
               )}

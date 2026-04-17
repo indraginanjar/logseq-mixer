@@ -1,4 +1,7 @@
+import { getActivePageContext } from 'blockTreeFormatter';
 import { BM25Index } from 'bm25Index';
+import { parseEditCommands } from 'editCommandParser';
+import { buildEditSystemPrompt, buildPageContextMessage } from 'editPromptBuilder';
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
@@ -7,6 +10,7 @@ import { rerankWithRRF, type SearchHit } from 'reranker';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
 import type { PerDocumentStorageProvider, StorageProvider } from './storage/StorageProvider';
+import type { EditCommand } from './types/editTypes';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -14,6 +18,11 @@ const CURRENT_CHUNKING_VERSION = '2'; // token-based
 const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = [];
 // Set maximum number of history messages to include in the prompt (e.g., last 6 messages)
 const MAX_HISTORY_LENGTH = 6;
+
+export interface EditQueryResult {
+  text: string;           // LLM response with json-edit blocks stripped
+  commands: EditCommand[]; // parsed edit commands (may be empty)
+}
 
 /** Clear the conversation history for a fresh session. */
 export function clearConversationHistory(): void {
@@ -105,7 +114,7 @@ export async function enableAutoIndexer(settings: any, storageProvider: StorageP
   }
 }
 
-export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal): Promise<string> {
+export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean): Promise<string | EditQueryResult> {
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
@@ -157,7 +166,18 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   }
 
   // Build the system message from the settings prompt.
-  const systemMessage = settings.prompt;
+  let systemMessage = settings.prompt;
+
+  // When edit mode is enabled, fetch page context and augment prompts.
+  let editPageContext: Awaited<ReturnType<typeof getActivePageContext>> = null;
+  if (editMode) {
+    try {
+      editPageContext = await getActivePageContext();
+    } catch (err) {
+      console.error('[handleQuery] Failed to get active page context for edit mode:', err);
+    }
+    systemMessage += '\n\n' + buildEditSystemPrompt();
+  }
 
   // Build the user message with context and conversation history.
   let userMessage = "";
@@ -198,6 +218,11 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     userMessage += vectorContext;
   }
 
+  // When edit mode is enabled and page context is available, append block tree context.
+  if (editMode && editPageContext) {
+    userMessage += '\n' + buildPageContextMessage(editPageContext.pageName, editPageContext.formattedTree) + '\n';
+  }
+
   // Build the messages array with proper roles.
   const messages: ChatMessage[] = [
     { role: 'system', content: systemMessage },
@@ -221,6 +246,15 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Trim conversation history if it grows too large.
   if (conversationHistory.length > MAX_HISTORY_LENGTH * 2) {
     conversationHistory.splice(0, conversationHistory.length - MAX_HISTORY_LENGTH * 2);
+  }
+
+  // When edit mode is enabled, parse edit commands from the response.
+  if (editMode) {
+    const parseResult = parseEditCommands(assistantResponse);
+    return {
+      text: parseResult.textWithoutEditBlocks,
+      commands: parseResult.commands,
+    };
   }
 
   return assistantResponse;
