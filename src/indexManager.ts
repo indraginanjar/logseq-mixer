@@ -11,6 +11,7 @@ export interface IndexingResult {
 import { getByID, remove } from "@orama/orama";
 import { DEFAULT_EMBEDDING_MODEL, EmbeddingProvider, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
+import { shouldSuppressAutoIndex } from "./cooldownManager";
 import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "./storage/StorageProvider";
 import type { VectorSearchAccelerator } from "./storage/VectorSearchAccelerator";
 
@@ -284,6 +285,25 @@ export async function checkAndIndexUpdatedPages(
 /** Debounce delay for auto-indexing on DB changes (ms). */
 const AUTO_INDEX_DEBOUNCE_MS = 30_000;
 
+/** Module-level debounce timer for the auto-indexer's onChanged callback. */
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Tracks whether the auto-embed toggle is enabled. */
+let _autoEmbedEnabled = true;
+
+/** Update the auto-embed enabled state used by the onChanged suppression guard. */
+export function setAutoEmbedEnabled(enabled: boolean): void {
+  _autoEmbedEnabled = enabled;
+}
+
+/** Cancel any pending auto-index debounce timer. */
+export function cancelAutoIndexDebounce(): void {
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+}
+
 export function startPageIndexingOnChange(
   apiKey: string,
   oramaInstance: OramaInstance | undefined,
@@ -306,10 +326,9 @@ export function startPageIndexingOnChange(
   if (hasHooked) return;
   hasHooked = true;
 
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
   logseq.DB.onChanged(() => {
     if (getIsUpdatingSettings()) return;
+    if (shouldSuppressAutoIndex(_autoEmbedEnabled)) return;
 
     // Clear any pending debounce timer and restart the wait
     if (debounceTimer !== null) {

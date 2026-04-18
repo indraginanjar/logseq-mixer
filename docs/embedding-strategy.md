@@ -142,11 +142,21 @@ There are three ways embedding/indexing occurs:
 
 ### 1. Manual Re-Index (Re-Index DB button)
 
-The user clicks the "🔄 Re-Index" button in the chat panel toolbar. This calls `indexEntireLogSeq()` which behaves according to the `indexingMode` setting (incremental or full). While indexing is in progress, the button changes to "⏹ Stop" — clicking it stops the indexing loop after the current page finishes.
+The user clicks the "🔄 Re-Index" button in the chat panel toolbar. This calls `indexEntireLogSeq()` which behaves according to the `indexingMode` setting (incremental or full). While indexing is in progress, the button changes to "⏹ Stop" — clicking it stops the indexing loop after the current page finishes processing.
+
+After a user-initiated stop, a 60-second cooldown period begins:
+
+- During cooldown, the Re-Index button is disabled (grayed out) and does not respond to clicks
+- During cooldown, the auto-indexer is suppressed — all `logseq.DB.onChanged()` events are ignored and no new indexing runs are scheduled
+- When the cooldown expires, the button re-enables and the auto-indexer resumes normal operation
+
+The cooldown only applies to user-initiated stops. Normal indexing completion and error completion do not trigger a cooldown — the button returns to the enabled "🔄 Re-Index" state immediately.
 
 ### 2. Auto-Indexing on Page Changes
 
 When the plugin loads, it registers a `logseq.DB.onChanged()` listener via `enableAutoIndexer()`. Any database change in Logseq (page edits, new pages, etc.) triggers `checkAndIndexUpdatedPages()`, which performs incremental indexing for changed pages.
+
+A toggle switch ("Auto-Embed: On/Off") in the toolbar controls whether the `onChanged` listener schedules indexing. When the toggle is disabled, database changes are ignored by the auto-indexer and no new indexing runs are scheduled. When re-enabled, auto-indexing resumes after the standard 30-second debounce. The toggle state is persisted via `logseq.settings` (key: `autoEmbedEnabled`, default: `true`) and restored on plugin load. Manual re-indexing via the Re-Index button works regardless of the toggle state.
 
 A guard flag (`isUpdatingSettings`) prevents cascading re-indexing loops. When the plugin persists the vector database to settings, the resulting `onChanged` event is ignored.
 
@@ -276,4 +286,7 @@ When using the `settings` storage backend, vector search still goes through the 
 | `src/indexManager.ts`  | Incremental indexing, auto-index on change, re-index guard, threads embeddingEndpoint/embeddingProvider to embedding calls |
 | `src/manager.ts`       | Orchestration: manual re-index, auto-indexer, query handling, passes provider settings to all embedding calls |
 | `src/VectorDBManager.ts` | Legacy Orama database CRUD, persistence, vector search (settings backend only) |
-| `src/settings.ts`      | Plugin settings schema including indexing mode, embedding model, embedding provider, embedding endpoint, and storage backend |
+| `src/cooldownManager.ts` | Cooldown timer management, auto-indexer suppression logic |
+| `src/buttonState.ts`   | Pure function for deriving re-index button visual state |
+| `src/components/AutoEmbedToggle.tsx` | Toggle switch component for enabling/disabling auto-embed |
+| `src/settings.ts`      | Plugin settings schema including indexing mode, embedding model, embedding provider, embedding endpoint, storage backend, and `autoEmbedEnabled` |

@@ -2,14 +2,17 @@ import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
-import { getIndexingProgress, isIndexingActive, requestPauseIndexing } from 'indexManager';
+import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM } from 'indexManager';
 import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { executeAll } from './blockExecutor';
 import { getActivePageContext } from './blockTreeFormatter';
+import { getButtonState } from './buttonState';
+import { AutoEmbedToggle } from './components/AutoEmbedToggle';
 import { ChangeSummary } from './components/ChangeSummary';
 import { EditToggle } from './components/EditToggle';
+import { cancelCooldown, startCooldown } from './cooldownManager';
 import { useAppVisible } from './hooks/useAppVisible';
 import { useCtrlKey } from './hooks/useCtrlKey';
 import { aiEditModeState, settingsState } from './state/settings';
@@ -367,6 +370,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [indexingStatus, setIndexingStatus] = useState<IndexingResult | null>(null);
   const [isDismissing, setIsDismissing] = useState(false);
   const [progressCount, setProgressCount] = useState(getIndexingProgress);
+  const [autoEmbedEnabled, setAutoEmbedEnabled] = useState(() => (logseq.settings?.autoEmbedEnabled as boolean) ?? true);
+  const [cooldownActive, setCooldownActive] = useState(false);
+
+  // Cancel cooldown timer on unmount
+  useEffect(() => {
+    return () => { cancelCooldown(); };
+  }, []);
 
   // Poll document count every 10 seconds
   useEffect(() => {
@@ -537,7 +547,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   };
 
   const handleIndexDB = async () => {
-    if (isIndexing) { requestPauseIndexing(); return; }
+    if (isIndexing) {
+      requestPauseIndexing();
+      cancelAutoIndexDebounce();
+      startCooldown(() => setCooldownActive(false));
+      setCooldownActive(true);
+      return;
+    }
+    if (cooldownActive) return;
     setIsIndexing(true);
     setError(null);
     setIndexingStatus(null);
@@ -566,7 +583,16 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     clearConversationHistory();
   };
 
+  const handleAutoEmbedToggle = () => {
+    const newValue = !autoEmbedEnabled;
+    setAutoEmbedEnabled(newValue);
+    setAutoEmbedEnabledIM(newValue);
+    logseq.updateSettings({ autoEmbedEnabled: newValue });
+  };
+
   if (!isVisible) return null;
+
+  const buttonProps = getButtonState({ isIndexing, isCooldownActive: cooldownActive });
 
   return (
     <Overlay onClick={e => {
@@ -659,12 +685,18 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               </StatusText>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
               {storageProvider.exportToFile && (
                 <ToolbarButton onClick={() => storageProvider.exportToFile?.()}>📥 Export</ToolbarButton>
               )}
-              <ToolbarButton variant={isIndexing ? 'pause' : 'index'} onClick={handleIndexDB}>
-                {isIndexing ? '⏹ Stop' : '🔄 Re-Index'}
+              <ToolbarButton
+                variant={buttonProps.variant}
+                onClick={handleIndexDB}
+                disabled={buttonProps.disabled}
+                css={buttonProps.disabled ? { opacity: 0.5, cursor: 'default' } : undefined}
+              >
+                {buttonProps.label}
               </ToolbarButton>
             </div>
           </ToolbarRow>

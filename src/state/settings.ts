@@ -9,7 +9,7 @@ interface IPluginSettings {
   apiKey: string;
   embeddingModel: string;
   VectorDBLogseqCopilot: string;
-
+  autoEmbedEnabled: boolean;
 }
 
 const settingsChangedEffect: AtomEffect<IPluginSettings> = ({ setSelf }) => {

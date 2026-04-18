@@ -241,6 +241,8 @@ The retrieval pipeline is wrapped in a try/catch. If any step fails (embedding, 
 
 This means the plugin always works — even without embeddings configured — by falling back to the currently active note as context.
 
+If the user stops indexing mid-run via the stop button, all embeddings generated up to the stop point are persisted in the vector database. Search proceeds with this partial set of embeddings — pages that were not yet indexed at the time of stopping will not appear in vector search results until the next indexing run completes them. This is a graceful degradation: the retrieval pipeline still works and returns results from whatever has been indexed so far, just with potentially incomplete coverage of the user's graph.
+
 ## Limitations
 
 - **Full chunk injection**: Retrieved chunks are injected in full, which can consume significant prompt tokens for long pages.
