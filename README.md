@@ -123,9 +123,15 @@ You can configure these in the Logseq plugin UI:
 - **`autoEmbedEnabled`**  
   - Default: `true`  
   - Controls whether the plugin automatically generates embeddings when pages are edited.  
-  - When enabled, page edits trigger background indexing after a 30-second debounce.  
+  - When enabled, page edits trigger background indexing after the configured debounce delay.  
   - When disabled, only manual re-indexing (via the Re-Index button) generates embeddings.  
   - The toggle can also be controlled from the "Auto-Embed: On/Off" switch in the chat panel toolbar.
+
+- **`autoIndexDebounceSeconds`**  
+  - Default: `300` (5 minutes)  
+  - How long to wait (in seconds) after the last page change before auto-indexing starts.  
+  - Higher values reduce API calls but delay index updates. Minimum 10 seconds.  
+  - Set to a lower value (e.g., `60`) if you want faster index updates, or higher (e.g., `600`) to save API credits.
 
 ---
 

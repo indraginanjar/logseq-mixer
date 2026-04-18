@@ -100,6 +100,13 @@ const settings: SettingSchemaDesc[] = [
     title: 'Auto-Embed on Page Changes',
     description: 'When enabled, the plugin automatically generates embeddings when pages are edited. Disable to prevent background indexing.',
     default: true,
+  },
+  {
+    key: 'autoIndexDebounceSeconds',
+    type: 'number',
+    title: 'Auto-Index Debounce (seconds)',
+    description: 'How long to wait after the last page change before auto-indexing starts. Higher values reduce API calls but delay index updates. Minimum 10 seconds.',
+    default: 300,
   }
 ];
 

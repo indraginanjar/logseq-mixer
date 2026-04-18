@@ -294,8 +294,16 @@ export async function checkAndIndexUpdatedPages(
   return result;
 }
 
-/** Debounce delay for auto-indexing on DB changes (ms). */
-const AUTO_INDEX_DEBOUNCE_MS = 30_000;
+/** Default debounce delay for auto-indexing on DB changes (ms). */
+const DEFAULT_AUTO_INDEX_DEBOUNCE_MS = 300_000; // 5 minutes
+
+/** Current debounce delay, configurable via plugin settings. */
+let _autoIndexDebounceMs = DEFAULT_AUTO_INDEX_DEBOUNCE_MS;
+
+/** Update the auto-index debounce delay (in seconds, from settings). */
+export function setAutoIndexDebounceSeconds(seconds: number): void {
+  _autoIndexDebounceMs = Math.max(10, seconds) * 1000; // minimum 10 seconds
+}
 
 /** Module-level debounce timer for the auto-indexer's onChanged callback. */
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -354,6 +362,6 @@ export function startPageIndexingOnChange(
       } catch (err) {
         console.error('Error indexing updated pages:', err);
       }
-    }, AUTO_INDEX_DEBOUNCE_MS);
+    }, _autoIndexDebounceMs);
   });
 }
