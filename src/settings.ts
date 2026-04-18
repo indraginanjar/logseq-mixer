@@ -93,6 +93,13 @@ const settings: SettingSchemaDesc[] = [
     default: 'sqlite',
     enumChoices: ['sqlite', 'settings'],
     enumPicker: 'select',
+  },
+  {
+    key: 'autoEmbedEnabled',
+    type: 'boolean',
+    title: 'Auto-Embed on Page Changes',
+    description: 'When enabled, the plugin automatically generates embeddings when pages are edited. Disable to prevent background indexing.',
+    default: true,
   }
 ];
 

@@ -25,6 +25,7 @@ Hope you find it useful! 😀👍🍀🍷
 - **Clickable page links**: Page names in `[[double brackets]]` are rendered as blue inline links that open the page in Logseq on click
 - Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
 - Automatically migrates existing Orama-based embeddings to the new per-document format — no re-indexing needed
+- **Stop & cooldown**: While indexing is in progress, the Re-Index button becomes a stop button. Clicking stop halts indexing after the current page and starts a 1-minute cooldown during which the button is disabled and auto-indexing is suppressed
 - Plugin still runs without embeddings — the currently active note will be passed as fallback context
 
 ---
@@ -98,6 +99,13 @@ You can configure these in the Logseq plugin UI:
   - Choose between `"sqlite"` (default) and `"settings"`.  
   - **sqlite**: Per-document storage in a sql.js SQLite database persisted to IndexedDB. Scales to large graphs without memory issues.  
   - **settings**: Legacy Orama-based storage in Logseq plugin settings. Suitable for small graphs only.
+
+- **`autoEmbedEnabled`**  
+  - Default: `true`  
+  - Controls whether the plugin automatically generates embeddings when pages are edited.  
+  - When enabled, page edits trigger background indexing after a 30-second debounce.  
+  - When disabled, only manual re-indexing (via the Re-Index button) generates embeddings.  
+  - The toggle can also be controlled from the "Auto-Embed: On/Off" switch in the chat panel toolbar.
 
 ---
 

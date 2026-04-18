@@ -28,6 +28,7 @@ vi.mock('./indexManager', () => ({
   isIndexingActive: vi.fn(() => false),
   requestPauseIndexing: vi.fn(),
   getIndexingProgress: vi.fn(() => 0),
+  cancelAutoIndexDebounce: vi.fn(),
 }));
 
 // Mock manager
@@ -124,6 +125,21 @@ vi.mock('./blockExecutor', () => ({
 // Mock blockTreeFormatter
 vi.mock('./blockTreeFormatter', () => ({
   getActivePageContext: vi.fn(() => Promise.resolve(null)),
+}));
+
+// Mock cooldownManager
+vi.mock('./cooldownManager', () => ({
+  cancelCooldown: vi.fn(),
+  startCooldown: vi.fn(),
+}));
+
+// Mock buttonState
+vi.mock('./buttonState', () => ({
+  getButtonState: vi.fn((input: any) => {
+    if (input.isIndexing) return { label: '⏹ Stop', variant: 'pause', disabled: false };
+    if (input.isCooldownActive) return { label: '🔄 Re-Index', variant: 'index', disabled: true };
+    return { label: '🔄 Re-Index', variant: 'index', disabled: false };
+  }),
 }));
 
 // Mock state/settings
