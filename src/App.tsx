@@ -401,7 +401,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   }, [storageProvider]);
 
   useEffect(() => {
-    if (settings) enableAutoIndexer(settings, storageProvider);
+    if (settings) {
+      enableAutoIndexer(settings, storageProvider);
+      // Sync configurable debounce delay from settings
+      const debounce = settings.autoIndexDebounceSeconds;
+      if (typeof debounce === 'number' && debounce > 0) {
+        setAutoIndexDebounceSeconds(debounce);
+      }
+    }
   }, [settings]);
 
   // Auto-dismiss success status after 4 seconds
@@ -431,15 +438,19 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   // Detect auto-indexer activity: poll isIndexingActive() to sync the
   // React isIndexing state with the module-level indexingInProgress flag.
-  // Only runs when the panel is visible and not during manual indexing.
+  // Polls every 1s when the panel is visible and not during manual indexing.
   const manualIndexingRef = useRef(false);
   useEffect(() => {
     if (!isVisible) return;
-    // Check once on mount/visibility change
-    if (!manualIndexingRef.current) {
+    const interval = setInterval(() => {
+      if (manualIndexingRef.current) return;
       const active = isIndexingActive();
-      if (active) setIsIndexing(true);
-    }
+      setIsIndexing(prev => {
+        if (active && !prev) return true;
+        return prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
   }, [isVisible]);
 
   useEffect(() => {
@@ -615,6 +626,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setAutoEmbedEnabled(newValue);
     setAutoEmbedEnabledIM(newValue);
     logseq.updateSettings({ autoEmbedEnabled: newValue });
+    // When disabling auto-embed, also stop any in-progress auto-indexing
+    // and cancel pending debounce timers so the user gets immediate feedback
+    if (!newValue && isIndexing && !manualIndexingRef.current) {
+      requestPauseIndexing();
+      cancelAutoIndexDebounce();
+    }
   };
 
   if (!isVisible) return null;

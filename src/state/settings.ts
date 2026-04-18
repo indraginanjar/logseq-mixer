@@ -10,6 +10,7 @@ interface IPluginSettings {
   embeddingModel: string;
   VectorDBLogseqCopilot: string;
   autoEmbedEnabled: boolean;
+  autoIndexDebounceSeconds: number;
 }
 
 const settingsChangedEffect: AtomEffect<IPluginSettings> = ({ setSelf }) => {
