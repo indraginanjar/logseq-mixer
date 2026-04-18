@@ -216,6 +216,16 @@ When using the `settings` storage backend, vector search still goes through the 
 - **Per-page resilience** (auto-indexer): If embedding fails for one page during auto-indexing, the error is logged and indexing continues for remaining pages
 - **Reference resolution failure**: If a block reference can't be fetched, the original `((uuid))` syntax is kept
 
+## Startup Performance
+
+The plugin uses several techniques to avoid blocking Logseq's main thread during startup:
+
+- **Lazy tokenizer loading**: The cl100k_base encoding table (~1.5 MB of JSON data) is loaded via dynamic `import()` on first use rather than at bundle parse time. This reduces the main bundle from ~1,740 KB to ~512 KB.
+- **Lazy storage provider**: A proxy wraps the real `SQLiteVectorStore` and defers WASM compilation and database restoration until the first method call. Initialization is scheduled via `requestIdleCallback` so it runs when the browser is idle.
+- **Vite chunk splitting**: Heavy dependencies (sql.js, Orama, tiktoken) are split into separate chunks via `manualChunks` in the Vite config, so they load on demand rather than at startup.
+- **Yield points**: `SQLiteVectorStore.initialize()` yields to the event loop between WASM loading and database restoration, allowing the host app to process window messages.
+- **Immediate toolbar registration**: The toolbar button and UI model are registered synchronously in `main()` before any heavy work begins.
+
 ## Architecture Diagram
 
 ```
@@ -290,3 +300,5 @@ When using the `settings` storage backend, vector search still goes through the 
 | `src/buttonState.ts`   | Pure function for deriving re-index button visual state |
 | `src/components/AutoEmbedToggle.tsx` | Toggle switch component for enabling/disabling auto-embed |
 | `src/settings.ts`      | Plugin settings schema including indexing mode, embedding model, embedding provider, embedding endpoint, storage backend, and `autoEmbedEnabled` |
+| `src/tokenizer.ts`     | Lazy-loaded cl100k_base tokenizer wrapper; uses dynamic `import()` for the ~1.5 MB encoding table to keep the main bundle small (~512 KB) |
+| `src/main.tsx`         | Plugin entry point with lazy storage provider proxy that defers SQLite/WASM initialization until first use, preventing startup blocking |
