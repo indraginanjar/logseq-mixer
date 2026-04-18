@@ -35,6 +35,9 @@ export class SQLiteVectorStore implements StorageProvider {
       locateFile: () => wasmUrl,
     });
 
+    // Yield to the event loop so the host app stays responsive during startup
+    await new Promise(resolve => setTimeout(resolve, 0));
+
     // Try to restore from IndexedDB; handle corruption (Req 10.3)
     try {
       const existingData = await this.idbLoad();
@@ -49,6 +52,9 @@ export class SQLiteVectorStore implements StorageProvider {
       console.warn('[SQLiteVectorStore] IndexedDB data corrupted, creating fresh database.', err);
       this._db = new SQL.Database();
     }
+
+    // Yield after heavy database parsing so the host app can process messages
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     // Create tables
     this._db.run(

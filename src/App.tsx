@@ -415,27 +415,32 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     return () => clearTimeout(timer);
   }, [indexingStatus]);
 
-  // Poll indexing progress every 500ms while indexing is active
+  // Poll indexing progress every 500ms while indexing is active.
+  // Also detects when auto-indexer finishes (isIndexingActive becomes false).
   useEffect(() => {
     if (!isIndexing) return;
     const interval = setInterval(() => {
       setProgressCount(getIndexingProgress());
+      // Detect auto-indexer completion
+      if (!manualIndexingRef.current && !isIndexingActive()) {
+        setIsIndexing(false);
+      }
     }, 500);
     return () => clearInterval(interval);
   }, [isIndexing]);
 
-  // Sync isIndexing state with indexManager's indexingInProgress flag
-  // so the UI reflects auto-indexer activity (not just manual re-index)
+  // Detect auto-indexer activity: poll isIndexingActive() to sync the
+  // React isIndexing state with the module-level indexingInProgress flag.
+  // Only runs when the panel is visible and not during manual indexing.
+  const manualIndexingRef = useRef(false);
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!isVisible) return;
+    // Check once on mount/visibility change
+    if (!manualIndexingRef.current) {
       const active = isIndexingActive();
-      setIsIndexing(prev => {
-        if (prev !== active) return active;
-        return prev;
-      });
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
+      if (active) setIsIndexing(true);
+    }
+  }, [isVisible]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -575,6 +580,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       return;
     }
     if (cooldownActive) return;
+    manualIndexingRef.current = true;
     setIsIndexing(true);
     setError(null);
     setIndexingStatus(null);
@@ -591,6 +597,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       setError(err.message || 'Indexing failed.');
     } finally {
       setIsIndexing(false);
+      manualIndexingRef.current = false;
     }
   };
 
