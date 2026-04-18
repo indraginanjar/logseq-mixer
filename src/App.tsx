@@ -424,6 +424,19 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     return () => clearInterval(interval);
   }, [isIndexing]);
 
+  // Sync isIndexing state with indexManager's indexingInProgress flag
+  // so the UI reflects auto-indexer activity (not just manual re-index)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const active = isIndexingActive();
+      setIsIndexing(prev => {
+        if (prev !== active) return active;
+        return prev;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
