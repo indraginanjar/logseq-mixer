@@ -99,10 +99,9 @@ You can configure these in the Logseq plugin UI:
   - The full endpoint to your LiteLLM instance.  
   - Default value:  
     ```
-    http://172.105.80.74:4000/chat/completions
+    http://127.0.0.1:4000/chat/completions
     ```
-  - This is a public instance that forwards your request to the correct provider (OpenAI, Google, etc.) using your API key.  
-  - You can self-host [LiteLLM](https://github.com/BerriAI/litellm) for full control or privacy — just set your own URL here.
+  - This defaults to a local LiteLLM instance. Install and run [LiteLLM](https://github.com/BerriAI/litellm) locally, or point this to your own hosted instance.
 
 - **`apiKey`**  
   - The API key used to authenticate your request with the actual LLM provider (OpenAI, Anthropic, Google, etc.).  
@@ -147,13 +146,32 @@ For deeper technical details, see the docs in the [`docs/`](./docs/) folder:
 
 ### 📦 Installation
 
-- Install it from the Logseq Marketplace (once it's approved)
-- Open plugin settings and configure your:
-  - API key
-  - LLM model
-  - (Optional) Embedding key
-  - (Optional) Custom LiteLLM server
-- Start composing with full context-awareness inside Logseq!
+#### Prerequisites
+
+This plugin requires a running [LiteLLM](https://github.com/BerriAI/litellm) proxy server. LiteLLM is a lightweight proxy that provides a unified OpenAI-compatible API for 100+ LLM providers (OpenAI, Anthropic, Google, local models, etc.).
+
+**Quick setup:**
+
+```bash
+pip install litellm
+litellm --model gpt-4o --port 4000
+```
+
+This starts a local proxy at `http://127.0.0.1:4000` that the plugin connects to by default. You can use any [LiteLLM-supported model](https://docs.litellm.ai/docs/providers) — just change the `--model` flag.
+
+For persistent configuration, see the [LiteLLM docs](https://docs.litellm.ai/docs/).
+
+#### Plugin setup
+
+1. Install the plugin from the Logseq Marketplace (once approved), or build from source
+2. Ensure LiteLLM is running (see above)
+3. Open plugin settings and configure:
+   - **`apiKey`** — your LLM provider API key (OpenAI, Anthropic, etc.)
+   - **`selectedModel`** — the model name (must match what LiteLLM supports)
+   - **`EmbeddingApiKey`** — (optional) API key for OpenAI embeddings, enables semantic search
+   - **`LiteLLMLink`** — defaults to `http://127.0.0.1:4000/chat/completions`; change if your LiteLLM instance is elsewhere
+4. Click the ✍️ icon in the Logseq toolbar to open the Composer panel
+5. (Optional) Click "🔄 Re-Index" to build the vector database for semantic search
 
 ---
 
