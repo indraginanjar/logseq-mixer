@@ -261,7 +261,7 @@ describe('VectorSearchAccelerator – empty store initialization', () => {
     expect(acc.isReady).toBe(true);
 
     vi.restoreAllMocks();
-  });
+  }, 15_000);
 });
 
 

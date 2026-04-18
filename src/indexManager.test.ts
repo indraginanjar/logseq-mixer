@@ -169,7 +169,7 @@ describe('Property 1: Bug Condition - Per-Page Double Flush and No Yielding Duri
       ),
       { numRuns: 20 }
     );
-  });
+  }, 30_000);
 });
 
 

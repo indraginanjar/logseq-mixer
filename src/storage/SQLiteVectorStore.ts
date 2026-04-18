@@ -187,9 +187,13 @@ export class SQLiteVectorStore implements StorageProvider {
   async getDocumentMeta(id: string): Promise<number | null> {
     if (!this._db) throw new Error('SQLite database not initialized');
 
-    const stmt = this._db.prepare('SELECT lastUpdated FROM documents WHERE id = ?');
+    // Check for exact ID first (single-chunk pages), then fall back to
+    // chunk_0 (multi-chunk pages store as pageId_chunk_0, pageId_chunk_1, etc.)
+    const stmt = this._db.prepare(
+      'SELECT lastUpdated FROM documents WHERE id = ? OR id = ? LIMIT 1'
+    );
     try {
-      stmt.bind([id]);
+      stmt.bind([id, `${id}_chunk_0`]);
       if (stmt.step()) {
         const row = stmt.get();
         return row[0] as number;
