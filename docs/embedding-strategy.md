@@ -136,6 +136,8 @@ Controlled by the `indexingMode` plugin setting.
 - Processes pages in batches of 5 concurrent API calls
 - Clears the block reference cache before starting
 
+> ⚠️ **Switch back to incremental after a full re-index.** Leaving `indexingMode` set to `"full"` means every future Re-Index click will wipe all existing embeddings and re-embed from scratch, wasting API credits and time. Full mode is intended as a one-time recovery tool, not a permanent setting.
+
 ## Indexing Triggers
 
 There are three ways embedding/indexing occurs:
