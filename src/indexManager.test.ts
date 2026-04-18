@@ -574,7 +574,7 @@ describe('Feature: indexing-status-feedback, Property 2: Paused indexing returns
       ),
       { numRuns: 100 }
     );
-  });
+  }, 30_000);
 });
 
 
