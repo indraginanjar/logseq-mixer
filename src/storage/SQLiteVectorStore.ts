@@ -268,6 +268,17 @@ export class SQLiteVectorStore implements StorageProvider {
     return 0;
   }
 
+  async getPageCount(): Promise<number> {
+    if (!this._db) return 0;
+    const result = this._db.exec(
+      "SELECT COUNT(DISTINCT CASE WHEN INSTR(id, '_chunk_') > 0 THEN SUBSTR(id, 1, INSTR(id, '_chunk_') - 1) ELSE id END) FROM documents"
+    );
+    if (result.length > 0 && result[0].values.length > 0) {
+      return result[0].values[0][0] as number;
+    }
+    return 0;
+  }
+
   async clear(): Promise<void> {
     if (!this._db) throw new Error('SQLite database not initialized');
     this._db.run('DELETE FROM documents');

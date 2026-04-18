@@ -276,7 +276,7 @@ When using the `settings` storage backend, vector search still goes through the 
 | File                    | Responsibility                                              |
 |------------------------|-------------------------------------------------------------|
 | `src/embedManager.ts`  | Block flattening with UUID annotation, reference resolution, chunk grouping, block metadata extraction, provider-aware embedding generation (OpenAI + Ollama), endpoint resolution |
-| `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search (brute-force fallback), `getAllEmbeddings()` for HNSW index construction, block metadata storage (`block_metadata` table), IndexedDB persistence |
+| `src/storage/SQLiteVectorStore.ts` | Per-document storage, cosine similarity search (brute-force fallback), `getAllEmbeddings()` for HNSW index construction, block metadata storage (`block_metadata` table), IndexedDB persistence, `getPageCount()` for distinct page statistics |
 | `src/storage/VectorSearchAccelerator.ts` | In-memory HNSW index for fast approximate nearest neighbor search; wraps SQLiteVectorStore with automatic fallback |
 | `src/storage/VectorSearchAccelerator.types.ts` | Configuration interfaces and default HNSW parameters |
 | `src/storage/cosineSimilarity.ts` | Embedding BLOB encode/decode, cosine similarity computation |

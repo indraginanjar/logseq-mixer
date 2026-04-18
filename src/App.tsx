@@ -367,6 +367,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [savedDraft, setSavedDraft] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
+  const [pageCount, setPageCount] = useState<number | null>(null);
   const [indexingStatus, setIndexingStatus] = useState<IndexingResult | null>(null);
   const [isDismissing, setIsDismissing] = useState(false);
   const [progressCount, setProgressCount] = useState(getIndexingProgress);
@@ -378,13 +379,19 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     return () => { cancelCooldown(); };
   }, []);
 
-  // Poll document count every 10 seconds
+  // Poll document and page count every 10 seconds
   useEffect(() => {
     const fetchCount = async () => {
       if (storageProvider.getDocumentCount) {
         try {
           const count = await storageProvider.getDocumentCount();
           setDocCount(count);
+        } catch { /* ignore */ }
+      }
+      if (storageProvider.getPageCount) {
+        try {
+          const count = await storageProvider.getPageCount();
+          setPageCount(count);
         } catch { /* ignore */ }
       }
     };
@@ -673,7 +680,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               </StatusIndicator>
             ) : indexingStatus?.outcome === 'completed' ? (
               <StatusIndicator variant="success" dismissing={isDismissing || undefined}>
-                ✓ Indexing complete — {docCount?.toLocaleString()} chunks indexed
+                ✓ Indexing complete — {docCount?.toLocaleString()} chunks indexed{pageCount ? ` from ${pageCount.toLocaleString()} pages` : ''}
               </StatusIndicator>
             ) : indexingStatus?.outcome === 'paused' ? (
               <StatusIndicator variant="paused">
@@ -681,7 +688,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               </StatusIndicator>
             ) : (
               <StatusText>
-                {docCount !== null && <>📊 {docCount.toLocaleString()} chunks indexed</>}
+                {docCount !== null && <>📊 {docCount.toLocaleString()} chunks indexed{pageCount ? ` from ${pageCount.toLocaleString()} pages` : ''}</>}
               </StatusText>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
