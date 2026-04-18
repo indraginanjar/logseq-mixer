@@ -21,12 +21,31 @@ Hope you find it useful! 😀👍🍀🍷
 - Stores each document embedding as an individual row in a SQLite database (via [sql.js](https://github.com/sql-js/sql.js)), persisted to IndexedDB
 - Retrieves related notes using RAG (HNSW-accelerated vector search + BM25 keyword search + RRF reranking)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
+- **AI Edit mode**: Toggle "AI Edit" in the toolbar to let the LLM insert, update, and delete blocks on your current page directly from the chat. The LLM sees your page's block tree (with UUIDs) and emits structured edit commands that the plugin executes via the Logseq Editor API
 - **Clickable block references**: The LLM cites specific blocks using `((uuid))` notation, rendered as teal-colored inline links that navigate directly to the source block on click
 - **Clickable page links**: Page names in `[[double brackets]]` are rendered as blue inline links that open the page in Logseq on click
 - Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
 - Automatically migrates existing Orama-based embeddings to the new per-document format — no re-indexing needed
 - **Stop & cooldown**: While indexing is in progress, the Re-Index button becomes a stop button. Clicking stop halts indexing after the current page and starts a 1-minute cooldown during which the button is disabled and auto-indexing is suppressed
 - Plugin still runs without embeddings — the currently active note will be passed as fallback context
+
+---
+
+### ✏️ AI Edit Mode
+
+Toggle the "AI Edit" switch in the chat toolbar to enable block editing from the chat interface. When enabled:
+
+1. The plugin sends the current page's block tree (with block UUIDs) to the LLM alongside your message
+2. The LLM can respond with structured edit commands to insert, update, or delete blocks
+3. Commands are executed automatically via the Logseq Editor API
+4. A change summary shows what was modified after each edit
+
+Supported operations:
+- **Insert**: Add a new child block under any existing block
+- **Update**: Change the content of an existing block (including properties like `priority:: high`)
+- **Delete**: Remove a block
+
+If no page is open when AI Edit is enabled, the plugin falls back to normal chat mode with a warning.
 
 ---
 
@@ -93,7 +112,8 @@ You can configure these in the Logseq plugin UI:
 - **`indexingMode`**  
   - Choose between `"incremental"` (default) and `"full"`.  
   - **Incremental**: Only embeds pages that are new or have been updated since the last index. Fast and cost-efficient.  
-  - **Full**: Wipes the vector database and re-embeds every page from scratch. Use this if you suspect the index is corrupted or want a clean rebuild.
+  - **Full**: Wipes the vector database and re-embeds every page from scratch. Use this if you suspect the index is corrupted or want a clean rebuild.  
+  - ⚠️ **Important**: After running a full re-index, switch this setting back to `"incremental"`. Leaving it on `"full"` means every future Re-Index click will delete all your existing embeddings and start over, wasting API credits and time.
 
 - **`storageBackend`**  
   - Choose between `"sqlite"` (default) and `"settings"`.  
@@ -106,6 +126,16 @@ You can configure these in the Logseq plugin UI:
   - When enabled, page edits trigger background indexing after a 30-second debounce.  
   - When disabled, only manual re-indexing (via the Re-Index button) generates embeddings.  
   - The toggle can also be controlled from the "Auto-Embed: On/Off" switch in the chat panel toolbar.
+
+---
+
+### 📚 Documentation
+
+For deeper technical details, see the docs in the [`docs/`](./docs/) folder:
+
+- [Embedding Strategy](./docs/embedding-strategy.md) — how pages are chunked, embedded, and stored; startup performance; auto-indexing and stop/cooldown behavior
+- [Chunking Strategy](./docs/chunking-strategy.md) — block-based chunking, semantic grouping, and overlap
+- [Retrieval Strategy](./docs/retrieval-strategy.md) — hybrid search pipeline (BM25 + HNSW vector search + RRF reranking), AI Edit mode, prompt construction
 
 ---
 

@@ -243,6 +243,34 @@ This means the plugin always works — even without embeddings configured — by
 
 If the user stops indexing mid-run via the stop button, all embeddings generated up to the stop point are persisted in the vector database. Search proceeds with this partial set of embeddings — pages that were not yet indexed at the time of stopping will not appear in vector search results until the next indexing run completes them. This is a graceful degradation: the retrieval pipeline still works and returns results from whatever has been indexed so far, just with potentially incomplete coverage of the user's graph.
 
+## AI Edit Mode
+
+When the user enables the "AI Edit" toggle in the chat toolbar, the query pipeline changes:
+
+1. The current page's block tree is fetched via `getActivePageContext()` and formatted with block UUIDs
+2. An edit-mode system prompt supplement (`buildEditSystemPrompt()`) is appended, instructing the LLM to emit structured edit commands inside ` ```json-edit ` fenced code blocks
+3. The LLM response is parsed by `parseEditCommands()` which extracts and validates commands from json-edit blocks
+4. Valid commands are executed sequentially by `executeAll()` via the Logseq Editor API (`insertBlock`, `updateBlock`, `removeBlock`)
+5. A `ChangeSummary` component displays the results (success/failure counts and per-command details)
+
+### Edit Command Schema
+
+Each command is a JSON object:
+
+| Field | Type | Required For | Description |
+|-------|------|-------------|-------------|
+| `action` | `"insert"` \| `"update"` \| `"delete"` | All | The operation to perform |
+| `blockUUID` | string | update, delete | UUID of the target block |
+| `parentBlockUUID` | string | insert | UUID of the parent block to insert under |
+| `content` | string | insert, update | Block content in Logseq markdown format |
+| `siblingOrder` | number | (optional) | Position among siblings (0 = first child) |
+
+### Safety
+
+- If no page is open, edit mode is silently disabled for that query and a warning is shown
+- Invalid commands (malformed JSON, missing required fields) are logged and skipped
+- Each command execution is wrapped in try/catch — a failed command doesn't prevent subsequent commands from running
+
 ## Limitations
 
 - **Full chunk injection**: Retrieved chunks are injected in full, which can consume significant prompt tokens for long pages.
@@ -270,6 +298,11 @@ If the user stops indexing mid-run via the stop button, all embeddings generated
 | `src/reranker.ts`       | `rerankWithRRF()` — single-list RRF reranking (legacy Orama path); `mergeWithRRF()` — dual-list RRF fusion (hybrid search) |
 | `src/VectorDBManager.ts`| `vectorSearchOramaDB()` — legacy Orama vector search (settings backend only) |
 | `src/LLMManager.ts`     | `queryLiteLLM()` — sends system + user messages to LLM via LiteLLM; `ChatMessage` type for message role typing; `MODEL_MAX_TOKENS` — per-model output token limits; `getMaxTokensForModel()` — lookup function |
+| `src/editPromptBuilder.ts` | `buildEditSystemPrompt()` — edit-mode system prompt with json-edit schema; `buildPageContextMessage()` — formats page block tree for LLM |
+| `src/editCommandParser.ts` | `parseEditCommands()` — extracts and validates edit commands from LLM response json-edit blocks |
+| `src/blockExecutor.ts`  | `executeAll()` / `executeOne()` — executes edit commands via Logseq Editor API (insertBlock, updateBlock, removeBlock) |
+| `src/blockTreeFormatter.ts` | `getActivePageContext()` — fetches and formats the current page's block tree with UUIDs for edit mode |
+| `src/types/editTypes.ts` | TypeScript types for EditCommand, EditAction, ParseResult, ExecutionResult, OperationOutcome |
 | `src/blockRefParser.ts` | `parse()`, `serialize()`, `transformToMarkdownLinks()` — detects and transforms `((uuid))` block references in LLM responses |
 | `src/components/BlockLink.tsx` | `BlockLink` — clickable inline component for block references (teal, navigates to block via `scrollToBlockInPage`) |
 | `src/components/ChatMessageList.tsx` | Chat message rendering with page link and block reference transformation pipeline |
