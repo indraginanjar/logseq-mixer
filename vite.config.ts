@@ -76,6 +76,18 @@ export default defineConfig({
     target: 'esnext',
     minify: 'esbuild',
     chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        // Split heavy dependencies into separate chunks that load lazily.
+        // This prevents the 1.7 MB monolithic bundle from blocking Logseq's
+        // main thread during startup (causes "Not Responding" on Windows).
+        manualChunks: {
+          'vendor-tiktoken': ['js-tiktoken'],
+          'vendor-sqljs': ['sql.js'],
+          'vendor-orama': ['@orama/orama', '@orama/plugin-data-persistence'],
+        },
+      },
+    },
   },
   test: {
     globals: true,

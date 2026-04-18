@@ -52,6 +52,18 @@ export function getIndexingProgress(): number {
   return _pagesProcessed;
 }
 
+/**
+ * Reset module-level indexing state. Intended for tests only — ensures clean
+ * state between fast-check iterations when the 1-second cooldown timer may
+ * not have fired due to fake timers or test parallelism.
+ * @internal
+ */
+export function _resetIndexingState(): void {
+  indexingInProgress = false;
+  _pauseRequested = false;
+  _pagesProcessed = 0;
+}
+
 let _isUpdatingSettings = false;
 
 export function getIsUpdatingSettings(): boolean {
