@@ -22,6 +22,7 @@ Hope you find it useful! 😀👍🍀🍷
 - Retrieves related notes using RAG (brute-force cosine similarity search + RRF reranking)
 - Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
 - **Clickable block references**: The LLM cites specific blocks using `((uuid))` notation, rendered as teal-colored inline links that navigate directly to the source block on click
+- **Clickable page links**: Page names in `[[double brackets]]` are rendered as blue inline links that open the page in Logseq on click
 - Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
 - Automatically migrates existing Orama-based embeddings to the new per-document format — no re-indexing needed
 - Plugin still runs without embeddings — the currently active note will be passed as fallback context
