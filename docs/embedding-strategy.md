@@ -205,6 +205,7 @@ When using the `settings` storage backend, vector search still goes through the 
  │     SQLiteVectorStore (default)       │
  │  - upsertDocuments / deleteDocuments  │
  │  - searchByVector (cosine similarity) │
+ │  - block_metadata table               │
  │  - Persisted to IndexedDB as binary   │
  │                                       │
  │  Legacy fallback: Orama + Settings    │

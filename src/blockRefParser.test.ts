@@ -120,19 +120,19 @@ describe('transformToMarkdownLinks', () => {
 
   it('transforms a single block ref to markdown link', () => {
     expect(transformToMarkdownLinks('see ((ab-cd)) here')).toBe(
-      'see [((ab-cd))](logseq://block/ab-cd) here'
+      'see [block:ab-cd](logseq://block/ab-cd) here'
     );
   });
 
   it('transforms multiple refs', () => {
     expect(transformToMarkdownLinks('((aa-bb)) and ((cc-dd))')).toBe(
-      '[((aa-bb))](logseq://block/aa-bb) and [((cc-dd))](logseq://block/cc-dd)'
+      '[block:aa-bb](logseq://block/aa-bb) and [block:cc-dd](logseq://block/cc-dd)'
     );
   });
 
   it('transforms consecutive refs', () => {
     expect(transformToMarkdownLinks('((aa-bb))((cc-dd))')).toBe(
-      '[((aa-bb))](logseq://block/aa-bb)[((cc-dd))](logseq://block/cc-dd)'
+      '[block:aa-bb](logseq://block/aa-bb)[block:cc-dd](logseq://block/cc-dd)'
     );
   });
 
@@ -149,7 +149,7 @@ describe('transformToMarkdownLinks', () => {
   it('transforms full UUID format', () => {
     const uuid = 'a1b2c3d4-e5f6-7890-abcd-ef0123456789';
     expect(transformToMarkdownLinks(`see ((${uuid})) here`)).toBe(
-      `see [((${uuid}))](logseq://block/${uuid}) here`
+      `see [block:${uuid}](logseq://block/${uuid}) here`
     );
   });
 });
