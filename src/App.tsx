@@ -359,6 +359,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastSubmittedMessage, setLastSubmittedMessage] = useState<string>('');
   const [isIndexing, setIsIndexing] = useState(isIndexingActive());
   const [editResults, setEditResults] = useState<Map<string | number, ExecutionResult>>(new Map());
 
@@ -465,18 +466,23 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (!inputMessage.trim()) return;
+    const messageToSend = inputMessage.trim() || lastSubmittedMessage;
+    if (!messageToSend) return;
 
-    setInputHistory(prev => [...prev, inputMessage.trim()]);
+    setInputHistory(prev => [...prev, messageToSend]);
     setHistoryIndex(-1);
     setSavedDraft('');
+    setLastSubmittedMessage(messageToSend);
 
-    const userMessage: ChatMessage = {
-      id: Date.now() + '_user',
-      content: inputMessage.trim(),
-      sender: 'user',
-    };
-    setMessages(prev => [...prev, userMessage]);
+    const isRetry = !inputMessage.trim();
+    if (!isRetry) {
+      const userMessage: ChatMessage = {
+        id: Date.now() + '_user',
+        content: messageToSend,
+        sender: 'user',
+      };
+      setMessages(prev => [...prev, userMessage]);
+    }
     setLoading(true);
     setError(null);
     setInputMessage('');
@@ -500,7 +506,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         }
       }
 
-      const resp = await handleQuery(inputMessage.trim(), settings, storageProvider, controller.signal, effectiveEditMode);
+      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode);
       abortControllerRef.current = null;
 
       if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
