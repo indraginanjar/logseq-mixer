@@ -521,3 +521,44 @@ describe('getDocumentContent', () => {
     expect(result.has('nonexistent')).toBe(false);
   });
 });
+
+// Feature: hierarchy-aware-retrieval, Property 11: Depth Metadata Storage Accuracy
+describe('Property 11: Depth Metadata Storage Accuracy', () => {
+  it('root_depth and has_heading are stored and retrieved accurately', async () => {
+    await fc.assert(fc.asyncProperty(
+      fc.array(fc.record({
+        id: fc.stringMatching(/^[a-z][a-z0-9]{2,10}$/),
+        rootDepth: fc.nat(10),
+        hasHeading: fc.boolean(),
+      }), { minLength: 1, maxLength: 5 }),
+      async (docs) => {
+        const store = await createInMemoryStore();
+        store.db!.run('ALTER TABLE documents ADD COLUMN root_depth INTEGER NOT NULL DEFAULT 0');
+        store.db!.run('ALTER TABLE documents ADD COLUMN has_heading INTEGER NOT NULL DEFAULT 0');
+
+        const seen = new Set<string>();
+        const unique = docs.filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
+
+        await store.upsertDocumentsWithDepth(unique.map(d => ({
+          id: d.id,
+          content: `content-${d.id}`,
+          lastUpdated: Date.now(),
+          embedding: new Array(8).fill(0.5),
+          rootDepth: d.rootDepth,
+          hasHeading: d.hasHeading,
+        })));
+
+        const meta = store.getDepthMetadata(unique.map(d => d.id));
+
+        for (const d of unique) {
+          const stored = meta.get(d.id);
+          expect(stored).toBeDefined();
+          expect(stored!.rootDepth).toBe(d.rootDepth);
+          expect(stored!.hasHeading).toBe(d.hasHeading);
+        }
+
+        store.db!.close();
+      }
+    ), { numRuns: 50 });
+  });
+});

@@ -1,6 +1,7 @@
 import { CrossPageDeduplicator, deduplicateBlocks } from './deduplicator';
 import { normalizeBlockContent } from './normalizer';
 import { countTokens, decode, encode } from './tokenizer';
+import { buildSubtreeChunks } from './hierarchyChunker';
 
 export type VectorDBSchemaDynamic = {
   id: string;
@@ -44,6 +45,11 @@ export interface BlockMetadataEntry {
   uuid: string;
   pageName: string;
   contentPreview: string;
+}
+
+export interface ChunkDepthMetadata {
+  rootDepth: number;
+  hasHeading: boolean;
 }
 
 export interface BlockLine {
@@ -675,19 +681,19 @@ export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAU
           const linkData: PageLinkData = { outgoingLinks, backlinks };
 
           const pageHeader = buildPageHeader(page.id, page.name, page.properties, linkData);
-          const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxTokens);
+          const subtreeChunks = buildSubtreeChunks(semanticBlockLines, { maxTokens, pageHeader });
 
           const chunkEmbeddings: VectorDBSchemaDynamic[] = [];
-          for (let c = 0; c < chunks.length; c++) {
+          for (let c = 0; c < subtreeChunks.length; c++) {
             try {
-              const chunkId = chunks.length === 1
+              const chunkId = subtreeChunks.length === 1
                 ? page.id.toString()
                 : `${page.id}_chunk_${c}`;
               const embedding: VectorDBSchemaDynamic = {
                 id: chunkId,
                 lastUpdated: page.updatedAt ?? 0,
-                content: chunks[c],
-                embedding: await useGenerateEmbedding(chunks[c], apiKey, model)
+                content: subtreeChunks[c].content,
+                embedding: await useGenerateEmbedding(subtreeChunks[c].content, apiKey, model)
               };
               chunkEmbeddings.push(embedding);
             } catch (err: any) {
@@ -729,7 +735,7 @@ export async function getEmbeddingsForPage(
   linkData?: PageLinkData,
   endpoint?: string,
   provider?: EmbeddingProvider
-): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[] }> {
+): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[]; chunkDepthMetadata: ChunkDepthMetadata[] }> {
   const { lines: originalLines, metadata: blockMetadata } = await flattenBlocks(blocks, [], pageName);
 
   // Normalize block content (strip markdown formatting)
@@ -761,21 +767,26 @@ export async function getEmbeddingsForPage(
 
   const pageHeader = buildPageHeader(pageId, pageName, properties, linkData);
   const maxTokens = EMBEDDING_MODELS[model].maxTokens;
-  const chunks = groupBlocksIntoChunks(semanticBlockLines, pageHeader, maxTokens);
+  const subtreeChunks = buildSubtreeChunks(semanticBlockLines, { maxTokens, pageHeader });
   const embeddings: VectorDBSchemaDynamic[] = [];
+  const chunkDepthMetadata: ChunkDepthMetadata[] = [];
 
-  for (let c = 0; c < chunks.length; c++) {
-    const chunkId = chunks.length === 1
+  for (let c = 0; c < subtreeChunks.length; c++) {
+    const chunkId = subtreeChunks.length === 1
       ? pageId
       : `${pageId}_chunk_${c}`;
     const embedding: VectorDBSchemaDynamic = {
       id: chunkId,
       lastUpdated,
-      content: chunks[c],
-      embedding: await useGenerateEmbedding(chunks[c], apiKey, model, endpoint, provider)
+      content: subtreeChunks[c].content,
+      embedding: await useGenerateEmbedding(subtreeChunks[c].content, apiKey, model, endpoint, provider)
     };
     embeddings.push(embedding);
+    chunkDepthMetadata.push({
+      rootDepth: subtreeChunks[c].rootDepth,
+      hasHeading: subtreeChunks[c].hasHeading,
+    });
   }
 
-  return { embeddings, blockMetadata };
+  return { embeddings, blockMetadata, chunkDepthMetadata };
 }

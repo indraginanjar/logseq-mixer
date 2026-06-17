@@ -12,7 +12,10 @@ import { getByID, remove } from "@orama/orama";
 import { DEFAULT_EMBEDDING_MODEL, EmbeddingProvider, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
 import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
 import { shouldSuppressAutoIndex } from "./cooldownManager";
+import { ChunkMigrationManager } from "./chunkMigrationManager";
+import type { BM25Index } from "./bm25Index";
 import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "./storage/StorageProvider";
+import type { DocumentRecordWithDepth } from "./storage/SQLiteVectorStore";
 import type { VectorSearchAccelerator } from "./storage/VectorSearchAccelerator";
 
 const BATCH_SIZE = 5;
@@ -29,6 +32,63 @@ let currentAccelerator: VectorSearchAccelerator | undefined;
 let indexingInProgress = false;
 let _pauseRequested = false;
 let _pagesProcessed = 0;
+
+/** Module-level migration manager instance, created during initialization. */
+let migrationManager: ChunkMigrationManager | null = null;
+
+/** Module-level BM25 index reference for updating during indexing. */
+let _bm25Index: BM25Index | null = null;
+
+/**
+ * Set the BM25 index reference so that indexing operations can update BM25 entries.
+ * Called by the manager layer after ensuring the BM25 index exists.
+ */
+export function setIndexManagerBM25(bm25Index: BM25Index | null): void {
+  _bm25Index = bm25Index;
+}
+
+/**
+ * Initialize the chunk migration manager for the given storage provider.
+ * - Ensures schema columns (root_depth, has_heading) exist
+ * - Resumes interrupted migrations if needed
+ * - Sets the re-index callback for background migration
+ *
+ * Should be called once during plugin initialization, after the storage provider
+ * is ready and before indexing starts.
+ */
+export function initializeMigrationManager(
+  storageProvider: PerDocumentStorageProvider,
+  bm25Index?: BM25Index | null,
+  reindexCallback?: (pageId: string) => Promise<void>
+): ChunkMigrationManager {
+  const { SQLiteVectorStore } = require('./storage/SQLiteVectorStore');
+  if (!(storageProvider instanceof SQLiteVectorStore)) {
+    throw new TypeError('[initializeMigrationManager] Requires SQLiteVectorStore');
+  }
+
+  const manager = new ChunkMigrationManager(storageProvider as any, bm25Index ?? undefined);
+
+  // Ensure schema columns exist (Req 8.2: add columns with default 0)
+  manager.ensureSchemaColumns();
+
+  // Set reindex callback if provided
+  if (reindexCallback) {
+    manager.setReindexCallback(reindexCallback);
+  }
+
+  // Resume interrupted migration if needed (Req 7.5)
+  manager.resumeIfNeeded();
+
+  migrationManager = manager;
+  return manager;
+}
+
+/**
+ * Get the current migration manager instance (may be null if not yet initialized).
+ */
+export function getMigrationManager(): ChunkMigrationManager | null {
+  return migrationManager;
+}
 
 /**
  * Request the current indexing run to pause after the current page finishes.
@@ -62,6 +122,8 @@ export function _resetIndexingState(): void {
   indexingInProgress = false;
   _pauseRequested = false;
   _pagesProcessed = 0;
+  migrationManager = null;
+  _bm25Index = null;
 }
 
 let _isUpdatingSettings = false;
@@ -80,6 +142,13 @@ export function setIsUpdatingSettings(value: boolean): void {
  */
 function isPerDocumentProvider(provider: any): provider is PerDocumentStorageProvider {
   return typeof provider?.getDocumentMeta === 'function';
+}
+
+/**
+ * Type guard: returns true when the storage provider supports depth-aware upserts.
+ */
+function hasDepthUpsert(provider: any): provider is PerDocumentStorageProvider & { upsertDocumentsWithDepth(docs: DocumentRecordWithDepth[]): Promise<void> } {
+  return typeof provider?.upsertDocumentsWithDepth === 'function';
 }
 
 /**
@@ -172,7 +241,7 @@ export async function checkAndIndexUpdatedPages(
           // Delete old block metadata for this page before re-indexing
           storageProvider.deleteBlockMetadataForPage?.(page.name);
 
-          const { embeddings: newEmbeddings, blockMetadata } = await getEmbeddingsForPage(
+          const { embeddings: newEmbeddings, blockMetadata, chunkDepthMetadata } = await getEmbeddingsForPage(
             pageIdStr,
             blocks,
             page.name,
@@ -193,15 +262,37 @@ export async function checkAndIndexUpdatedPages(
           await storageProvider.deleteDocuments(oldChunkIds);
           accelerator?.removeVectors(oldChunkIds);
 
-          // Map embeddings to DocumentRecord[] and upsert
-          const docs: DocumentRecord[] = newEmbeddings.map(e => ({
-            id: e.id,
-            content: e.content,
-            lastUpdated: e.lastUpdated,
-            embedding: e.embedding,
-          }));
-          await storageProvider.upsertDocuments(docs);
-          accelerator?.addVectors(docs.map(d => ({ id: d.id, content: d.content, embedding: d.embedding })));
+          // Remove old BM25 entries for this page before inserting new ones (Req 10.2)
+          if (_bm25Index) {
+            _bm25Index.removeDocuments(oldChunkIds);
+          }
+
+          // Map embeddings to DocumentRecordWithDepth[] and upsert with depth metadata (Req 8.1, 8.3)
+          if (hasDepthUpsert(storageProvider) && chunkDepthMetadata) {
+            const docsWithDepth: DocumentRecordWithDepth[] = newEmbeddings.map((e, idx) => ({
+              id: e.id,
+              content: e.content,
+              lastUpdated: e.lastUpdated,
+              embedding: e.embedding,
+              rootDepth: chunkDepthMetadata[idx]?.rootDepth ?? 0,
+              hasHeading: chunkDepthMetadata[idx]?.hasHeading ?? false,
+            }));
+            await storageProvider.upsertDocumentsWithDepth(docsWithDepth);
+          } else {
+            const docs: DocumentRecord[] = newEmbeddings.map(e => ({
+              id: e.id,
+              content: e.content,
+              lastUpdated: e.lastUpdated,
+              embedding: e.embedding,
+            }));
+            await storageProvider.upsertDocuments(docs);
+          }
+          accelerator?.addVectors(newEmbeddings.map(d => ({ id: d.id, content: d.content, embedding: d.embedding })));
+
+          // Register new chunk content in BM25 index (Req 10.1)
+          if (_bm25Index) {
+            _bm25Index.upsertDocuments(newEmbeddings.map(e => ({ id: e.id, content: e.content })));
+          }
 
           // Upsert block metadata after successful indexing
           if (blockMetadata.length > 0) {

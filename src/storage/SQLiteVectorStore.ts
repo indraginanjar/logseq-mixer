@@ -3,6 +3,11 @@ import type { DocumentRecord, SearchResult, StorageProvider } from './StoragePro
 import { cosineSimilarity, decodeEmbedding, encodeEmbedding } from './cosineSimilarity';
 import { migrateLegacyOrama } from './migrateLegacy';
 
+export interface DocumentRecordWithDepth extends DocumentRecord {
+  rootDepth: number;
+  hasHeading: boolean;
+}
+
 /**
  * SQLiteVectorStore stores each document embedding as an individual row
  * in a sql.js SQLite database, backed by IndexedDB for persistence.
@@ -65,7 +70,9 @@ export class SQLiteVectorStore implements StorageProvider {
         id TEXT PRIMARY KEY,
         content TEXT NOT NULL,
         lastUpdated INTEGER NOT NULL,
-        embedding BLOB NOT NULL
+        embedding BLOB NOT NULL,
+        root_depth INTEGER NOT NULL DEFAULT 0,
+        has_heading INTEGER NOT NULL DEFAULT 0
       )`
     );
     this._db.run(
@@ -248,6 +255,55 @@ export class SQLiteVectorStore implements StorageProvider {
     }
 
     return result;
+  }
+
+  /** Get root_depth and has_heading for a set of document IDs. */
+  getDepthMetadata(ids: string[]): Map<string, { rootDepth: number; hasHeading: boolean }> {
+    if (!this._db || ids.length === 0) return new Map();
+
+    const placeholders = ids.map(() => '?').join(', ');
+    const stmt = this._db.prepare(
+      `SELECT id, root_depth, has_heading FROM documents WHERE id IN (${placeholders})`
+    );
+    const result = new Map<string, { rootDepth: number; hasHeading: boolean }>();
+
+    try {
+      stmt.bind(ids);
+      while (stmt.step()) {
+        const row = stmt.get();
+        result.set(row[0] as string, {
+          rootDepth: row[1] as number,
+          hasHeading: (row[2] as number) === 1,
+        });
+      }
+    } finally {
+      stmt.free();
+    }
+
+    return result;
+  }
+
+  /** Upsert documents with extended metadata (root_depth, has_heading). */
+  async upsertDocumentsWithDepth(docs: DocumentRecordWithDepth[]): Promise<void> {
+    if (!this._db) throw new Error('SQLite database not initialized');
+    if (docs.length === 0) return;
+
+    this._db.run('BEGIN TRANSACTION');
+    for (const doc of docs) {
+      try {
+        const embeddingBlob = encodeEmbedding(doc.embedding);
+        this._db.run(
+          'INSERT OR REPLACE INTO documents (id, content, lastUpdated, embedding, root_depth, has_heading) VALUES (?, ?, ?, ?, ?, ?)',
+          [doc.id, doc.content, doc.lastUpdated, embeddingBlob as any, doc.rootDepth, doc.hasHeading ? 1 : 0]
+        );
+      } catch (err) {
+        console.error(`[SQLiteVectorStore] Failed to upsert document with depth "${doc.id}":`, err);
+      }
+    }
+    this._db.run('COMMIT');
+    if (!this._bulkMode) {
+      await this.flushWithRetry();
+    }
   }
 
   /** Retrieve all document IDs and content for BM25 index building. */

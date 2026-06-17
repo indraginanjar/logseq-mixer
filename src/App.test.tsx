@@ -512,6 +512,7 @@ describe('Feature: indexing-status-feedback, Property 4: Success StatusIndicator
         async (pagesProcessed, docCount) => {
           cleanup();
           vi.clearAllMocks();
+          vi.useFakeTimers();
           mockIsIndexingActive.mockReturnValue(false);
 
           // Mock indexEntireLogSeq to return completed with the random pagesProcessed
@@ -530,7 +531,9 @@ describe('Feature: indexing-status-feedback, Property 4: Success StatusIndicator
           );
 
           // Wait for initial docCount fetch to settle
-          await flushPromises();
+          await act(async () => {
+            vi.advanceTimersByTime(1);
+          });
 
           // Find and click the Re-Index button
           const findButton = () => {
@@ -545,7 +548,9 @@ describe('Feature: indexing-status-feedback, Property 4: Success StatusIndicator
           fireEvent.click(reindexButton!);
 
           // Wait for indexing to complete and status to render
-          await flushPromises();
+          await act(async () => {
+            vi.advanceTimersByTime(1);
+          });
 
           const text = container.textContent || '';
 
@@ -555,6 +560,8 @@ describe('Feature: indexing-status-feedback, Property 4: Success StatusIndicator
           // The success message must contain the formatted chunk count (docCount)
           const expectedCount = docCount.toLocaleString();
           expect(text).toContain(expectedCount);
+
+          vi.useRealTimers();
         }
       ),
       { numRuns: 100 }
@@ -568,6 +575,8 @@ describe('StatusIndicator unit tests', () => {
    * Test paused outcome renders "Indexing paused" (Req 2.2)
    */
   it('renders "Indexing paused" when indexing result has paused outcome', async () => {
+    vi.useFakeTimers();
+
     mockIsIndexingActive.mockReturnValue(false);
     mockIndexEntireLogSeq.mockImplementation(() =>
       Promise.resolve({ outcome: 'paused', pagesProcessed: 5 })
@@ -585,15 +594,21 @@ describe('StatusIndicator unit tests', () => {
     expect(reindexButton).toBeDefined();
     fireEvent.click(reindexButton!);
 
-    await flushPromises();
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
 
     expect(container.textContent).toContain('Indexing paused');
+
+    vi.useRealTimers();
   });
 
   /**
    * Test error outcome routes to ErrorBanner, not StatusIndicator (Req 2.3, 7.3)
    */
   it('routes error outcome to ErrorBanner, not StatusIndicator', async () => {
+    vi.useFakeTimers();
+
     mockIsIndexingActive.mockReturnValue(false);
     mockIndexEntireLogSeq.mockImplementation(() =>
       Promise.resolve({ outcome: 'error', pagesProcessed: 0, errorMessage: 'Test error' })
@@ -609,13 +624,17 @@ describe('StatusIndicator unit tests', () => {
     );
     fireEvent.click(reindexButton!);
 
-    await flushPromises();
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
 
     // Error should appear in the ErrorBanner
     expect(container.textContent).toContain('Test error');
     // StatusIndicator messages should NOT appear
     expect(container.textContent).not.toContain('Indexing complete');
     expect(container.textContent).not.toContain('Indexing paused');
+
+    vi.useRealTimers();
   });
 
   /**

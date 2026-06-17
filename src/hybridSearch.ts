@@ -1,4 +1,5 @@
 import type { BM25Index } from './bm25Index';
+import { applyDepthWeight } from './depthWeightedSearch';
 import { classifyQuery } from './queryClassifier';
 import type { RankedHit, SearchHit } from './reranker';
 import { mergeWithRRF } from './reranker';
@@ -69,10 +70,24 @@ export async function hybridSearch(
   }
 
   // 4. Merge results via RRF with classification weights
-  return mergeWithRRF(bm25Hits, vectorHits, {
+  const merged = mergeWithRRF(bm25Hits, vectorHits, {
     k: rrfK,
     limit,
     bm25Weight,
     vectorWeight,
   });
+
+  // 5. Apply depth-weighted scoring
+  // Duck-type check: storageProvider may or may not have getDepthMetadata
+  const hasDepthMetadata = 'getDepthMetadata' in storageProvider &&
+    typeof (storageProvider as any).getDepthMetadata === 'function';
+
+  if (!hasDepthMetadata || merged.length === 0) {
+    return merged;
+  }
+
+  const depthMeta = (storageProvider as any).getDepthMetadata(merged.map((h: RankedHit) => h.id)) as Map<string, { rootDepth: number; hasHeading: boolean }>;
+  const weighted = applyDepthWeight(merged, depthMeta);
+  weighted.sort((a, b) => b.weightedRrfScore - a.weightedRrfScore);
+  return weighted.slice(0, limit);
 }
