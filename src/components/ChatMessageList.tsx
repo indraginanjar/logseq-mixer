@@ -197,6 +197,75 @@ const CodeArea = styled('div', {
   overflow: 'auto',
 });
 
+const CopyIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const CopyButton = styled('button', {
+  background: 'none',
+  border: 'none',
+  padding: '4px 8px',
+  fontSize: '12px',
+  fontWeight: '500',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  color: '$slate9',
+  marginLeft: 'auto',
+  transition: 'all 0.15s ease-in-out',
+  fontFamily: '$sans',
+
+  '&:hover': {
+    color: '$slate12',
+    backgroundColor: '$slate5',
+  },
+  '&:active': {
+    transform: 'scale(0.95)',
+  },
+  variants: {
+    copied: {
+      true: {
+        color: '$green11',
+        '&:hover': {
+          color: '$green11',
+          backgroundColor: '$green3',
+        },
+      },
+    },
+  },
+});
+
 const PreviewArea = styled('div', {
   padding: '12px',
   fontSize: '14px',
@@ -667,6 +736,17 @@ function MarkdownTabbedPanel({
   getBlockMetadata?: ChatMessageListProps['getBlockMetadata'];
 }) {
   const [activeTab, setActiveTab] = React.useState<'code' | 'preview'>('code');
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy code text:', err);
+    }
+  };
 
   return (
     <SpecialPanel>
@@ -685,6 +765,16 @@ function MarkdownTabbedPanel({
         >
           Preview
         </PanelTabButton>
+        {activeTab === 'code' && (
+          <CopyButton
+            copied={copied}
+            onClick={handleCopy}
+            title={copied ? 'Copied!' : 'Copy to clipboard'}
+          >
+            {copied ? <CheckIcon /> : <CopyIcon />}
+            {copied ? 'Copied' : 'Copy'}
+          </CopyButton>
+        )}
       </PanelHeader>
 
       <TabPanel active={activeTab === 'code'}>

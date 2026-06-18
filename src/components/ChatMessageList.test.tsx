@@ -129,6 +129,12 @@ beforeAll(() => {
       scrollToBlockInPage: vi.fn(),
     },
   };
+  Object.defineProperty(navigator, 'clipboard', {
+    value: {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    },
+    configurable: true,
+  });
 });
 
 afterEach(() => {
@@ -399,7 +405,8 @@ describe('ChatMessageList integration', () => {
     expect(container.textContent).toContain('Some ending text.');
 
     // Check that Code and Preview buttons are present
-    const buttons = container.querySelectorAll('button');
+    const allButtons = Array.from(container.querySelectorAll('button'));
+    const buttons = allButtons.filter(b => b.textContent === 'Code' || b.textContent === 'Preview');
     expect(buttons.length).toBe(2);
     expect(buttons[0].textContent).toBe('Code');
     expect(buttons[1].textContent).toBe('Preview');
@@ -407,6 +414,14 @@ describe('ChatMessageList integration', () => {
     // Check initial active states using the mocked stitches active attributes
     expect(buttons[0].getAttribute('data-active')).toBe('true');
     expect(buttons[1].getAttribute('data-active')).toBe('false');
+
+    // Check copy button is present when code tab is active
+    const copyButton = allButtons.find(b => b.textContent?.includes('Copy'));
+    expect(copyButton).toBeTruthy();
+    const writeTextSpy = vi.spyOn(navigator.clipboard, 'writeText');
+    fireEvent.click(copyButton!);
+    expect(writeTextSpy).toHaveBeenCalledWith('# Hello\nThis is **markdown** content');
+    writeTextSpy.mockRestore();
 
     // Simulate clicking the Preview button
     fireEvent.click(buttons[1]);
@@ -472,7 +487,8 @@ describe('ChatMessageList integration', () => {
     const { container } = render(<ChatMessageList messages={messages} />);
 
     // Assert Code and Preview tab buttons are present
-    const buttons = container.querySelectorAll('button');
+    const allButtons = Array.from(container.querySelectorAll('button'));
+    const buttons = allButtons.filter(b => b.textContent === 'Code' || b.textContent === 'Preview');
     expect(buttons.length).toBe(2);
     expect(buttons[0].textContent).toBe('Code');
     expect(buttons[1].textContent).toBe('Preview');
@@ -511,7 +527,8 @@ describe('ChatMessageList integration', () => {
     const { container } = render(<ChatMessageList messages={messages} />);
 
     // There should be exactly one panel (2 buttons: Code and Preview)
-    const buttons = container.querySelectorAll('button');
+    const allButtons = Array.from(container.querySelectorAll('button'));
+    const buttons = allButtons.filter(b => b.textContent === 'Code' || b.textContent === 'Preview');
     expect(buttons.length).toBe(2);
     expect(buttons[0].textContent).toBe('Code');
     expect(buttons[1].textContent).toBe('Preview');
@@ -533,7 +550,8 @@ describe('ChatMessageList integration', () => {
     const { container } = render(<ChatMessageList messages={messages} />);
 
     // There should be exactly one panel (2 buttons: Code and Preview)
-    const buttons = container.querySelectorAll('button');
+    const allButtons = Array.from(container.querySelectorAll('button'));
+    const buttons = allButtons.filter(b => b.textContent === 'Code' || b.textContent === 'Preview');
     expect(buttons.length).toBe(2);
     expect(buttons[0].textContent).toBe('Code');
     expect(buttons[1].textContent).toBe('Preview');
