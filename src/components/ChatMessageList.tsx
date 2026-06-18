@@ -741,14 +741,24 @@ function MarkdownTabbedPanel({
 
   const handleCopy = async () => {
     try {
-      let textToCopy = '';
       if (activeTab === 'code') {
-        textToCopy = content;
+        await navigator.clipboard.writeText(content);
       } else if (activeTab === 'preview' && previewRef.current) {
-        textToCopy = previewRef.current.innerText || previewRef.current.textContent || '';
-      }
+        const text = previewRef.current.innerText || previewRef.current.textContent || '';
+        const html = previewRef.current.innerHTML || '';
 
-      await navigator.clipboard.writeText(textToCopy);
+        if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard.write === 'function') {
+          const textBlob = new Blob([text], { type: 'text/plain' });
+          const htmlBlob = new Blob([html], { type: 'text/html' });
+          const item = new ClipboardItem({
+            'text/plain': textBlob,
+            'text/html': htmlBlob,
+          });
+          await navigator.clipboard.write([item]);
+        } else {
+          await navigator.clipboard.writeText(text);
+        }
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
