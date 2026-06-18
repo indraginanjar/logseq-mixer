@@ -4,6 +4,8 @@ import { vi } from 'vitest';
 
 vi.mock('./LLMManager', () => ({
   queryLiteLLM: vi.fn(),
+  getContextLimitForModel: vi.fn(() => 16385),
+  getMaxTokensForModel: vi.fn(() => 4096),
 }));
 
 vi.mock('./embedManager', () => ({

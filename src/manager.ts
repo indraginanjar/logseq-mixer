@@ -5,8 +5,9 @@ import { buildEditSystemPrompt, buildPageContextMessage } from 'editPromptBuilde
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
-import { queryLiteLLM, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, type ChatMessage, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
+import { countTokens, encode, decode } from 'tokenizer';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
 import type { PerDocumentStorageProvider, StorageProvider } from './storage/StorageProvider';
@@ -133,6 +134,13 @@ export async function enableAutoIndexer(settings: any, storageProvider: StorageP
   }
 }
 
+function truncateToTokens(text: string, maxTokens: number): string {
+  if (maxTokens <= 0) return "";
+  const tokens = encode(text);
+  if (tokens.length <= maxTokens) return text;
+  return decode(tokens.slice(0, maxTokens)) + "\n... (truncated to fit model context limit)";
+}
+
 export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean): Promise<string | EditQueryResult> {
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
@@ -198,22 +206,51 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     systemMessage += '\n\n' + buildEditSystemPrompt();
   }
 
-  // Build the user message with context and conversation history.
-  let userMessage = "";
+  // Estimate context token budget to avoid context window overflow errors.
+  const systemTokens = countTokens(systemMessage);
+  const contextLimit = getContextLimitForModel(settings.selectedModel);
+  const maxOutput = getMaxTokensForModel(settings.selectedModel);
+  const safetyMargin = 500;
+  const totalInputBudget = Math.max(1024, contextLimit - maxOutput - safetyMargin);
+  let userBudget = Math.max(1024, totalInputBudget - systemTokens);
 
-  // Append recent conversation history (limited to the most recent MAX_HISTORY_LENGTH messages)
-  const recentHistory = conversationHistory.slice(-MAX_HISTORY_LENGTH);
-  if (recentHistory.length > 0) {
-    userMessage += "Conversation History:\n";
-    recentHistory.forEach(entry => {
-      userMessage += entry.role === "user"
-        ? "User: " + entry.content + "\n"
-        : "Assistant: " + entry.content + "\n";
-    });
-    userMessage += "\n";
+  console.info(`[handleQuery] Model: ${settings.selectedModel}, Context Limit: ${contextLimit}, Max Output: ${maxOutput}, Input Budget: ${totalInputBudget}, User Budget: ${userBudget}`);
+
+  // Build the user message parts budget-consciously.
+  let editContextText = "";
+  if (editMode && editPageContext) {
+    const rawEditContext = buildPageContextMessage(editPageContext.pageName, editPageContext.formattedTree);
+    // Allocate up to 35% of userBudget
+    const limit = Math.floor(userBudget * 0.35);
+    editContextText = truncateToTokens(rawEditContext, limit);
+    userBudget -= countTokens(editContextText);
   }
 
-  // Try to include the current page context, but do not fail if it cannot be retrieved.
+  const recentHistory = conversationHistory.slice(-MAX_HISTORY_LENGTH);
+  let historyText = "";
+  if (recentHistory.length > 0) {
+    const limit = Math.floor(userBudget * 0.20);
+    let historyEntries: string[] = [];
+    let historyTokens = 0;
+    for (let i = recentHistory.length - 1; i >= 0; i--) {
+      const entry = recentHistory[i];
+      const entryText = entry.role === "user"
+        ? "User: " + entry.content + "\n"
+        : "Assistant: " + entry.content + "\n";
+      const entryTokens = countTokens(entryText);
+      if (historyTokens + entryTokens > limit && historyEntries.length > 0) {
+        break;
+      }
+      historyEntries.unshift(entryText);
+      historyTokens += entryTokens;
+    }
+    if (historyEntries.length > 0) {
+      historyText = "Conversation History:\n" + historyEntries.join("") + "\n";
+      userBudget -= countTokens(historyText);
+    }
+  }
+
+  let pageContextText = "";
   try {
     const page = await logseq.Editor.getCurrentPage();
     if (page !== null) {
@@ -222,25 +259,33 @@ export async function handleQuery(query: string, settings: any, storageProvider:
       pageContent.forEach(element => {
         wholePageContent += "- " + element.content + "\n";
       });
-      userMessage += "Current Page Context:\n";
-      userMessage += `current_page_open_id: ${page.id}\n`;
-      userMessage += `current_page_open_name: ${page.name}\n`;
-      userMessage += `current_page_open_content: ${wholePageContent}\n\n`;
+      const rawPageContext = "Current Page Context:\n" +
+        `current_page_open_id: ${page.id}\n` +
+        `current_page_open_name: ${page.name}\n` +
+        `current_page_open_content: ${wholePageContent}\n\n`;
+      // Allocate up to 25% of userBudget
+      const limit = Math.floor(userBudget * 0.25);
+      pageContextText = truncateToTokens(rawPageContext, limit);
+      userBudget -= countTokens(pageContextText);
     }
   } catch (err) {
     console.error("Failed to retrieve current page context:", err);
   }
 
-  // Append additional context from vector search if available.
+  let vectorContextText = "";
   if (vectorContext) {
-    userMessage += "Additional Context from Knowledge Base:\n";
-    userMessage += vectorContext;
+    const rawVectorContext = "Additional Context from Knowledge Base:\n" + vectorContext;
+    // Use the remaining userBudget
+    vectorContextText = truncateToTokens(rawVectorContext, userBudget);
+    userBudget -= countTokens(vectorContextText);
   }
 
-  // When edit mode is enabled and page context is available, append block tree context.
-  if (editMode && editPageContext) {
-    userMessage += '\n' + buildPageContextMessage(editPageContext.pageName, editPageContext.formattedTree) + '\n';
-  }
+  // Combine components into userMessage
+  let userMessage = "";
+  if (historyText) userMessage += historyText;
+  if (pageContextText) userMessage += pageContextText;
+  if (vectorContextText) userMessage += vectorContextText;
+  if (editContextText) userMessage += editContextText;
 
   // Build the messages array with proper roles.
   const messages: ChatMessage[] = [
