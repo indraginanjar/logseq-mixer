@@ -28,49 +28,93 @@ vi.mock('../stitches.config', () => {
   };
 });
 
-// Mock react-markdown to exercise the components.a override
+// Mock react-markdown to exercise the components.a and components.code overrides
 vi.mock('react-markdown', () => {
   return {
     __esModule: true,
     default: ({ children, components }: { children: string; components?: any }) => {
-      // Parse markdown link patterns [text](href) and render via components.a if provided
-      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+      const content = typeof children === 'string' ? children : '';
+
+      // Parse fenced code blocks
+      const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
       const parts: React.ReactNode[] = [];
       let lastIndex = 0;
       let match: RegExpExecArray | null;
       let key = 0;
 
-      const content = typeof children === 'string' ? children : '';
-
-      while ((match = linkRegex.exec(content)) !== null) {
-        // Add text before the link
+      while ((match = codeBlockRegex.exec(content)) !== null) {
         if (match.index > lastIndex) {
           parts.push(content.slice(lastIndex, match.index));
         }
 
-        const linkText = match[1];
-        const href = match[2];
+        const lang = match[1] || '';
+        const codeText = match[2];
 
-        if (components?.a) {
-          // Use the custom a component override — this is the key integration point
+        if (components?.code) {
           parts.push(
-            <React.Fragment key={key++}>
-              {components.a({ href, children: linkText })}
+            <React.Fragment key={`code-block-${key++}`}>
+              {components.code({
+                node: {},
+                inline: false,
+                className: lang ? `language-${lang}` : '',
+                children: codeText,
+              })}
             </React.Fragment>
           );
         } else {
-          parts.push(<a key={key++} href={href}>{linkText}</a>);
+          parts.push(
+            <pre key={`code-block-${key++}`} className={lang ? `language-${lang}` : ''}>
+              <code className={lang ? `language-${lang}` : ''}>{codeText}</code>
+            </pre>
+          );
         }
 
-        lastIndex = linkRegex.lastIndex;
+        lastIndex = codeBlockRegex.lastIndex;
       }
 
-      // Add remaining text
       if (lastIndex < content.length) {
         parts.push(content.slice(lastIndex));
       }
 
-      return <div data-testid="markdown">{parts.length > 0 ? parts : content}</div>;
+      // Parse links on the non-element parts
+      const finalParts = parts.map((part, i) => {
+        if (typeof part !== 'string') return part;
+
+        const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+        const subParts: React.ReactNode[] = [];
+        let subLastIndex = 0;
+        let subMatch: RegExpExecArray | null;
+        let subKey = 0;
+
+        while ((subMatch = linkRegex.exec(part)) !== null) {
+          if (subMatch.index > subLastIndex) {
+            subParts.push(part.slice(subLastIndex, subMatch.index));
+          }
+
+          const linkText = subMatch[1];
+          const href = subMatch[2];
+
+          if (components?.a) {
+            subParts.push(
+              <React.Fragment key={`link-${subKey++}`}>
+                {components.a({ href, children: linkText })}
+              </React.Fragment>
+            );
+          } else {
+            subParts.push(<a key={`link-${subKey++}`} href={href}>{linkText}</a>);
+          }
+
+          subLastIndex = linkRegex.lastIndex;
+        }
+
+        if (subLastIndex < part.length) {
+          subParts.push(part.slice(subLastIndex));
+        }
+
+        return <React.Fragment key={`part-${i}`}>{subParts}</React.Fragment>;
+      });
+
+      return <div data-testid="markdown">{finalParts}</div>;
     },
   };
 });
@@ -242,9 +286,9 @@ describe('ChatMessageList integration', () => {
       <ChatMessageList messages={messages} getBlockMetadata={mockGetBlockMetadata} />
     );
 
-    // BlockLink renders as a <span> with the children text from ReactMarkdown
+    // BlockLink renders as a <span> with the label text when placeholder children is provided
     const spans = container.querySelectorAll('span');
-    const blockLinkSpan = Array.from(spans).find((s) => s.textContent === 'block:ab-cd');
+    const blockLinkSpan = Array.from(spans).find((s) => s.textContent === 'Some block content');
     expect(blockLinkSpan).toBeTruthy();
 
     // Surrounding text should be present
@@ -277,7 +321,7 @@ describe('ChatMessageList integration', () => {
     // PageLink should render for [[My Page]]
     expect(spanTexts).toContain('My Page');
     // BlockLink should render for ((ab-cd))
-    expect(spanTexts).toContain('block:ab-cd');
+    expect(spanTexts).toContain('Block preview');
   });
 
   /**
@@ -334,4 +378,169 @@ describe('ChatMessageList integration', () => {
     expect(container.textContent).toContain('Check out');
     expect(container.textContent).toContain('for info');
   });
+
+  /**
+   * Tab support tests
+   */
+  it('renders tabs and supports switching between Code and Preview views', () => {
+    const { fireEvent } = require('@testing-library/react');
+    const messages: ChatMessage[] = [
+      {
+        id: 1,
+        content: 'Some introduction text:\n\n```markdown\n# Hello\nThis is **markdown** content\n```\n\nSome ending text.',
+        sender: 'assistant',
+      },
+    ];
+
+    const { container } = render(<ChatMessageList messages={messages} />);
+
+    // The surrounding text should be rendered normally in the container
+    expect(container.textContent).toContain('Some introduction text:');
+    expect(container.textContent).toContain('Some ending text.');
+
+    // Check that Code and Preview buttons are present
+    const buttons = container.querySelectorAll('button');
+    expect(buttons.length).toBe(2);
+    expect(buttons[0].textContent).toBe('Code');
+    expect(buttons[1].textContent).toBe('Preview');
+
+    // Check initial active states using the mocked stitches active attributes
+    expect(buttons[0].getAttribute('data-active')).toBe('true');
+    expect(buttons[1].getAttribute('data-active')).toBe('false');
+
+    // Simulate clicking the Preview button
+    fireEvent.click(buttons[1]);
+
+    // Check updated active states
+    expect(buttons[0].getAttribute('data-active')).toBe('false');
+    expect(buttons[1].getAttribute('data-active')).toBe('true');
+
+    // Simulate clicking the Code button back
+    fireEvent.click(buttons[0]);
+    expect(buttons[0].getAttribute('data-active')).toBe('true');
+    expect(buttons[1].getAttribute('data-active')).toBe('false');
+  });
+
+  /**
+   * Logseq markdown extension tests
+   */
+  it('renders Logseq block properties, task badges, checkboxes, and tags', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 1,
+        content: 'public:: true\ncategory:: work\n- TODO task item\n- [ ] incomplete task\n- [x] completed task\nReferencing #[[my tag]] and #another-tag.',
+        sender: 'assistant',
+      },
+    ];
+
+    const { container } = render(<ChatMessageList messages={messages} />);
+
+    // Assert block properties are rendered
+    expect(container.textContent).toContain('public:');
+    expect(container.textContent).toContain('true');
+    expect(container.textContent).toContain('category:');
+    expect(container.textContent).toContain('work');
+
+    // Assert task badge (TODO) is rendered
+    const spans = container.querySelectorAll('span');
+    const spanTexts = Array.from(spans).map((s) => s.textContent);
+    expect(spanTexts).toContain('TODO');
+
+    // Assert checkboxes are rendered
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    expect(checkboxes.length).toBe(2);
+    expect((checkboxes[0] as HTMLInputElement).checked).toBe(false);
+    expect((checkboxes[1] as HTMLInputElement).checked).toBe(true);
+
+    // Assert tags are rendered
+    expect(spanTexts).toContain('#my tag');
+    expect(spanTexts).toContain('#another-tag');
+  });
+
+  /**
+   * Logseq markdown table rendering test
+   */
+  it('renders markdown tables correctly', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 1,
+        content: 'Here is a table:\n\n| Item | Cost | Status |\n|---|---|---|\n| Book | $10 | DONE |\n| Pen | $2 | TODO |',
+        sender: 'assistant',
+      },
+    ];
+
+    const { container } = render(<ChatMessageList messages={messages} />);
+
+    // Assert Code and Preview tab buttons are present
+    const buttons = container.querySelectorAll('button');
+    expect(buttons.length).toBe(2);
+    expect(buttons[0].textContent).toBe('Code');
+    expect(buttons[1].textContent).toBe('Preview');
+
+    // Assert table element is rendered (in the Preview tab DOM)
+    const table = container.querySelector('table');
+    expect(table).toBeTruthy();
+
+    // Assert headers are rendered
+    const headers = container.querySelectorAll('th');
+    expect(headers.length).toBe(3);
+    expect(headers[0].textContent).toBe('Item');
+    expect(headers[1].textContent).toBe('Cost');
+    expect(headers[2].textContent).toBe('Status');
+
+    // Assert cells are rendered
+    const cells = container.querySelectorAll('td');
+    expect(cells.length).toBe(6);
+    expect(cells[0].textContent).toBe('Book');
+    expect(cells[1].textContent).toBe('$10');
+    expect(cells[2].textContent).toContain('DONE');
+    expect(cells[3].textContent).toBe('Pen');
+    expect(cells[4].textContent).toBe('$2');
+    expect(cells[5].textContent).toContain('TODO');
+  });
+
+  it('renders markdown tables inside a markdown code fence with only one panel', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 1,
+        content: 'Check out this table:\n\n```markdown\n| Item | Cost |\n|---|---|\n| Book | $10 |\n```',
+        sender: 'assistant',
+      },
+    ];
+
+    const { container } = render(<ChatMessageList messages={messages} />);
+
+    // There should be exactly one panel (2 buttons: Code and Preview)
+    const buttons = container.querySelectorAll('button');
+    expect(buttons.length).toBe(2);
+    expect(buttons[0].textContent).toBe('Code');
+    expect(buttons[1].textContent).toBe('Preview');
+
+    // Inside the Preview tab, there should be a table
+    const table = container.querySelector('table');
+    expect(table).toBeTruthy();
+  });
+
+  it('does not render duplicate/empty panels when a markdown table is inside a bulleted code fence', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 1,
+        content: '- ```markdown\n| Item | Cost |\n|---|---|\n| Book | $10 |\n```',
+        sender: 'assistant',
+      },
+    ];
+
+    const { container } = render(<ChatMessageList messages={messages} />);
+
+    // There should be exactly one panel (2 buttons: Code and Preview)
+    const buttons = container.querySelectorAll('button');
+    expect(buttons.length).toBe(2);
+    expect(buttons[0].textContent).toBe('Code');
+    expect(buttons[1].textContent).toBe('Preview');
+
+    // Inside the Preview tab, there should be a table
+    const table = container.querySelector('table');
+    expect(table).toBeTruthy();
+  });
 });
+

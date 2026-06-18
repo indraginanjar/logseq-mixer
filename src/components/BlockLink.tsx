@@ -30,7 +30,10 @@ export function BlockLink({ blockUuid, label, pageName, children }: BlockLinkPro
     }
   };
 
-  const displayText = children ?? label ?? `${blockUuid.slice(0, 8)}…`;
+  const isPlaceholder =
+    typeof children === 'string' &&
+    (children.startsWith('block:') || children === `((${blockUuid}))`);
+  const displayText = isPlaceholder ? (label ?? children) : (children ?? label) ?? `${blockUuid.slice(0, 8)}…`;
 
   return (
     <StyledBlockLink onClick={handleClick}>
