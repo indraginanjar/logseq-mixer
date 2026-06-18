@@ -430,6 +430,17 @@ describe('ChatMessageList integration', () => {
     expect(buttons[0].getAttribute('data-active')).toBe('false');
     expect(buttons[1].getAttribute('data-active')).toBe('true');
 
+    // Check copy button is present and works when preview tab is active
+    const copyButtonOnPreview = allButtons.find(b => b.textContent?.includes('Copy'));
+    expect(copyButtonOnPreview).toBeTruthy();
+    const writeTextSpy2 = vi.spyOn(navigator.clipboard, 'writeText');
+    fireEvent.click(copyButtonOnPreview!);
+    expect(writeTextSpy2).toHaveBeenCalled();
+    const copiedText = writeTextSpy2.mock.calls[0][0];
+    expect(copiedText).toContain('Hello');
+    expect(copiedText).toContain('markdown');
+    writeTextSpy2.mockRestore();
+
     // Simulate clicking the Code button back
     fireEvent.click(buttons[0]);
     expect(buttons[0].getAttribute('data-active')).toBe('true');

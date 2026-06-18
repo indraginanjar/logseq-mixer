@@ -737,15 +737,28 @@ function MarkdownTabbedPanel({
 }) {
   const [activeTab, setActiveTab] = React.useState<'code' | 'preview'>('code');
   const [copied, setCopied] = React.useState(false);
+  const previewRef = React.useRef<HTMLDivElement>(null);
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(content);
+      let textToCopy = '';
+      if (activeTab === 'code') {
+        textToCopy = content;
+      } else if (activeTab === 'preview' && previewRef.current) {
+        textToCopy = previewRef.current.innerText || previewRef.current.textContent || '';
+      }
+
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to copy code text:', err);
+      console.error('Failed to copy text:', err);
     }
+  };
+
+  const handleTabChange = (tab: 'code' | 'preview') => {
+    setActiveTab(tab);
+    setCopied(false);
   };
 
   return (
@@ -754,27 +767,25 @@ function MarkdownTabbedPanel({
         <PanelTabButton
           active={activeTab === 'code'}
           data-active={activeTab === 'code'}
-          onClick={() => setActiveTab('code')}
+          onClick={() => handleTabChange('code')}
         >
           Code
         </PanelTabButton>
         <PanelTabButton
           active={activeTab === 'preview'}
           data-active={activeTab === 'preview'}
-          onClick={() => setActiveTab('preview')}
+          onClick={() => handleTabChange('preview')}
         >
           Preview
         </PanelTabButton>
-        {activeTab === 'code' && (
-          <CopyButton
-            copied={copied}
-            onClick={handleCopy}
-            title={copied ? 'Copied!' : 'Copy to clipboard'}
-          >
-            {copied ? <CheckIcon /> : <CopyIcon />}
-            {copied ? 'Copied' : 'Copy'}
-          </CopyButton>
-        )}
+        <CopyButton
+          copied={copied}
+          onClick={handleCopy}
+          title={copied ? 'Copied!' : activeTab === 'code' ? 'Copy code' : 'Copy preview'}
+        >
+          {copied ? <CheckIcon /> : <CopyIcon />}
+          {copied ? 'Copied' : 'Copy'}
+        </CopyButton>
       </PanelHeader>
 
       <TabPanel active={activeTab === 'code'}>
@@ -782,7 +793,7 @@ function MarkdownTabbedPanel({
       </TabPanel>
 
       <TabPanel active={activeTab === 'preview'}>
-        <PreviewArea>
+        <PreviewArea ref={previewRef}>
           {renderMarkdownWithProperties(content, true, getBlockMetadata, false)}
         </PreviewArea>
       </TabPanel>
