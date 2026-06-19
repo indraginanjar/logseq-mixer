@@ -39,6 +39,9 @@ export function getContextLimitForModel(model: string): number {
     return MODEL_CONTEXT_LIMITS[model];
   }
   // Keyword matching for unknown models
+  if (normalized.includes('gpt-5')) return 128000;
+  if (normalized.includes('o1-') || normalized.startsWith('o1')) return 128000;
+  if (normalized.includes('o3-') || normalized.startsWith('o3')) return 200000;
   if (normalized.includes('gpt-4o')) return 128000;
   if (normalized.includes('gpt-4')) return 8192;
   if (normalized.includes('gpt-3.5')) return 16385;
@@ -58,18 +61,32 @@ export async function queryLiteLLM(
   endpoint: string,
   signal?: AbortSignal
 ): Promise<any> {
+  const useMaxCompletionTokens = 
+    model.toLowerCase().includes('o1-') || 
+    model.toLowerCase().startsWith('o1') ||
+    model.toLowerCase().includes('o3-') || 
+    model.toLowerCase().startsWith('o3') ||
+    model.toLowerCase().includes('gpt-5');
+
+  const requestBody: Record<string, any> = {
+    model: model,
+    messages: messages,
+    "api_key": apiKey
+  };
+
+  if (useMaxCompletionTokens) {
+    requestBody.max_completion_tokens = getMaxTokensForModel(model);
+  } else {
+    requestBody.max_tokens = getMaxTokensForModel(model);
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model: model,
-      messages: messages,
-      max_tokens: getMaxTokensForModel(model),
-      "api_key":apiKey
-    }),
+    body: JSON.stringify(requestBody),
     signal,
   });
 
