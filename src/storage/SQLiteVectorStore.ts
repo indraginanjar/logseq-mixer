@@ -438,9 +438,31 @@ export class SQLiteVectorStore implements StorageProvider {
       if (!tables.includes('documents') || !tables.includes('kv_store')) {
         throw new Error('Missing required tables: documents and kv_store');
       }
-    } catch (err) {
+
+      // Ensure all tables exist (self-healing migration)
+      newDb.run(
+        'CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)'
+      );
+      newDb.run(
+        `CREATE TABLE IF NOT EXISTS documents (
+          id TEXT PRIMARY KEY,
+          content TEXT NOT NULL,
+          lastUpdated INTEGER NOT NULL,
+          embedding BLOB NOT NULL,
+          root_depth INTEGER NOT NULL DEFAULT 0,
+          has_heading INTEGER NOT NULL DEFAULT 0
+        )`
+      );
+      newDb.run(
+        `CREATE TABLE IF NOT EXISTS block_metadata (
+          uuid TEXT PRIMARY KEY,
+          pageName TEXT NOT NULL,
+          contentPreview TEXT NOT NULL
+        )`
+      );
+    } catch (err: any) {
       newDb.close();
-      throw new Error('Invalid SQLite database format or schema structure');
+      throw new Error(`Invalid SQLite database format or schema structure: ${err.message}`);
     }
 
     if (this._db) {
