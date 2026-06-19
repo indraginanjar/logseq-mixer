@@ -663,22 +663,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         <MessagesContainer id="messages-container" className={ctrlHeld ? 'ctrl-held' : ''}>
           <ChatMessageList
             messages={messages}
+            editResults={editResults}
             getBlockMetadata={(uuid) => {
               const provider = storageProvider as any;
               return provider.getBlockMetadata?.(uuid) ?? null;
             }}
           />
-          {messages.map((msg) => {
-            const result = editResults.get(msg.id);
-            return result ? (
-              <div key={`summary-${msg.id}`} style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '12px' }}>
-                <div style={{ width: '28px', flexShrink: 0 }} />
-                <div style={{ maxWidth: '80%' }}>
-                  <ChangeSummary result={result} />
-                </div>
-              </div>
-            ) : null;
-          })}
           {loading && (
             <TypingIndicator>
               <Dot delay={0} /><Dot delay={1} /><Dot delay={2} />

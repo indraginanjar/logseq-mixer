@@ -94,10 +94,28 @@ vi.mock('./stitches.config', () => {
 });
 
 // Mock ChatMessageList
-vi.mock('./components/ChatMessageList', () => ({
-  __esModule: true,
-  default: () => React.createElement('div', { 'data-testid': 'chat-messages' }),
-}));
+vi.mock('./components/ChatMessageList', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ messages, editResults }: any) => {
+      return React.createElement(
+        'div',
+        { 'data-testid': 'chat-messages' },
+        messages.map((msg: any) => {
+          const result = editResults?.get(msg.id);
+          return result
+            ? React.createElement(
+                'div',
+                { 'data-testid': 'change-summary', key: msg.id },
+                `Changes: ${result.successCount} succeeded, ${result.failedCount} failed`
+              )
+            : null;
+        })
+      );
+    },
+  };
+});
 
 // Mock EditToggle
 vi.mock('./components/EditToggle', () => ({

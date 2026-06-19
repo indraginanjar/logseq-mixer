@@ -6,6 +6,8 @@ import { keyframes, styled } from '../stitches.config';
 import { BlockLink } from './BlockLink';
 import { CtrlLink } from './CtrlLink';
 import { PageLink } from './PageLink';
+import { ChangeSummary } from './ChangeSummary';
+import type { ExecutionResult } from '../types/editTypes';
 
 export type ChatMessage = {
   id: string | number;
@@ -429,6 +431,7 @@ const TableCell = styled('td', {
 
 type ChatMessageListProps = {
   messages: ChatMessage[];
+  editResults?: Map<string | number, ExecutionResult>;
   getBlockMetadata?: (uuid: string) => { pageName: string; contentPreview: string } | null;
 };
 
@@ -811,7 +814,7 @@ function MarkdownTabbedPanel({
   );
 }
 
-export default function ChatMessageList({ messages, getBlockMetadata }: ChatMessageListProps) {
+export default function ChatMessageList({ messages, editResults, getBlockMetadata }: ChatMessageListProps) {
   if (messages.length === 0) {
     return (
       <EmptyState>
@@ -826,20 +829,33 @@ export default function ChatMessageList({ messages, getBlockMetadata }: ChatMess
 
   return (
     <Container>
-      {messages.map((msg) => (
-        <MessageRow key={msg.id} align={msg.sender}>
-          {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
-          <Bubble role={msg.sender}>
-            {renderMarkdownWithProperties(
-              msg.content,
-              msg.sender === 'assistant',
-              getBlockMetadata,
-              msg.sender === 'assistant'
+      {messages.map((msg) => {
+        const result = editResults?.get(msg.id);
+        return (
+          <React.Fragment key={msg.id}>
+            <MessageRow align={msg.sender}>
+              {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
+              <Bubble role={msg.sender}>
+                {renderMarkdownWithProperties(
+                  msg.content,
+                  msg.sender === 'assistant',
+                  getBlockMetadata,
+                  msg.sender === 'assistant'
+                )}
+              </Bubble>
+              {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
+            </MessageRow>
+            {result && (
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '4px', marginBottom: '12px' }}>
+                <div style={{ width: '28px', flexShrink: 0 }} />
+                <div style={{ maxWidth: '80%', width: '100%' }}>
+                  <ChangeSummary result={result} />
+                </div>
+              </div>
             )}
-          </Bubble>
-          {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
-        </MessageRow>
-      ))}
+          </React.Fragment>
+        );
+      })}
     </Container>
   );
 }
