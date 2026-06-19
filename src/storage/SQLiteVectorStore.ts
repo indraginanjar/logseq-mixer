@@ -17,6 +17,7 @@ export interface DocumentRecordWithDepth extends DocumentRecord {
  */
 export class SQLiteVectorStore implements StorageProvider {
   private _db: Database | null = null;
+  private _SQL: any = null;
   private _bulkMode: boolean = false;
   private readonly idbKey: string;
   private static readonly DB_NAME = 'logseq-composer-vectors';
@@ -36,9 +37,10 @@ export class SQLiteVectorStore implements StorageProvider {
     const wasmUrl = this.resolveWasmUrl(basePath);
     console.info(`[SQLiteVectorStore] Loading WASM from: ${wasmUrl}`);
 
-    const SQL = await initSqlJs({
+    this._SQL = await initSqlJs({
       locateFile: () => wasmUrl,
     });
+    const SQL = this._SQL;
 
     // Yield to the event loop so the host app stays responsive during startup
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -60,6 +62,10 @@ export class SQLiteVectorStore implements StorageProvider {
 
     // Yield after heavy database parsing so the host app can process messages
     await new Promise(resolve => setTimeout(resolve, 0));
+
+    if (!this._db) {
+      throw new Error('[SQLiteVectorStore] Database initialization failed.');
+    }
 
     // Create tables
     this._db.run(
@@ -411,6 +417,38 @@ export class SQLiteVectorStore implements StorageProvider {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  /** Import a SQLite database from an ArrayBuffer, replacing existing data */
+  async importFromFile(buffer: ArrayBuffer): Promise<void> {
+    if (!this._SQL) {
+      const basePath = (logseq.baseInfo as any).path ?? '';
+      const wasmUrl = this.resolveWasmUrl(basePath);
+      this._SQL = await initSqlJs({
+        locateFile: () => wasmUrl,
+      });
+    }
+
+    const newDb = new this._SQL.Database(new Uint8Array(buffer));
+
+    // Basic structural validation check (ensure the schema tables exist)
+    try {
+      const tablesResult = newDb.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tables = tablesResult.length > 0 ? tablesResult[0].values.map((v: any) => v[0] as string) : [];
+      if (!tables.includes('documents') || !tables.includes('kv_store')) {
+        throw new Error('Missing required tables: documents and kv_store');
+      }
+    } catch (err) {
+      newDb.close();
+      throw new Error('Invalid SQLite database format or schema structure');
+    }
+
+    if (this._db) {
+      this._db.close();
+    }
+
+    this._db = newDb;
+    await this.flushWithRetry();
   }
 
   /** Get the stored chunking version, or null if not set. */

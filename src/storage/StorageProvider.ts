@@ -36,6 +36,9 @@ export interface StorageProvider {
   /** Export the SQLite database as a downloadable file (optional) */
   exportToFile?(): void;
 
+  /** Import a SQLite database from an ArrayBuffer, replacing existing data (optional) */
+  importFromFile?(buffer: ArrayBuffer): Promise<void>;
+
   // --- Legacy methods used by SettingsStorageProvider + Orama backend ---
 
   /** Save serialized data (legacy Orama JSON blob) */
@@ -58,6 +61,7 @@ export interface PerDocumentStorageProvider extends StorageProvider {
   beginBulk?(): void;
   endBulk?(): void;
   persistToIndexedDB?(): Promise<void>;
+  importFromFile?(buffer: ArrayBuffer): Promise<void>;
 
   /** Upsert block metadata records. */
   upsertBlockMetadata?(entries: Array<{ uuid: string; pageName: string; contentPreview: string }>): void;

@@ -492,6 +492,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isVisible = useAppVisible();
   const themeMode = useThemeMode(initialThemeMode);
   const ctrlHeld = useCtrlKey();
@@ -812,6 +813,54 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     logseq.updateSettings({ selectedModel: newModel });
   };
 
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const confirmed = window.confirm(
+      "WARNING: Importing a new database will completely overwrite your current database. This action cannot be undone.\n\nAre you sure you want to proceed?"
+    );
+
+    if (!confirmed) {
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const buffer = event.target?.result as ArrayBuffer;
+      if (buffer) {
+        try {
+          if (storageProvider.importFromFile) {
+            await storageProvider.importFromFile(buffer);
+            
+            // Reload page and document count statistics
+            if (storageProvider.getDocumentCount) {
+              const dCount = await storageProvider.getDocumentCount();
+              setDocCount(dCount);
+            }
+            if (storageProvider.getPageCount) {
+              const pCount = await storageProvider.getPageCount();
+              setPageCount(pCount);
+            }
+            
+            window.logseq.UI.showMsg('Database imported successfully!', 'success');
+          } else {
+            window.logseq.UI.showMsg('Import not supported by the current storage backend.', 'error');
+          }
+        } catch (err: any) {
+          console.error('Import failed:', err);
+          window.logseq.UI.showMsg(`Import failed: ${err.message}`, 'error');
+        }
+      }
+    };
+    reader.onerror = () => {
+      window.logseq.UI.showMsg('Failed to read the file.', 'error');
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
+
   if (!isVisible) return null;
 
   const buttonProps = getButtonState({ isIndexing, isCooldownActive: cooldownActive });
@@ -966,8 +1015,22 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             <DbPanelActions>
               {storageProvider.exportToFile && (
                 <DbPanelButton variant="primary" onClick={() => storageProvider.exportToFile?.()}>
-                  📥 Export SQLite DB
+                  📤 Export SQLite DB
                 </DbPanelButton>
+              )}
+              {storageProvider.importFromFile && (
+                <>
+                  <input
+                    type="file"
+                    accept=".sqlite,.db"
+                    ref={fileInputRef}
+                    onChange={handleImportFileChange}
+                    style={{ display: 'none' }}
+                  />
+                  <DbPanelButton variant="primary" onClick={() => fileInputRef.current?.click()}>
+                    📥 Import SQLite DB
+                  </DbPanelButton>
+                </>
               )}
               <DbPanelButton variant="secondary" onClick={() => setShowDbPanel(false)}>
                 Close
