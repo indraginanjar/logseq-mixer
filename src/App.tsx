@@ -164,6 +164,112 @@ const ModelSelect = styled('select', {
   },
 });
 
+const DbPanel = styled('div', {
+  position: 'absolute',
+  top: '53px',
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: '$elevation0',
+  zIndex: 10,
+  display: 'flex',
+  flexDirection: 'column',
+  padding: '24px 20px',
+  animation: `${fadeIn} 0.2s ease-out`,
+});
+
+const DbPanelHeader = styled('div', {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: '20px',
+  borderBottom: '1px solid $slate6',
+  paddingBottom: '10px',
+});
+
+const DbPanelTitle = styled('h3', {
+  margin: 0,
+  fontSize: '16px',
+  fontWeight: 600,
+  color: '$highContrast',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+});
+
+const DbStatsList = styled('div', {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '12px',
+  flex: 1,
+  overflowY: 'auto',
+});
+
+const DbStatRow = styled('div', {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '10px 12px',
+  backgroundColor: '$slate3',
+  borderRadius: '8px',
+  border: '1px solid $slate5',
+});
+
+const DbStatLabel = styled('span', {
+  fontSize: '13px',
+  fontWeight: 500,
+  color: '$slate11',
+});
+
+const DbStatValue = styled('span', {
+  fontSize: '13px',
+  fontWeight: 600,
+  color: '$highContrast',
+});
+
+const DbPanelActions = styled('div', {
+  display: 'flex',
+  gap: '10px',
+  marginTop: '20px',
+});
+
+const DbPanelButton = styled('button', {
+  flex: 1,
+  padding: '10px 16px',
+  borderRadius: '8px',
+  fontSize: '13px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.15s',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '6px',
+  fontFamily: '$sans',
+
+  variants: {
+    variant: {
+      primary: {
+        backgroundColor: '$blue9',
+        color: 'white',
+        border: 'none',
+        '&:hover': { backgroundColor: '$blue10' },
+        '&:active': { transform: 'scale(0.98)' },
+      },
+      secondary: {
+        backgroundColor: 'transparent',
+        border: '1px solid $slate6',
+        color: '$slate11',
+        '&:hover': { backgroundColor: '$slate3', color: '$highContrast' },
+        '&:active': { transform: 'scale(0.98)' },
+      },
+    },
+  },
+  defaultVariants: {
+    variant: 'secondary',
+  },
+});
+
 const MessagesContainer = styled('div', {
   flex: 1,
   overflowY: 'auto',
@@ -411,6 +517,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [progressCount, setProgressCount] = useState(getIndexingProgress);
   const [autoEmbedEnabled, setAutoEmbedEnabled] = useState(() => (logseq.settings?.autoEmbedEnabled as boolean) ?? true);
   const [cooldownActive, setCooldownActive] = useState(false);
+  const [showDbPanel, setShowDbPanel] = useState(false);
 
   // Cancel cooldown timer on unmount
   useEffect(() => {
@@ -803,9 +910,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
-              {storageProvider.exportToFile && (
-                <ToolbarButton onClick={() => storageProvider.exportToFile?.()}>📥 Export</ToolbarButton>
-              )}
+              <ToolbarButton onClick={() => setShowDbPanel(true)}>🗄️ Database</ToolbarButton>
               <ToolbarButton
                 variant={buttonProps.variant}
                 onClick={handleIndexDB}
@@ -817,6 +922,59 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             </div>
           </ToolbarRow>
         </InputArea>
+
+        {showDbPanel && (
+          <DbPanel>
+            <DbPanelHeader>
+              <DbPanelTitle>🗄️ Database Center</DbPanelTitle>
+              <CloseButton onClick={() => setShowDbPanel(false)} aria-label="Close Database Panel">✕</CloseButton>
+            </DbPanelHeader>
+
+            <DbStatsList>
+              <DbStatRow>
+                <DbStatLabel>Storage Backend</DbStatLabel>
+                <DbStatValue style={{ textTransform: 'capitalize' }}>
+                  {settings?.storageBackend || 'SQLite'}
+                </DbStatValue>
+              </DbStatRow>
+              <DbStatRow>
+                <DbStatLabel>Indexed Pages</DbStatLabel>
+                <DbStatValue>
+                  {pageCount !== null ? pageCount.toLocaleString() : '0'}
+                </DbStatValue>
+              </DbStatRow>
+              <DbStatRow>
+                <DbStatLabel>Indexed Chunks (Vectors)</DbStatLabel>
+                <DbStatValue>
+                  {docCount !== null ? docCount.toLocaleString() : '0'}
+                </DbStatValue>
+              </DbStatRow>
+              <DbStatRow>
+                <DbStatLabel>Embedding Provider</DbStatLabel>
+                <DbStatValue style={{ textTransform: 'capitalize' }}>
+                  {settings?.embeddingProvider || 'OpenAI'}
+                </DbStatValue>
+              </DbStatRow>
+              <DbStatRow>
+                <DbStatLabel>Embedding Model</DbStatLabel>
+                <DbStatValue>
+                  {settings?.embeddingModel || 'text-embedding-3-small'}
+                </DbStatValue>
+              </DbStatRow>
+            </DbStatsList>
+
+            <DbPanelActions>
+              {storageProvider.exportToFile && (
+                <DbPanelButton variant="primary" onClick={() => storageProvider.exportToFile?.()}>
+                  📥 Export SQLite DB
+                </DbPanelButton>
+              )}
+              <DbPanelButton variant="secondary" onClick={() => setShowDbPanel(false)}>
+                Close
+              </DbPanelButton>
+            </DbPanelActions>
+          </DbPanel>
+        )}
       </ChatPanel>
     </Overlay>
   );
