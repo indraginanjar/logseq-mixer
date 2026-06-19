@@ -80,3 +80,37 @@ export async function queryLiteLLM(
   const data = await response.json();
   return data;
 }
+
+export async function fetchLiteLLMModels(endpoint: string, apiKey: string): Promise<string[]> {
+  let modelsEndpoint = endpoint;
+  if (endpoint.endsWith('/chat/completions')) {
+    modelsEndpoint = endpoint.replace(/\/chat\/completions$/, '/models');
+  } else if (endpoint.endsWith('/chat/completions/')) {
+    modelsEndpoint = endpoint.replace(/\/chat\/completions\/$/, '/models');
+  } else {
+    try {
+      const url = new URL(endpoint);
+      url.pathname = url.pathname.replace(/\/chat\/completions$/, '/models');
+      modelsEndpoint = url.toString();
+    } catch {
+      modelsEndpoint = endpoint + '/models';
+    }
+  }
+
+  const response = await fetch(modelsEndpoint, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch models from LiteLLM: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (data && Array.isArray(data.data)) {
+    return data.data.map((m: any) => m.id);
+  }
+  throw new Error('Invalid response format from LiteLLM models endpoint');
+}

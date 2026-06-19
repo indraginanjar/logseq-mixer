@@ -19,6 +19,7 @@ import { aiEditModeState, settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
 import type { ExecutionResult } from './types/editTypes';
+import { fetchLiteLLMModels } from './LLMManager';
 
 // --- Animations ---
 
@@ -677,9 +678,27 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   };
 
   const currentModel = settings?.selectedModel || 'gpt-3.5-turbo';
-  const modelChoices = MODEL_CHOICES.includes(currentModel)
-    ? MODEL_CHOICES
-    : [currentModel, ...MODEL_CHOICES];
+  const [fetchedModels, setFetchedModels] = useState<string[]>(MODEL_CHOICES);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      if (settings?.LiteLLMLink) {
+        try {
+          const models = await fetchLiteLLMModels(settings.LiteLLMLink, settings.apiKey || '');
+          if (models && models.length > 0) {
+            setFetchedModels(models);
+          }
+        } catch (err) {
+          console.warn('Failed to fetch models from LiteLLM, using default list:', err);
+        }
+      }
+    };
+    loadModels();
+  }, [settings?.LiteLLMLink, settings?.apiKey]);
+
+  const modelChoices = fetchedModels.includes(currentModel)
+    ? fetchedModels
+    : [currentModel, ...fetchedModels];
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newModel = e.target.value;
