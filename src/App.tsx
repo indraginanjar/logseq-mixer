@@ -127,6 +127,42 @@ const HeaderButton = styled('button', {
   '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
 });
 
+const MODEL_CHOICES = [
+  'gpt-3.5-turbo',
+  'gpt-4',
+  'gpt-4o',
+  'claude-2',
+  'claude-3-opus',
+  'gemini-pro',
+  'codestral/codestral-latest',
+  'deepseek-chat',
+];
+
+const ModelSelect = styled('select', {
+  background: 'transparent',
+  border: '1px solid $slate6',
+  borderRadius: '6px',
+  padding: '4px 24px 4px 8px',
+  cursor: 'pointer',
+  color: '$slate10',
+  fontSize: '12px',
+  fontWeight: 500,
+  transition: 'all 0.15s',
+  outline: 'none',
+  fontFamily: '$sans',
+  appearance: 'none',
+  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 6px center',
+  backgroundSize: '12px',
+  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
+  '&:focus': { borderColor: '$blue8' },
+  '& option': {
+    backgroundColor: '$elevation0',
+    color: '$highContrast',
+  },
+});
+
 const MessagesContainer = styled('div', {
   flex: 1,
   overflowY: 'auto',
@@ -640,6 +676,16 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     }
   };
 
+  const currentModel = settings?.selectedModel || 'gpt-3.5-turbo';
+  const modelChoices = MODEL_CHOICES.includes(currentModel)
+    ? MODEL_CHOICES
+    : [currentModel, ...MODEL_CHOICES];
+
+  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newModel = e.target.value;
+    logseq.updateSettings({ selectedModel: newModel });
+  };
+
   if (!isVisible) return null;
 
   const buttonProps = getButtonState({ isIndexing, isCooldownActive: cooldownActive });
@@ -655,6 +701,17 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             <Title>Composer</Title>
           </HeaderLeft>
           <HeaderRight>
+            <ModelSelect
+              value={currentModel}
+              onChange={handleModelChange}
+              aria-label="Select Model"
+            >
+              {modelChoices.map((choice) => (
+                <option key={choice} value={choice}>
+                  {choice}
+                </option>
+              ))}
+            </ModelSelect>
             <HeaderButton onClick={handleNewSession} aria-label="New Session">✨ New</HeaderButton>
             <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close">✕</CloseButton>
           </HeaderRight>
