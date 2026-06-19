@@ -473,6 +473,13 @@ export class SQLiteVectorStore implements StorageProvider {
     await this.flushWithRetry();
   }
 
+  /** Get the size of the SQLite database in bytes */
+  async getDatabaseSize(): Promise<number> {
+    if (!this._db) return 0;
+    const data = this._db.export();
+    return data.byteLength;
+  }
+
   /** Get the stored chunking version, or null if not set. */
   getChunkingVersion(): string | null {
     if (!this._db) throw new Error('SQLite database not initialized');

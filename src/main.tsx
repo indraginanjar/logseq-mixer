@@ -51,7 +51,7 @@ function createLazyStorageProvider(backend: 'sqlite' | 'settings'): StorageProvi
   // Proxy all optional methods so they resolve lazily
   const optionalAsyncMethods = [
     'upsertDocuments', 'deleteDocuments', 'searchByVector',
-    'getDocumentMeta', 'save', 'load', 'importFromFile',
+    'getDocumentMeta', 'save', 'load', 'importFromFile', 'getDatabaseSize',
   ] as const;
 
   for (const method of optionalAsyncMethods) {

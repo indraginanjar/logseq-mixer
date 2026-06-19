@@ -21,6 +21,15 @@ import type { StorageProvider } from './storage/StorageProvider';
 import type { ExecutionResult } from './types/editTypes';
 import { fetchLiteLLMModels } from './LLMManager';
 
+function formatBytes(bytes: number, decimals = 2): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
 // --- Animations ---
 
 const slideIn = keyframes({
@@ -513,6 +522,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
+  const [dbSize, setDbSize] = useState<number | null>(null);
   const [indexingStatus, setIndexingStatus] = useState<IndexingResult | null>(null);
   const [isDismissing, setIsDismissing] = useState(false);
   const [progressCount, setProgressCount] = useState(getIndexingProgress);
@@ -525,7 +535,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     return () => { cancelCooldown(); };
   }, []);
 
-  // Poll document and page count every 10 seconds
+  // Poll document, page count, and database size every 10 seconds
   useEffect(() => {
     const fetchCount = async () => {
       if (storageProvider.getDocumentCount) {
@@ -538,6 +548,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         try {
           const count = await storageProvider.getPageCount();
           setPageCount(count);
+        } catch { /* ignore */ }
+      }
+      if (storageProvider.getDatabaseSize) {
+        try {
+          const size = await storageProvider.getDatabaseSize();
+          setDbSize(size);
         } catch { /* ignore */ }
       }
     };
@@ -843,6 +859,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               const pCount = await storageProvider.getPageCount();
               setPageCount(pCount);
             }
+            if (storageProvider.getDatabaseSize) {
+              const size = await storageProvider.getDatabaseSize();
+              setDbSize(size);
+            }
             
             window.logseq.UI.showMsg('Database imported successfully!', 'success');
           } else {
@@ -859,6 +879,28 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     };
     reader.readAsArrayBuffer(file);
     e.target.value = '';
+  };
+
+  const handleOpenDbPanel = async () => {
+    setShowDbPanel(true);
+    if (storageProvider.getDocumentCount) {
+      try {
+        const count = await storageProvider.getDocumentCount();
+        setDocCount(count);
+      } catch { /* ignore */ }
+    }
+    if (storageProvider.getPageCount) {
+      try {
+        const count = await storageProvider.getPageCount();
+        setPageCount(count);
+      } catch { /* ignore */ }
+    }
+    if (storageProvider.getDatabaseSize) {
+      try {
+        const size = await storageProvider.getDatabaseSize();
+        setDbSize(size);
+      } catch { /* ignore */ }
+    }
   };
 
   if (!isVisible) return null;
@@ -959,7 +1001,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
-              <ToolbarButton onClick={() => setShowDbPanel(true)}>🗄️ Database</ToolbarButton>
+              <ToolbarButton onClick={handleOpenDbPanel}>🗄️ Database</ToolbarButton>
               <ToolbarButton
                 variant={buttonProps.variant}
                 onClick={handleIndexDB}
@@ -986,6 +1028,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                   {settings?.storageBackend || 'SQLite'}
                 </DbStatValue>
               </DbStatRow>
+              {dbSize !== null && (
+                <DbStatRow>
+                  <DbStatLabel>Database Size</DbStatLabel>
+                  <DbStatValue>{formatBytes(dbSize)}</DbStatValue>
+                </DbStatRow>
+              )}
               <DbStatRow>
                 <DbStatLabel>Indexed Pages</DbStatLabel>
                 <DbStatValue>
