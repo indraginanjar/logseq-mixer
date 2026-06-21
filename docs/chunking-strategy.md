@@ -1,23 +1,31 @@
 # Chunking Strategy
 
-## Current Approach: Block-Based Chunking
+## Current Approach: Hierarchy-Aware Subtree Chunking
 
-The plugin chunks pages by Logseq's native unit — the block. Blocks are recursively flattened (including nested child blocks), block references and embeds are resolved to actual content, and adjacent blocks are grouped into chunks that respect block boundaries. No block is ever split mid-content.
+The plugin chunks pages respecting Logseq's hierarchical parent-child block structure. Blocks are recursively flattened, block references and embeds are resolved to their actual content, semantic groups are identified, and the blocks are grouped into chunks using a token-budget-aware hierarchy chunker. To preserve semantic context across chunk boundaries, parent ancestor chains are prepended as breadcrumbs, and overlapping blocks are carried over between adjacent chunks.
+
+---
 
 ## How It Works
 
-For each page, the plugin:
+For each page, the plugin runs the following processing pipeline:
 
-1. Fetches the page's block tree via `logseq.Editor.getPageBlocksTree()`
-2. Recursively flattens all blocks (including nested children) with indentation reflecting depth
-3. Resolves block references `((uuid))` and block embeds `{{embed ((uuid))}}` to actual content
-4. Groups adjacent block lines into chunks up to ~16,000 characters (derived from the model's 8,191 token limit × 2 chars/token)
-5. Prepends page metadata (id, name) to each chunk for context
-6. Each chunk gets its own embedding and database record
+1. **Fetch Blocks**: Retrieves the page's block tree via `logseq.Editor.getPageBlocksTree()`.
+2. **Flatten Hierarchy**: Recursively flattens all blocks (including nested children) using `flattenBlocks()`, formatting children with parent context breadcrumbs (`[parent > child] content`) and appending block properties (attributes).
+3. **Resolve References**: Scans block content for block references `((uuid))` and block embeds `{{embed ((uuid))}}` and resolves them to their actual referenced block content via `resolveBlockReferences()`.
+4. **Identify Semantic Groups**: Groups headings and their subsequent child subtrees into semantic units using `identifySemanticGroups()`.
+5. **Compute Token Lengths**: Evaluates the size of each block line using the real tokenizer (`countTokens()`) against the selected embedding model's maximum token limit (e.g., 8,191 tokens for OpenAI models).
+6. **Subtree Chunking**: Groups the block tree into cohesive chunks rooted at subtrees via `buildSubtreeChunks()`.
+7. **Prepend Context Headers**: Prepends a rich page metadata header (id, name, tags, outgoing links, and backlinks) to each chunk to ensure the embedding model and the LLM understand the global context of every chunk.
+8. **Prepend Ancestor Context**: Prepends parent breadcrumb context to chunks starting at a nested block depth.
+9. **Apply Overlap**: Prepends overlapping block lines from the tail of the previous chunk onto the head of the next chunk.
+10. **Store Block Metadata**: Extracts block UUIDs, parent page names, and content previews to populate the `block_metadata` table in SQLite for clickable citation link rendering.
+
+---
 
 ## Block Flattening
 
-The `flattenBlocks()` function recursively traverses the entire block tree:
+The `flattenBlocks()` function recursively traverses the block tree:
 
 ```
 Top-level block A
@@ -37,108 +45,113 @@ Becomes:
 [block:uuid-b] - Block B content
 ```
 
-Each block line is prefixed with a `[block:<uuid>]` annotation when the block has a UUID and non-empty content. Child blocks include a breadcrumb trail showing their parent context. These annotations are embedded in the chunk text so that when chunks are retrieved during search, the LLM can see which block each piece of content came from and cite it using `((uuid))` notation.
+Each block line is prefixed with a `[block:<uuid>]` annotation when the block has a UUID. Child blocks include a breadcrumb trail showing their parent context. These annotations are embedded in the chunk text so that when chunks are retrieved during search, the LLM can identify which block each piece of content came from and cite it using `((uuid))` notation.
 
-Blocks without a UUID or with empty content do not receive an annotation.
+---
 
-## Block Reference Resolution
+## Block Reference & Embed Resolution
 
-Before embedding, block content is scanned for two patterns:
+Before embedding, block content is scanned for references:
 
-| Pattern                        | Example                          | Resolution                              |
-|-------------------------------|----------------------------------|-----------------------------------------|
-| Block reference               | `((64a1b2c3-d4e5-...))`         | Replaced with the referenced block's text |
-| Block embed                   | `{{embed ((64a1b2c3-d4e5-...))}}` | Replaced with the embedded block's text   |
+| Pattern | Example | Resolution |
+| :--- | :--- | :--- |
+| **Block reference** | `((64a1b2c3-d4e5-...))` | Replaced with the referenced block's text |
+| **Block embed** | `{{embed ((64a1b2c3-d4e5-...))}}` | Replaced with the embedded block's text |
 
-Resolution uses `logseq.Editor.getBlock(uuid)` to fetch the actual content. A cache (`refCache`) prevents redundant API calls when the same block is referenced multiple times. The cache is cleared before each indexing run.
+Resolution uses `logseq.Editor.getBlock(uuid)` to fetch the actual content. A per-run cache (`refCache`) prevents redundant API calls when the same block is referenced multiple times. If a referenced block cannot be retrieved, the original syntax is kept as fallback.
 
-If a referenced block can't be fetched (deleted, invalid UUID), the original syntax is kept as fallback.
+---
 
-## Chunk Grouping
+## Subtree Chunking Algorithm
 
-Adjacent block lines are grouped into chunks using `groupBlocksIntoChunks()`:
+The default chunking algorithm is implemented in `buildSubtreeChunks()`:
 
-1. Start with the page header as the initial chunk content
-2. Append block lines one by one
-3. When adding a line would exceed the chunk character limit (~16,000 chars), finalize the current chunk and start a new one
-4. The new chunk starts with the page header again (so every chunk has page context)
-5. Block lines are never split — the boundary is always between complete blocks
+### 1. Heading Group Cohesion
+Heading blocks (`# Heading`) and their nested children are kept together in the same chunk if they fit within the token budget. If the combined heading subtree exceeds the budget, the chunker splits the subtree at child boundaries and prepends the heading content as ancestor context to the subsequent chunks.
 
-### Example
+### 2. Ancestor Context Breadcrumbs
+When a chunk begins at a nested child block, the chunker walks backward through the block tree to build a breadcrumb string of parent blocks (e.g., `Parent Block > Child Block`). If this context exceeds the truncation threshold (default: 60 characters per ancestor), ancestors are truncated to fit. This ancestor context is prepended to the chunk.
 
-A page with 50 blocks where blocks 1-30 fit in one chunk and blocks 31-50 fit in another:
+### 3. Chunk Overlap
+To prevent loss of context at chunk boundaries, adjacent chunks share overlapping blocks. The chunker takes the last block lines of the previous chunk and prepends them to the next chunk:
+- **Overlap limit**: Default is 15% (`OVERLAP_FRACTION = 0.15`) of the previous chunk's block count.
+- **Budget cap**: The total token length of overlapping blocks cannot exceed 20% (`MAX_OVERLAP_BUDGET = 0.20`) of the total chunk token limit.
+- **Single-chunk pages**: Pages that fit entirely within a single chunk do not receive any overlap.
 
-| Chunk   | ID                  | Content                                    |
-|---------|--------------------|--------------------------------------------|
-| Chunk 0 | `{pageId}_chunk_0` | Page header + blocks 1-30                  |
-| Chunk 1 | `{pageId}_chunk_1` | Page header + blocks 31-50                 |
+---
 
-If the entire page fits in one chunk, the record uses the plain page ID (no `_chunk_` suffix).
+## Alternative/Legacy Chunker: groupBlocksIntoChunks()
+
+`groupBlocksIntoChunks()` is an alternative linear adjacency-based chunker kept in `src/embedManager.ts` and used primarily in tests. It splits block lines sequentially:
+1. Groups consecutive blocks sharing a semantic group (heading group).
+2. Fits as many semantic groups and single lines as possible into a chunk.
+3. Finalizes the chunk when adding a block exceeds the budget, and carries over overlap lines to the next chunk.
+
+---
 
 ## Chunk IDs
 
-| Scenario              | ID Format              | Example          |
-|----------------------|------------------------|------------------|
-| Single chunk (short page) | `{pageId}`          | `42`             |
-| Multiple chunks       | `{pageId}_chunk_{n}`   | `42_chunk_0`, `42_chunk_1` |
+| Scenario | ID Format | Example |
+| :--- | :--- | :--- |
+| **Single chunk** (short page) | `{pageId}` | `42` |
+| **Multiple chunks** (long page) | `{pageId}_chunk_{n}` | `42_chunk_0`, `42_chunk_1` |
+
+---
 
 ## Page Metadata Header
 
-Every chunk is prefixed with:
+Every chunk is prefixed with metadata to retain global page context:
 
 ```
 note_id: {page.id}
 note_name: {page.name}
+note_tags: {tags} (optional)
+note_links: {outgoing links} (optional)
+note_backlinks: {backlinks} (optional)
 note_content:
-
 ```
 
-This ensures the embedding model and LLM know which page the blocks belong to, even when viewing a chunk in isolation.
+---
 
 ## Block Metadata Storage
 
-During indexing, the plugin also populates a `block_metadata` table that maps each block's UUID to its parent page name and a short content preview (first 50 characters, truncated with "…"). This metadata is used at render time to display meaningful labels on clickable block references and to navigate to the correct page when a block reference is clicked.
+During indexing, the plugin populates a `block_metadata` table to map block UUIDs to their parent page names and a short content preview (first 50 characters, truncated with "…"). This metadata is retrieved at query time to display helpful titles on clickable citations in the chat panel.
 
-| Column         | Type       | Description                                      |
-|---------------|------------|--------------------------------------------------|
-| uuid          | TEXT (PK)  | Block UUID from Logseq                           |
-| pageName      | TEXT       | Parent page name                                 |
-| contentPreview| TEXT       | First 50 chars of block content (truncated with "…") |
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| **`uuid`** | TEXT (PK) | Block UUID from Logseq |
+| **`pageName`** | TEXT | Parent page name |
+| **`contentPreview`** | TEXT | First 50 chars of block content (truncated with "…") |
 
-When a page is re-indexed, its old block metadata is deleted before new records are inserted. A full re-index clears all block metadata.
+---
 
 ## What Gets Chunked
 
-| Content Type              | Handling                                              |
-|--------------------------|-------------------------------------------------------|
-| Top-level blocks         | Included with `- ` prefix and `[block:uuid]` annotation |
-| Nested/child blocks      | Included with breadcrumb context and `[block:uuid]` annotation |
-| Block references `(())`  | Resolved to actual referenced block content            |
-| Block embeds `{{embed}}` | Resolved to actual embedded block content              |
-| Journal pages            | Included (individual journal entries like "Apr 15th")  |
-| Internal pages           | Skipped (cards, contents, favorites, `__*`, "journals" index) |
-| Empty blocks             | Skipped (only blocks with content are included)        |
+| Content Type | Handling |
+| :--- | :--- |
+| **Top-level blocks** | Included with `- ` prefix and `[block:uuid]` annotation |
+| **Nested/child blocks** | Included with breadcrumb context and `[block:uuid]` annotation |
+| **Block references** | Resolved to actual referenced block content |
+| **Block embeds** | Resolved to actual embedded block content |
+| **Journal pages** | Included (individual journal entries like "Apr 15th") |
+| **Internal pages** | Skipped (cards, contents, favorites, `__*`, "journals" index) |
+| **Empty blocks** | Skipped (only blocks with content are included) |
+
+---
 
 ## Limitations
 
-- **No semantic grouping**: Blocks are grouped by adjacency and size, not by topic. Two unrelated blocks next to each other may share a chunk.
-- **Single block overflow**: If a single block's content exceeds the chunk limit, it gets its own chunk and is truncated by the safety limit in `useGenerateEmbedding()`.
-- **No overlap between chunks**: Unlike sliding-window chunking, there's no overlap. Context at chunk boundaries may be split between two chunks.
-- **Reference resolution depth**: Only one level of references is resolved. If a referenced block itself contains references, those nested references are not resolved.
-- **Cache scope**: The reference cache is per-indexing-run. References resolved during auto-indexing may use stale cache entries within the same run.
+- **Single block overflow**: If a single block's content exceeds the chunk limit, it is split across multiple chunks using raw token slices.
+- **Cache scope**: The block reference cache is per-indexing-run. References resolved during auto-indexing may use stale cache entries within the same run.
+- **Reference resolution depth**: Only one level of references is resolved. If a referenced block itself contains references, those nested references are not resolved recursively.
 
-## Configuration
-
-| Parameter       | Value   | Location              | Description                          |
-|----------------|---------|----------------------|--------------------------------------|
-| maxTokens      | varies  | `src/embedManager.ts` | Model token limit from EMBEDDING_MODELS registry (8,191 for OpenAI models, 8,192/512/256 for Ollama models) |
-
-Not currently exposed as a plugin setting.
+---
 
 ## File Reference
 
-| File                   | Relevant Code                                                |
-|-----------------------|--------------------------------------------------------------|
-| `src/embedManager.ts` | `flattenBlocks()` (recursive block traversal with UUID annotation), `resolveBlockReferences()` (reference resolution), `groupBlocksIntoChunks()` (chunk grouping), `createContentPreview()` (block metadata preview truncation), `getEmbedingsAllNotes()` (full indexing), `getEmbeddingsForPage()` (incremental indexing, returns embeddings + block metadata) |
-| `src/indexManager.ts`  | `checkAndIndexUpdatedPages()` (incremental indexing with chunk cleanup via `deleteDocuments` + `upsertDocuments`, block metadata via `upsertBlockMetadata` + `deleteBlockMetadataForPage`) |
-| `src/storage/SQLiteVectorStore.ts` | Per-document storage of chunks (each chunk is a row in the `documents` table), block metadata storage (`block_metadata` table with `upsertBlockMetadata`, `deleteBlockMetadataForPage`, `clearBlockMetadata`, `getBlockMetadata`) |
+| File | Relevant Code |
+| :--- | :--- |
+| **`src/hierarchyChunker.ts`** | `buildSubtreeChunks()` (subtree-based chunking), `buildAncestorContext()` (ancestor context creation), `computeDepthWeight()` (subtree weight scoring). |
+| **`src/embedManager.ts`** | `flattenBlocks()` (recursive block flattening), `resolveBlockReferences()` (resolving refs), `identifySemanticGroups()` (semantic grouping), `buildPageHeader()` (metadata prepending), `getEmbedingsAllNotes()` / `getEmbeddingsForPage()` (orchestrating chunking + embedding pipeline), `groupBlocksIntoChunks()` (sequential chunking). |
+| **`src/indexManager.ts`** | `checkAndIndexUpdatedPages()` (calls single page embedding and handles SQLite CRUD). |
+| **`src/storage/SQLiteVectorStore.ts`** | Stores chunks in the `documents` table and block navigation data in the `block_metadata` table. |

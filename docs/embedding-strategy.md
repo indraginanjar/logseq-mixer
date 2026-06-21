@@ -253,8 +253,8 @@ The plugin uses several techniques to avoid blocking Logseq's main thread during
   ref resolution)         │
      │                    │
      ▼                    │
- groupBlocksIntoChunks()  │
-     │                    │
+  buildSubtreeChunks()     │
+      │                    │
      ▼                    ▼
  ┌───────────────────────────────────────┐
  │      useGenerateEmbedding()           │

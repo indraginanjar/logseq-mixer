@@ -1,187 +1,144 @@
-# Logseq Mixer ✍️
+<p align="center">
+  <img src="logseq.png" alt="Logseq Mixer Logo" width="128" height="128">
+</p>
 
-**Logseq Mixer** is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, originally created and developed by **[Martin Minarik](https://github.com/martindev9999)**. It is a plugin that connects your Logseq notes with any LLM using Retrieval-Augmented Generation (RAG).  
-Hope you find it useful! 😀👍🍀🍷
+<h1 align="center">Logseq Mixer</h1>
 
-### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button). By default, only new or updated pages are indexed — this is fast even for large vaults.
+<p align="center">
+  <strong>Connect your Logseq notes with any LLM using local/cloud vector embeddings, Hybrid RAG, and direct AI-powered block editing.</strong>
+</p>
 
-> **Note**: After updating to a version with clickable block references, a **full re-index** is required to populate block metadata and add block UUID annotations to your chunks.
-
-🎥 [Watch demo](https://www.youtube.com/watch?v=J0QDrz-Ccis)
-
-**Support the original author Martin Minarik ❤️**
-
-<a href="https://buymeacoffee.com/martinminarik" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important;width: 178px !important;" ></a>
-
----
-
-### ⚙️ How It Works
-
-- Uses [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) or local [Ollama](https://ollama.com/) models for semantic vector search
-- Stores each document embedding as an individual row in a SQLite database (via [sql.js](https://github.com/sql-js/sql.js)), persisted to IndexedDB
-- Retrieves related notes using RAG (HNSW-accelerated vector search + BM25 keyword search + RRF reranking)
-- Passes context into **any LLM** using [LiteLLM](https://github.com/BerriAI/litellm)
-- **AI Edit mode**: Toggle "AI Edit" in the toolbar to let the LLM insert, update, and delete blocks on your current page directly from the chat. The LLM sees your page's block tree (with UUIDs) and emits structured edit commands that the plugin executes via the Logseq Editor API
-- **Clickable block references**: The LLM cites specific blocks using `((uuid))` notation, rendered as teal-colored inline links that navigate directly to the source block on click
-- **Clickable page links**: Page names in `[[double brackets]]` are rendered as blue inline links that open the page in Logseq on click
-- Supports **all LiteLLM-compatible models**, including ChatGPT 4o, Claude, DeepSeek, Gemini, and local models via OLLAMA (with extra configuration)
-- Automatically migrates existing Orama-based embeddings to the new per-document format — no re-indexing needed
-- **Stop & cooldown**: While indexing is in progress, the Re-Index button becomes a stop button. Clicking stop halts indexing after the current page and starts a 1-minute cooldown during which the button is disabled and auto-indexing is suppressed
-- Plugin still runs without embeddings — the currently active note will be passed as fallback context
+<p align="center">
+  <a href="https://github.com/martindev9999/logseq-composer"><img src="https://img.shields.io/badge/fork--of-logseq--composer-blue?style=flat-square" alt="Fork of Logseq Composer"></a>
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License MIT">
+  <a href="https://buymeacoffee.com/martinminarik"><img src="https://img.shields.io/badge/sponsor-buy%20me%20a%20coffee-yellow?style=flat-square" alt="Sponsor Original Author"></a>
+</p>
 
 ---
 
-### ✏️ AI Edit Mode
+**Logseq Mixer** is a highly capable, RAG-powered AI assistant plugin for Logseq. It is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)** (originally created by **[Martin Minarik](https://github.com/martindev9999)**). 
 
-Toggle the "AI Edit" switch in the chat toolbar to enable block editing from the chat interface. When enabled:
+By combining semantic vector embeddings with keyword search and the Logseq Editor API, Logseq Mixer goes beyond simple chat interfaces: it understands the structure of your notes, retrieves the most relevant context, and can even edit your blocks directly from the chat.
 
-1. The plugin sends the current page's block tree (with block UUIDs) to the LLM alongside your message
-2. The LLM can respond with structured edit commands to insert, update, or delete blocks
-3. Commands are executed automatically via the Logseq Editor API
-4. A change summary shows what was modified after each edit
+**[Watch the Demo Video](https://www.youtube.com/watch?v=J0QDrz-Ccis)**
 
-Supported operations:
-- **Insert**: Add a new child block under any existing block
-- **Update**: Change the content of an existing block (including properties like `priority:: high`)
-- **Delete**: Remove a block
-
-If no page is open when AI Edit is enabled, the plugin falls back to normal chat mode with a warning.
+> [!IMPORTANT]
+> **Database Indexing Required:** For the LLM to access your files, you need to trigger a database index scan (using the green **Re-Index** button at the bottom-left of the chat panel). By default, Mixer uses **Incremental Indexing**, meaning only new or updated pages are processed—making it fast even for massive vaults.
+>
+> If you are upgrading from an older version that didn't support clickable block references, a **Full Re-Index** is required to populate block metadata and associate block UUID annotations with your text chunks.
 
 ---
 
-### ⚠️ Fork Notice & Acknowledgments
+## Key Features
 
-This project is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, which was originally developed by Martin Minarik. We are incredibly grateful to the original author for building such a solid foundation.
-
-If something breaks or you'd like to suggest a feature or improvement for **Logseq Mixer**:
-- Please be patient 🙏
-- Check out the original project or file an issue/pull request on this fork's repository.
-
----
-
-### 🛠 Plugin Settings (Detailed)
-
-You can configure these in the Logseq plugin UI:
-
-- **`selectedModel`**  
-  - Example: `"gpt-4o"`  
-  - The name of the LLM model to use. This is passed directly into LiteLLM, so it should match a valid model from the provider you're using.
-
-- **`prompt`**  
-  - This is the custom prompt shown to the LLM with every query.  
-  - The word `"context"` inside your prompt is replaced by the text content pulled from your notes (via vector search or current page).  
-  - Default is tuned for productivity, but you can customize it for different LLM personalities or task types.
-
-- **`EmbeddingApiKey`**  
-  - Used for generating vector embeddings of your notes (for semantic search).  
-  - Required for OpenAI embedding models. Not needed when using Ollama (local models).  
-  - If not set and provider is OpenAI, vector search is skipped and only the current Logseq note is passed as context.  
-  - You do **not** need this if you're using Ollama or if you're okay with simpler functionality.
-
-- **`embeddingModel`**  
-  - Choose the embedding model for vector search.  
-  - OpenAI models: `text-embedding-3-small` (default), `text-embedding-ada-002`, `text-embedding-3-large`.  
-  - Ollama models: `nomic-embed-text` (768d, 8192 tokens), `mxbai-embed-large` (1024d, 512 tokens), `all-minilm` (384d, 256 tokens).  
-  - Changing this will re-create the vector database.
-
-- **`embeddingProvider`**  
-  - Choose between `"openai"` (default) and `"ollama"`.  
-  - **openai**: Cloud-based embeddings via the OpenAI API. Requires an API key.  
-  - **ollama**: Local embeddings via a running Ollama instance. No API key needed.
-
-- **`embeddingEndpoint`**  
-  - The URL for embedding API requests.  
-  - Default: `https://api.openai.com/v1/embeddings`  
-  - For Ollama, set to `http://localhost:11434/api/embeddings`.  
-  - Leave empty to use the default OpenAI endpoint.
-
-- **`LiteLLMLink`**   
-  - The full endpoint to your LiteLLM instance.  
-  - Default value:  
-    ```
-    http://127.0.0.1:4000/chat/completions
-    ```
-  - This defaults to a local LiteLLM instance. Install and run [LiteLLM](https://github.com/BerriAI/litellm) locally, or point this to your own hosted instance.
-
-- **`apiKey`**  
-  - The API key used to authenticate your request with the actual LLM provider (OpenAI, Anthropic, Google, etc.).  
-  - This key is passed to LiteLLM which handles routing and forwarding it properly.  
-  - **Keep this secure**, especially if using shared or public LiteLLM endpoints.
-
-- **`indexingMode`**  
-  - Choose between `"incremental"` (default) and `"full"`.  
-  - **Incremental**: Only embeds pages that are new or have been updated since the last index. Fast and cost-efficient.  
-  - **Full**: Wipes the vector database and re-embeds every page from scratch. Use this if you suspect the index is corrupted or want a clean rebuild.  
-  - ⚠️ **Important**: After running a full re-index, switch this setting back to `"incremental"`. Leaving it on `"full"` means every future Re-Index click will delete all your existing embeddings and start over, wasting API credits and time.
-
-- **`storageBackend`**  
-  - Choose between `"sqlite"` (default) and `"settings"`.  
-  - **sqlite**: Per-document storage in a sql.js SQLite database persisted to IndexedDB. Scales to large graphs without memory issues.  
-  - **settings**: Legacy Orama-based storage in Logseq plugin settings. Suitable for small graphs only.
-
-- **`autoEmbedEnabled`**  
-  - Default: `true`  
-  - Controls whether the plugin automatically generates embeddings when pages are edited.  
-  - When enabled, page edits trigger background indexing after the configured debounce delay.  
-  - When disabled, only manual re-indexing (via the Re-Index button) generates embeddings.  
-  - The toggle can also be controlled from the "Auto-Embed: On/Off" switch in the chat panel toolbar.
-
-- **`autoIndexDebounceSeconds`**  
-  - Default: `300` (5 minutes)  
-  - How long to wait (in seconds) after the last page change before auto-indexing starts.  
-  - Higher values reduce API calls but delay index updates. Minimum 10 seconds.  
-  - Set to a lower value (e.g., `60`) if you want faster index updates, or higher (e.g., `600`) to save API credits.
+- **SQLite Vector Storage (IndexedDB):** Stores document embeddings in a robust, local SQLite database (powered by [sql.js](https://github.com/sql-js/sql.js)) running in IndexedDB, scaling efficiently to large knowledge graphs.
+- **Advanced Hybrid RAG:** Matches your queries using a state-of-the-art hybrid pipeline combining HNSW-accelerated vector search, BM25 keyword search, and Reciprocal Rank Fusion (RRF) reranking.
+- **AI Edit Mode:** Let the LLM insert, update, or delete blocks directly on your active page. When toggled, the LLM receives the active page's block tree structure and emits actions executed via the Logseq Editor API.
+- **Inline References & Links:**
+  - **Clickable block references:** The LLM cites source blocks using standard `((uuid))` notation, rendered as clickable teal-colored inline links.
+  - **Clickable page links:** References to pages in `[[double brackets]]` are styled as blue links that open target pages on click.
+- **Multi-Provider Support:** Supports any model compatible with **[LiteLLM](https://github.com/BerriAI/litellm)** (OpenAI, Anthropic Claude, Google Gemini, DeepSeek, local Ollama, etc.).
+- **Background Auto-Indexing:** Detects workspace changes and automatically re-indexes changed pages in the background after a customizable debounce period.
+- **Stop & Cooldown Controls:** Halt indexing at any point. The Re-Index button transforms into a "Stop" button during active runs, initiating a short cooldown to let the editor settle.
 
 ---
 
-### 📚 Documentation
+## Installation & Setup
 
-For deeper technical details, see the docs in the [`docs/`](./docs/) folder:
+### 1. Prerequisites (Run LiteLLM Proxy)
+Logseq Mixer communicates with your models using a running **[LiteLLM](https://github.com/BerriAI/litellm)** proxy server. LiteLLM is a lightweight, local proxy that offers an OpenAI-compatible interface for over 100+ LLM providers.
 
-- [Embedding Strategy](./docs/embedding-strategy.md) — how pages are chunked, embedded, and stored; startup performance; auto-indexing and stop/cooldown behavior
-- [Chunking Strategy](./docs/chunking-strategy.md) — block-based chunking, semantic grouping, and overlap
-- [Retrieval Strategy](./docs/retrieval-strategy.md) — hybrid search pipeline (BM25 + HNSW vector search + RRF reranking), AI Edit mode, prompt construction
-
----
-
-### 📦 Installation
-
-#### Prerequisites
-
-This plugin requires a running [LiteLLM](https://github.com/BerriAI/litellm) proxy server. LiteLLM is a lightweight proxy that provides a unified OpenAI-compatible API for 100+ LLM providers (OpenAI, Anthropic, Google, local models, etc.).
-
-**Quick setup:**
-
+To set up the proxy:
 ```bash
+# Install LiteLLM via pip
 pip install litellm
+
+# Start the proxy (example using GPT-4o)
 litellm --model gpt-4o --port 4000
 ```
+This starts the proxy server at `http://127.0.0.1:4000/chat/completions`, which is the default endpoint Mixer looks for. You can configure any [LiteLLM-supported provider or model](https://docs.litellm.ai/docs/providers).
 
-This starts a local proxy at `http://127.0.0.1:4000` that the plugin connects to by default. You can use any [LiteLLM-supported model](https://docs.litellm.ai/docs/providers) — just change the `--model` flag.
+### 2. Install the Plugin
+#### Option A: Marketplace
+Install **Logseq Mixer** directly from the built-in Logseq Plugin Marketplace (once approved).
 
-For persistent configuration, see the [LiteLLM docs](https://docs.litellm.ai/docs/).
-
-#### Plugin setup
-
-1. Install the plugin from the Logseq Marketplace (once approved), or build from source
-2. Ensure LiteLLM is running (see above)
-3. Open plugin settings and configure:
-   - **`apiKey`** — your LLM provider API key (OpenAI, Anthropic, etc.)
-   - **`selectedModel`** — the model name (must match what LiteLLM supports)
-   - **`EmbeddingApiKey`** — (optional) API key for OpenAI embeddings, enables semantic search
-   - **`LiteLLMLink`** — defaults to `http://127.0.0.1:4000/chat/completions`; change if your LiteLLM instance is elsewhere
-4. Click the ✍️ icon in the Logseq toolbar to open the Mixer panel
-5. (Optional) Click "🔄 Re-Index" to build the vector database for semantic search
+#### Option B: Manual Installation (From Source)
+If you want to run the latest development build:
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/martindev9999/logseq-composer.git logseq-mixer
+   cd logseq-mixer
+   ```
+2. Install dependencies and build the plugin:
+   ```bash
+   # Using pnpm
+   pnpm install
+   pnpm run build
+   pnpm run postbuild
+   
+   # Or using yarn
+   yarn install
+   yarn run build
+   yarn run postbuild
+   ```
+3. Open Logseq, enable **Developer Mode** in Settings > Advanced.
+4. Click `Load unpacked plugin`, navigate to the `logseq-mixer` directory, and select the `dist` directory or the project root.
 
 ---
 
-### 📄 License
+## Configuration Settings
 
-This project is open-source and licensed under the **MIT License**.  
-You're free to:
-- Use
-- Copy
-- Modify
-- Distribute
+Configure these settings inside the Logseq Plugin settings page:
 
-Please see the [`LICENSE`](./LICENSE) file for full details.
+| Setting Key | Type | Default Value | Description |
+| :--- | :--- | :--- | :--- |
+| **`selectedModel`** | String | `"gpt-4o"` | The name of the LLM model to use (passed directly to LiteLLM). |
+| **`apiKey`** | Password | *None* | The API key used to authenticate with your LLM provider. |
+| **`LiteLLMLink`** | String | `http://127.0.0.1:4000/chat/completions` | The local or hosted LiteLLM completion server endpoint. |
+| **`prompt`** | Text | *Default System Prompt* | The system prompt template sent to the LLM. The string `"context"` is replaced by the retrieved notes. |
+| **`embeddingProvider`** | Enum | `"openai"` | Choose between `"openai"` (cloud-based) or `"ollama"` (local embeddings). |
+| **`EmbeddingApiKey`** | Password | *None* | API Key for generating OpenAI embeddings. Not required if using Ollama. |
+| **`embeddingModel`** | Enum | `"text-embedding-3-small"` | Model used for vector embeddings. Choices: OpenAI (`text-embedding-3-small`, `text-embedding-ada-002`, `text-embedding-3-large`) or Ollama (`nomic-embed-text`, `mxbai-embed-large`, `all-minilm`). Changing this triggers a full vector database rebuild. |
+| **`embeddingEndpoint`** | String | `https://api.openai.com/v1/embeddings` | The API endpoint for generating embeddings. For local Ollama, set to `http://localhost:11434/api/embeddings`. |
+| **`indexingMode`** | Enum | `"incremental"` | **`incremental`** only updates changed pages. **`full`** rebuilds the entire database from scratch. *(Note: Switch back to incremental after running a full index to avoid wasting API credits).* |
+| **`storageBackend`** | Enum | `"sqlite"` | **`sqlite`** uses local SQLite database (IndexedDB). **`settings`** is the legacy Orama-based storage (recommended for small graphs only). |
+| **`autoEmbedEnabled`** | Boolean | `true` | When true, page modifications trigger background embedding generation. |
+| **`autoIndexDebounceSeconds`** | Number | `300` | Delay in seconds to wait after your last edit before background auto-indexing kicks in. |
+
+---
+
+## AI Edit Mode
+
+Toggle the **AI Edit** switch in the chat panel's toolbar to allow the LLM to directly write to and modify your open page.
+
+1. **Hierarchy Context:** Mixer compiles the active page's blocks, attributes, and block UUIDs, passing them to the LLM.
+2. **Structured Actions:** The LLM responds with structured edits specifying the targets of its actions.
+3. **Execution:** The plugin runs the edits using Logseq's native API:
+   - **Insert:** Add a nested block under any block UUID.
+   - **Update:** Edit the text or properties of an existing block.
+   - **Delete:** Safely remove blocks.
+4. **Summary:** A change summary is displayed showing exactly what blocks were created or altered.
+
+---
+
+## Technical Documentation
+
+For details on the internals and design choices behind the plugin, check the technical specification files:
+
+- [Embedding Strategy](./docs/embedding-strategy.md) — Chunking mechanisms, vector generation, and performance optimization.
+- [Chunking Strategy](./docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
+- [Retrieval Strategy](./docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
+
+---
+
+## Fork Notice & Acknowledgments
+
+This project is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, developed by **[Martin Minarik](https://github.com/martindev9999)**. We want to extend our sincere thanks to Martin for building and open-sourcing the original version of this software.
+
+If you enjoy this plugin and want to support the original creator's efforts, please consider buying him a coffee:
+
+<p align="left">
+  <a href="https://buymeacoffee.com/martinminarik" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important; width: 178px !important;" >
+  </a>
+</p>
