@@ -11,7 +11,6 @@
 <p align="center">
   <a href="https://github.com/martindev9999/logseq-composer"><img src="https://img.shields.io/badge/fork--of-logseq--composer-blue?style=flat-square" alt="Fork of Logseq Composer"></a>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License MIT">
-  <a href="https://buymeacoffee.com/martinminarik"><img src="https://img.shields.io/badge/sponsor-buy%20me%20a%20coffee-yellow?style=flat-square" alt="Sponsor Original Author"></a>
 </p>
 
 ---
@@ -136,11 +135,3 @@ For details on the internals and design choices behind the plugin, check the tec
 ## Fork Notice & Acknowledgments
 
 This project is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, developed by **[Martin Minarik](https://github.com/martindev9999)**. We want to extend our sincere thanks to Martin for building and open-sourcing the original version of this software.
-
-If you enjoy this plugin and want to support the original creator's efforts, please consider buying him a coffee:
-
-<p align="left">
-  <a href="https://buymeacoffee.com/martinminarik" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important; width: 178px !important;" >
-  </a>
-</p>
