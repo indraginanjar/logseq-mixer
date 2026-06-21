@@ -2,7 +2,7 @@
 
 ## Overview
 
-Logseq Composer uses Retrieval-Augmented Generation (RAG) to provide the LLM with relevant context from the user's notes. When a user sends a query, the plugin runs a hybrid search pipeline that combines BM25 keyword search with vector similarity search, merges results via Reciprocal Rank Fusion (RRF), and injects the top-ranked chunks into the LLM prompt alongside conversation history and the currently open page.
+Logseq Mixer uses Retrieval-Augmented Generation (RAG) to provide the LLM with relevant context from the user's notes. When a user sends a query, the plugin runs a hybrid search pipeline that combines BM25 keyword search with vector similarity search, merges results via Reciprocal Rank Fusion (RRF), and injects the top-ranked chunks into the LLM prompt alongside conversation history and the currently open page.
 
 ## Retrieval Pipeline
 

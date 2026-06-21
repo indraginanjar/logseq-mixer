@@ -140,7 +140,7 @@ async function main() {
     zIndex: 11,
   });
 
-  const toolbarButtonKey = 'logseq-composer';
+  const toolbarButtonKey = 'logseq-mixer';
 
   logseq.provideStyle(`
     div[data-injected-ui=${toolbarButtonKey}-${key}] {

@@ -32,11 +32,11 @@ jobs:
           mkdir release
           cp -r dist/* release/
           cp package.json README.md LICENSE logseq.png release/
-          cd release && zip -r ../logseq-composer.zip .
+          cd release && zip -r ../logseq-mixer.zip .
 
       - name: Upload plugin zip to release
         uses: softprops/action-gh-release@v1
         with:
-          files: logseq-composer.zip
+          files: logseq-mixer.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

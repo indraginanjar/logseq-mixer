@@ -1,5 +1,5 @@
 {
-  "name": "logseq-composer",
+  "name": "logseq-mixer",
   "version": "0.0.1",
   "author": "Martin Minarik",
   "description": "Plugin that connects all of your notes with any LLM",
@@ -12,7 +12,7 @@
   "scripts": {
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "postbuild": "node -e \"const fs=require('fs'),p=require('path');fs.copyFileSync('package.json','dist/package.json');if(fs.existsSync('README.md'))fs.copyFileSync('README.md','dist/README.md');if(fs.existsSync('logseq.png'))fs.copyFileSync('logseq.png','dist/logseq.png');if(process.env.CI!=='true'){const d=p.join(require('os').homedir(),'.logseq/plugins/logseq-bradder-plugin');fs.mkdirSync(d,{recursive:true});fs.cpSync('dist',d,{recursive:true})}\"",
+    "postbuild": "node -e \"const fs=require('fs'),p=require('path');fs.copyFileSync('package.json','dist/package.json');if(fs.existsSync('README.md'))fs.copyFileSync('README.md','dist/README.md');if(fs.existsSync('logseq.png'))fs.copyFileSync('logseq.png','dist/logseq.png');if(process.env.CI!=='true'){const d=p.join(require('os').homedir(),'.logseq/plugins/logseq-mixer');fs.mkdirSync(d,{recursive:true});fs.cpSync('dist',d,{recursive:true})}\"",
     "dev": "yarn && yarn build && yarn postbuild"
   },
   "dependencies": {
@@ -55,8 +55,8 @@
     "chrome 80"
   ],
   "logseq": {
-    "id": "logseq-composer",
-    "title": "Logseq Composer",
+    "id": "logseq-mixer",
+    "title": "Logseq Mixer",
     "icon": "logseq.png"
   }
 }

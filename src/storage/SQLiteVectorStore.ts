@@ -20,7 +20,7 @@ export class SQLiteVectorStore implements StorageProvider {
   private _SQL: any = null;
   private _bulkMode: boolean = false;
   private readonly idbKey: string;
-  private static readonly DB_NAME = 'logseq-composer-vectors';
+  private static readonly DB_NAME = 'logseq-mixer-vectors';
   private static readonly STORE_NAME = 'sqlite';
 
   constructor(graphPath: string) {
@@ -534,9 +534,9 @@ export class SQLiteVectorStore implements StorageProvider {
 
   // --- IndexedDB helpers ---
 
-  private openIDB(): Promise<IDBDatabase> {
+  private openIDB(dbName: string = SQLiteVectorStore.DB_NAME): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(SQLiteVectorStore.DB_NAME, 1);
+      const request = indexedDB.open(dbName, 1);
       request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains(SQLiteVectorStore.STORE_NAME)) {
@@ -560,13 +560,31 @@ export class SQLiteVectorStore implements StorageProvider {
   }
 
   private async idbLoad(): Promise<ArrayBuffer | null> {
-    const db = await this.openIDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(SQLiteVectorStore.STORE_NAME, 'readonly');
-      const store = tx.objectStore(SQLiteVectorStore.STORE_NAME);
-      const request = store.get(this.idbKey);
-      request.onsuccess = () => { db.close(); resolve(request.result ?? null); };
-      request.onerror = () => { db.close(); reject(request.error); };
-    });
+    // First try the new DB_NAME
+    let data = await this.idbLoadFromDb(SQLiteVectorStore.DB_NAME);
+    if (!data) {
+      // Fallback to legacy DB_NAME
+      data = await this.idbLoadFromDb('logseq-composer-vectors');
+      if (data) {
+        console.info('[SQLiteVectorStore] Found legacy database in logseq-composer-vectors. Will migrate to logseq-mixer-vectors on next save.');
+      }
+    }
+    return data;
+  }
+
+  private async idbLoadFromDb(dbName: string): Promise<ArrayBuffer | null> {
+    try {
+      const db = await this.openIDB(dbName);
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(SQLiteVectorStore.STORE_NAME, 'readonly');
+        const store = tx.objectStore(SQLiteVectorStore.STORE_NAME);
+        const request = store.get(this.idbKey);
+        request.onsuccess = () => { db.close(); resolve(request.result ?? null); };
+        request.onerror = () => { db.close(); reject(request.error); };
+      });
+    } catch (err) {
+      console.warn(`[SQLiteVectorStore] Failed to load from IndexedDB database: ${dbName}`, err);
+      return null;
+    }
   }
 }

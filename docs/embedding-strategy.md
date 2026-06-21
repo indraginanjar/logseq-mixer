@@ -2,7 +2,7 @@
 
 ## Overview
 
-Logseq Composer uses embedding models to generate vector embeddings for all user notes. The plugin supports both cloud-based OpenAI models and local Ollama models, configurable via plugin settings. Users can choose between six embedding models across two providers to balance cost, speed, privacy, and quality. These embeddings power semantic search via RAG (Retrieval-Augmented Generation), allowing the LLM to find and reference relevant notes when answering queries.
+Logseq Mixer uses embedding models to generate vector embeddings for all user notes. The plugin supports both cloud-based OpenAI models and local Ollama models, configurable via plugin settings. Users can choose between six embedding models across two providers to balance cost, speed, privacy, and quality. These embeddings power semantic search via RAG (Retrieval-Augmented Generation), allowing the LLM to find and reference relevant notes when answering queries.
 
 ## Embedding Providers
 

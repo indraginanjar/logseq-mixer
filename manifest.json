@@ -1,5 +1,5 @@
 {
-  "name": "logseq-composer",
+  "name": "logseq-mixer",
   "version": "v0.0.1",
   "author": "Martin Minarik",
   "main": "index.html",
@@ -14,8 +14,8 @@
     "chrome 80"
   ],
   "logseq": {
-    "id": "logseq-composer",
-    "title":"Logseq Composer",
+    "id": "logseq-mixer",
+    "title":"Logseq Mixer",
     "icon": "logseq.png"
   }
 }

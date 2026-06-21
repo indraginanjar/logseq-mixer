@@ -1,6 +1,6 @@
-# Logseq Composer ✍️
+# Logseq Mixer ✍️
 
-**Logseq Composer** is a plugin that connects your Logseq notes with any LLM using Retrieval-Augmented Generation (RAG).  
+**Logseq Mixer** is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, originally created and developed by **[Martin Minarik](https://github.com/martindev9999)**. It is a plugin that connects your Logseq notes with any LLM using Retrieval-Augmented Generation (RAG).  
 Hope you find it useful! 😀👍🍀🍷
 
 ### For the LLM to have access to your files you NEED TO RE-INDEX DB (bottom left green button). By default, only new or updated pages are indexed — this is fast even for large vaults.
@@ -9,7 +9,7 @@ Hope you find it useful! 😀👍🍀🍷
 
 🎥 [Watch demo](https://www.youtube.com/watch?v=J0QDrz-Ccis)
 
-**Support me to help the project ❤️**
+**Support the original author Martin Minarik ❤️**
 
 <a href="https://buymeacoffee.com/martinminarik" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important;width: 178px !important;" ></a>
 
@@ -49,13 +49,13 @@ If no page is open when AI Edit is enabled, the plugin falls back to normal chat
 
 ---
 
-### ⚠️ Early Stage Notice
+### ⚠️ Fork Notice & Acknowledgments
 
-This is my **first Logseq plugin**, and it's still in **heavy development** with updates coming soon.  
-If something breaks or you'd like to suggest a feature or improvement:
+This project is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, which was originally developed by Martin Minarik. We are incredibly grateful to the original author for building such a solid foundation.
 
+If something breaks or you'd like to suggest a feature or improvement for **Logseq Mixer**:
 - Please be patient 🙏
-- [Create an issue](https://github.com/martindev9999/logseq-composer/issues)
+- Check out the original project or file an issue/pull request on this fork's repository.
 
 ---
 
@@ -170,7 +170,7 @@ For persistent configuration, see the [LiteLLM docs](https://docs.litellm.ai/doc
    - **`selectedModel`** — the model name (must match what LiteLLM supports)
    - **`EmbeddingApiKey`** — (optional) API key for OpenAI embeddings, enables semantic search
    - **`LiteLLMLink`** — defaults to `http://127.0.0.1:4000/chat/completions`; change if your LiteLLM instance is elsewhere
-4. Click the ✍️ icon in the Logseq toolbar to open the Composer panel
+4. Click the ✍️ icon in the Logseq toolbar to open the Mixer panel
 5. (Optional) Click "🔄 Re-Index" to build the vector database for semantic search
 
 ---

@@ -915,7 +915,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         <Header>
           <HeaderLeft>
             <LogoIcon>✍️</LogoIcon>
-            <Title>Composer</Title>
+            <Title>Mixer</Title>
           </HeaderLeft>
           <HeaderRight>
             <ModelSelect
