@@ -20,7 +20,9 @@
 
 By combining semantic vector embeddings with keyword search and the Logseq Editor API, Logseq Mixer goes beyond simple chat interfaces: it understands the structure of your notes, retrieves the most relevant context, and can even edit your blocks directly from the chat.
 
-**[Watch the Demo Video](https://www.youtube.com/watch?v=J0QDrz-Ccis)**
+<p align="center">
+  <img src="https://raw.githubusercontent.com/indraginanjar/logseq-mixer/dev/docs/assets/demo.gif" alt="Logseq Mixer Demo" width="800">
+</p>
 
 > [!IMPORTANT]
 > **Database Indexing Required:** For the LLM to access your files, you need to trigger a database index scan (using the green **Re-Index** button at the bottom-left of the chat panel). By default, Mixer uses **Incremental Indexing**, meaning only new or updated pages are processed—making it fast even for massive vaults.
