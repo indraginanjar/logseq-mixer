@@ -1,7 +1,7 @@
 {
   "name": "logseq-mixer",
-  "version": "0.0.1",
-  "author": "Martin Minarik",
+  "version": "0.0.2",
+  "author": "Indra Ginanjar",
   "description": "Plugin that connects all of your notes with any LLM",
   "main": "index.html",
   "effect": "true",
@@ -56,7 +56,7 @@
   ],
   "logseq": {
     "id": "logseq-mixer",
-    "title": "Logseq Mixer",
+    "title": "Mixer",
     "icon": "logseq.png"
   }
 }

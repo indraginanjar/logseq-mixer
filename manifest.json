@@ -1,7 +1,7 @@
 {
   "name": "logseq-mixer",
-  "version": "v0.0.1",
-  "author": "Martin Minarik",
+  "version": "v0.0.2",
+  "author": "Indra Ginanjar",
   "main": "index.html",
   "effect":"true",
   "sponsors":["https://buymeacoffee.com/martinminarik"],
@@ -15,7 +15,7 @@
   ],
   "logseq": {
     "id": "logseq-mixer",
-    "title":"Logseq Mixer",
+    "title": "Mixer",
     "icon": "logseq.png"
   }
 }

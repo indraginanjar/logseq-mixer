@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logseq.png" alt="Logseq Mixer Logo" width="128" height="128">
+  <img src="https://raw.githubusercontent.com/indraginanjar/logseq-mixer/dev/logseq.png" alt="Logseq Mixer Logo" width="128" height="128">
 </p>
 
 <h1 align="center">Logseq Mixer</h1>
@@ -125,9 +125,9 @@ Toggle the **AI Edit** switch in the chat panel's toolbar to allow the LLM to di
 
 For details on the internals and design choices behind the plugin, check the technical specification files:
 
-- [Embedding Strategy](./docs/embedding-strategy.md) — Chunking mechanisms, vector generation, and performance optimization.
-- [Chunking Strategy](./docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
-- [Retrieval Strategy](./docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
+- [Embedding Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/embedding-strategy.md) — Chunking mechanisms, vector generation, and performance optimization.
+- [Chunking Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
+- [Retrieval Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
 
 ---
 
