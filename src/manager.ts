@@ -233,29 +233,21 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     userBudget -= countTokens(editContextText);
   }
 
-  const recentHistory = conversationHistory.slice(-MAX_HISTORY_LENGTH);
-  let historyText = "";
-  if (recentHistory.length > 0) {
-    const limit = Math.floor(userBudget * 0.20);
-    let historyEntries: string[] = [];
-    let historyTokens = 0;
-    for (let i = recentHistory.length - 1; i >= 0; i--) {
-      const entry = recentHistory[i];
-      const entryText = entry.role === "user"
-        ? "User: " + entry.content + "\n"
-        : "Assistant: " + entry.content + "\n";
-      const entryTokens = countTokens(entryText);
-      if (historyTokens + entryTokens > limit && historyEntries.length > 0) {
-        break;
-      }
-      historyEntries.unshift(entryText);
-      historyTokens += entryTokens;
+  // Build multi-turn history messages (excluding the current query which is already the last entry)
+  const historyForMessages = conversationHistory.slice(0, -1).slice(-MAX_HISTORY_LENGTH);
+  let historyTokenBudget = Math.floor(userBudget * 0.20);
+  const historyMessages: ChatMessage[] = [];
+  let historyTokensUsed = 0;
+  for (let i = historyForMessages.length - 1; i >= 0; i--) {
+    const entry = historyForMessages[i];
+    const entryTokens = countTokens(entry.content);
+    if (historyTokensUsed + entryTokens > historyTokenBudget && historyMessages.length > 0) {
+      break;
     }
-    if (historyEntries.length > 0) {
-      historyText = "Conversation History:\n" + historyEntries.join("") + "\n";
-      userBudget -= countTokens(historyText);
-    }
+    historyMessages.unshift({ role: entry.role, content: entry.content });
+    historyTokensUsed += entryTokens;
   }
+  userBudget -= historyTokensUsed;
 
   let pageContextText = "";
   try {
@@ -293,16 +285,17 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     userBudget -= countTokens(vectorContextText);
   }
 
-  // Combine components into userMessage
+  // Combine context into the current user message
   let userMessage = "";
-  if (historyText) userMessage += historyText;
   if (pageContextText) userMessage += pageContextText;
   if (vectorContextText) userMessage += vectorContextText;
   if (editContextText) userMessage += editContextText;
+  userMessage += query;
 
-  // Build the messages array with proper roles.
+  // Build the messages array with proper multi-turn format
   const messages: ChatMessage[] = [
     { role: 'system', content: systemMessage },
+    ...historyMessages,
     { role: 'user', content: userMessage },
   ];
 
