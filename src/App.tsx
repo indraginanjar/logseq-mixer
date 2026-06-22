@@ -388,6 +388,22 @@ const ToolbarRow = styled('div', {
   marginTop: '8px',
 });
 
+const ImageButton = styled('button', {
+  width: '28px',
+  height: '28px',
+  borderRadius: '6px',
+  border: 'none',
+  backgroundColor: 'transparent',
+  color: '$gray11',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+  '&:hover:not(:disabled)': { backgroundColor: '$gray4' },
+  '&:disabled': { opacity: 0.4, cursor: 'default' },
+});
+
 const StatusText = styled('span', {
   fontSize: '11px',
   color: '$slate9',
@@ -519,6 +535,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedDraft, setSavedDraft] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
@@ -619,6 +637,25 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  const handleImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => setImageDataUrl(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) handleImageFile(file);
+        break;
+      }
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(e.target.value);
     const el = e.target;
@@ -667,7 +704,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         }
       }
 
-      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode);
+      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode, imageDataUrl ?? undefined);
+      setImageDataUrl(null);
       abortControllerRef.current = null;
 
       if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
@@ -990,13 +1028,30 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         )}
 
         <InputArea>
+          {imageDataUrl && (
+            <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <img src={imageDataUrl} alt="attached" style={{ maxHeight: 48, maxWidth: 80, borderRadius: 4 }} />
+              <button onClick={() => setImageDataUrl(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>✕</button>
+            </div>
+          )}
           <InputWrapper>
+            <input
+              ref={imageFileRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]); e.target.value = ''; }}
+            />
+            <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach image" disabled={loading}>
+              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z" fill="currentColor"/></svg>
+            </ImageButton>
             <TextArea
               ref={textareaRef}
               placeholder={loading ? 'Thinking...' : 'Ask about your notes...'}
               value={inputMessage}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               disabled={loading}
               rows={4}
             />

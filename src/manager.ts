@@ -5,7 +5,7 @@ import { buildEditSystemPrompt, buildPageContextMessage } from 'editPromptBuilde
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
-import { queryLiteLLM, type ChatMessage, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
+import { queryLiteLLM, type ChatMessage, type MessageContentPart, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
 import { rerankWithRRF, type SearchHit } from 'reranker';
 import { countTokens, encode, decode } from 'tokenizer';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
@@ -144,7 +144,7 @@ function truncateToTokens(text: string, maxTokens: number): string {
   return decode(tokens.slice(0, maxTokens)) + "\n... (truncated to fit model context limit)";
 }
 
-export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean): Promise<string | EditQueryResult> {
+export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string): Promise<string | EditQueryResult> {
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
@@ -293,13 +293,23 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   if (pageContextText) userMessage += pageContextText;
   if (vectorContextText) userMessage += vectorContextText;
   if (editContextText) userMessage += editContextText;
+  if (editMode && imageDataUrl) {
+    userMessage += `\nAttached Image Data URI (use this in block content with ![](data_uri) syntax):\n${imageDataUrl}\n\n`;
+  }
   userMessage += query;
 
   // Build the messages array with proper multi-turn format
+  const userContent: string | MessageContentPart[] = imageDataUrl
+    ? [
+        { type: 'text', text: userMessage },
+        { type: 'image_url', image_url: { url: imageDataUrl } },
+      ]
+    : userMessage;
+
   const messages: ChatMessage[] = [
     { role: 'system', content: systemMessage },
     ...historyMessages,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: userContent },
   ];
 
   console.info(`[handleQuery] System message length: ${systemMessage.length} chars`);

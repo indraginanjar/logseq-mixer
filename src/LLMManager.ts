@@ -1,7 +1,11 @@
 
+export type MessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | MessageContentPart[];
 };
 
 /** Max output tokens per model. Falls back to 4096 for unknown models. */
