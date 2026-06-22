@@ -866,6 +866,9 @@ describe('Edit mode handleSubmit flow', () => {
       pageUUID: 'page-uuid-123',
       formattedTree: '[uuid:abc] - Block content',
       blockCount: 1,
+      selectedBlockUUID: null,
+      selectedBlockContent: null,
+      isSelectedBlockEmpty: false,
     });
     mockHandleQuery.mockResolvedValue({
       text: 'I updated the heading for you.',
@@ -910,6 +913,9 @@ describe('Edit mode handleSubmit flow', () => {
       pageUUID: 'page-uuid-123',
       formattedTree: '[uuid:abc] - Block content',
       blockCount: 1,
+      selectedBlockUUID: null,
+      selectedBlockContent: null,
+      isSelectedBlockEmpty: false,
     });
     mockHandleQuery.mockResolvedValue({
       text: 'Here are the changes.',
@@ -995,6 +1001,9 @@ describe('Edit mode handleSubmit flow', () => {
       pageUUID: 'page-uuid-123',
       formattedTree: '[uuid:abc] - Block content',
       blockCount: 1,
+      selectedBlockUUID: null,
+      selectedBlockContent: null,
+      isSelectedBlockEmpty: false,
     });
     mockHandleQuery.mockResolvedValue({
       text: 'No changes needed.',
@@ -1067,6 +1076,9 @@ describe('No active page warning in edit mode', () => {
       pageUUID: 'page-uuid-123',
       formattedTree: '[uuid:abc] - Block content',
       blockCount: 1,
+      selectedBlockUUID: null,
+      selectedBlockContent: null,
+      isSelectedBlockEmpty: false,
     });
     mockHandleQuery.mockResolvedValue({
       text: 'I updated the block.',

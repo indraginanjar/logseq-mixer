@@ -25,19 +25,22 @@ describe('buildEditSystemPrompt', () => {
 
 describe('buildPageContextMessage', () => {
   it('includes the page name in the output', () => {
-    const result = buildPageContextMessage('My Page', '[uuid:a-1] - Block');
+    const result = buildPageContextMessage('My Page', 'page-uuid', null, null, false, '[uuid:a-1] - Block');
     expect(result).toContain('My Page');
   });
 
   it('includes the formatted tree in the output', () => {
     const tree = '[uuid:aaa-111] - First\n  [uuid:bbb-222] - Child';
-    const result = buildPageContextMessage('Test', tree);
+    const result = buildPageContextMessage('Test', 'test-uuid', null, null, false, tree);
     expect(result).toContain(tree);
   });
 
   it('formats as Page header followed by Blocks section', () => {
-    const result = buildPageContextMessage('Notes', '[uuid:x] - content');
-    expect(result).toMatch(/^Page:.*"Notes"/);
+    const result = buildPageContextMessage('Notes', 'notes-uuid', 'selected-uuid', 'hello', false, '[uuid:x] - content');
+    expect(result).toMatch(/^Page Name:.*"Notes"/);
     expect(result).toContain('Blocks:');
+    expect(result).toContain('notes-uuid');
+    expect(result).toContain('selected-uuid');
+    expect(result).toContain('hello');
   });
 });

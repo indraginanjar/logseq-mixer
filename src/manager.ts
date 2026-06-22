@@ -219,7 +219,14 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Build the user message parts budget-consciously.
   let editContextText = "";
   if (editMode && editPageContext) {
-    const rawEditContext = buildPageContextMessage(editPageContext.pageName, editPageContext.formattedTree);
+    const rawEditContext = buildPageContextMessage(
+      editPageContext.pageName,
+      editPageContext.pageUUID,
+      editPageContext.selectedBlockUUID,
+      editPageContext.selectedBlockContent,
+      editPageContext.isSelectedBlockEmpty,
+      editPageContext.formattedTree
+    );
     // Allocate up to 35% of userBudget
     const limit = Math.floor(userBudget * 0.35);
     editContextText = truncateToTokens(rawEditContext, limit);
@@ -252,7 +259,13 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   let pageContextText = "";
   try {
-    const page = await logseq.Editor.getCurrentPage();
+    let page = await logseq.Editor.getCurrentPage();
+    if (page === null) {
+      const currentBlock = await logseq.Editor.getCurrentBlock();
+      if (currentBlock && currentBlock.page) {
+        page = await logseq.Editor.getPage(currentBlock.page.id);
+      }
+    }
     if (page !== null) {
       const pageContent = await logseq.Editor.getPageBlocksTree(page.uuid);
       let wholePageContent = "";

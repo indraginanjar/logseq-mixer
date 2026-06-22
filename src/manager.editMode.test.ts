@@ -67,7 +67,6 @@ describe('handleQuery – edit mode', () => {
   beforeEach(() => {
     clearConversationHistory();
 
-    // Mock global logseq object
     (globalThis as any).logseq = {
       Editor: {
         getCurrentPage: vi.fn().mockResolvedValue({
@@ -78,6 +77,8 @@ describe('handleQuery – edit mode', () => {
         getPageBlocksTree: vi.fn().mockResolvedValue([
           { uuid: 'b-1', content: 'Block one', children: [] },
         ]),
+        getCurrentBlock: vi.fn().mockResolvedValue(null),
+        getPage: vi.fn(),
       },
     };
 

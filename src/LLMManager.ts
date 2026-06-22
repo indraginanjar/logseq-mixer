@@ -19,6 +19,18 @@ const MODEL_MAX_TOKENS: Record<string, number> = {
 const DEFAULT_MAX_TOKENS = 4096;
 
 export function getMaxTokensForModel(model: string): number {
+  const normalized = model.toLowerCase();
+  // Reasoning/thinking models need a much larger completion token budget because
+  // their thinking tokens are counted against the max completion tokens limit.
+  if (normalized.includes('gpt-5')) {
+    return 128000;
+  }
+  if (normalized.includes('o3-') || normalized.startsWith('o3')) {
+    return 100000;
+  }
+  if (normalized.includes('o1-') || normalized.startsWith('o1')) {
+    return 65536;
+  }
   return MODEL_MAX_TOKENS[model] ?? DEFAULT_MAX_TOKENS;
 }
 
@@ -39,8 +51,8 @@ export function getContextLimitForModel(model: string): number {
     return MODEL_CONTEXT_LIMITS[model];
   }
   // Keyword matching for unknown models
-  if (normalized.includes('gpt-5')) return 128000;
-  if (normalized.includes('o1-') || normalized.startsWith('o1')) return 128000;
+  if (normalized.includes('gpt-5')) return 400000;
+  if (normalized.includes('o1-') || normalized.startsWith('o1')) return 200000;
   if (normalized.includes('o3-') || normalized.startsWith('o3')) return 200000;
   if (normalized.includes('gpt-4o')) return 128000;
   if (normalized.includes('gpt-4')) return 8192;

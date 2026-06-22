@@ -63,22 +63,32 @@ export async function getActivePageContext(): Promise<{
   pageUUID: string;
   formattedTree: string;
   blockCount: number;
+  selectedBlockUUID: string | null;
+  selectedBlockContent: string | null;
+  isSelectedBlockEmpty: boolean;
 } | null> {
   try {
-    const page = await logseq.Editor.getCurrentPage();
+    let page = await logseq.Editor.getCurrentPage();
+    const currentBlock = await logseq.Editor.getCurrentBlock();
+    if (page === null && currentBlock && currentBlock.page) {
+      page = await logseq.Editor.getPage(currentBlock.page.id);
+    }
     if (page === null) {
       return null;
     }
 
     const pageName: string = String(page.name ?? page.originalName ?? '');
     const pageUUID: string = String(page.uuid ?? '');
+    const selectedBlockUUID = currentBlock ? String(currentBlock.uuid) : null;
+    const selectedBlockContent = currentBlock ? String(currentBlock.content ?? '') : null;
+    const isSelectedBlockEmpty = currentBlock ? !currentBlock.content?.trim() : false;
 
     const rawBlocks = await logseq.Editor.getPageBlocksTree(pageName);
     const blockNodes = mapToBlockNodes(rawBlocks ?? []);
     const formattedTree = formatBlockTree(blockNodes);
     const blockCount = countBlocks(blockNodes);
 
-    return { pageName, pageUUID, formattedTree, blockCount };
+    return { pageName, pageUUID, formattedTree, blockCount, selectedBlockUUID, selectedBlockContent, isSelectedBlockEmpty };
   } catch (err) {
     console.error('Failed to get active page context:', err);
     return null;

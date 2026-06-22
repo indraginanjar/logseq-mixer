@@ -3,10 +3,10 @@ import { EditAction, EditCommand, ParseResult } from './types/editTypes';
 const VALID_ACTIONS: ReadonlySet<string> = new Set(['insert', 'update', 'delete']);
 
 /**
- * Regex to match ```json-edit ... ``` fenced code blocks.
+ * Regex to match ```json-edit ... ``` or ```json ... ``` fenced code blocks.
  * Captures the content between the fences.
  */
-const JSON_EDIT_BLOCK_RE = /```json-edit\s*\n([\s\S]*?)```/g;
+const JSON_EDIT_BLOCK_RE = /```(?:json-edit|json)\s*\n([\s\S]*?)```/g;
 
 /**
  * Validate a single command object against the EditCommand schema.
@@ -20,6 +20,10 @@ export function validateEditCommand(obj: unknown): EditCommand | null {
 
   const raw = obj as Record<string, unknown>;
 
+  // Normalize key casing (e.g. blockUUID vs blockUuid vs uuid)
+  const blockUUID = (raw.blockUUID ?? raw.blockUuid ?? raw.uuid) as string | undefined;
+  const parentBlockUUID = (raw.parentBlockUUID ?? raw.parentBlockUuid) as string | undefined;
+
   if (typeof raw.action !== 'string' || !VALID_ACTIONS.has(raw.action)) {
     console.warn('[editCommandParser] Invalid or missing action:', raw.action);
     return null;
@@ -28,17 +32,17 @@ export function validateEditCommand(obj: unknown): EditCommand | null {
   const action = raw.action as EditAction;
 
   if (action === 'insert') {
-    if (typeof raw.parentBlockUUID !== 'string' || typeof raw.content !== 'string') {
+    if (typeof parentBlockUUID !== 'string' || typeof raw.content !== 'string') {
       console.warn('[editCommandParser] insert requires parentBlockUUID and content:', raw);
       return null;
     }
   } else if (action === 'update') {
-    if (typeof raw.blockUUID !== 'string' || typeof raw.content !== 'string') {
+    if (typeof blockUUID !== 'string' || typeof raw.content !== 'string') {
       console.warn('[editCommandParser] update requires blockUUID and content:', raw);
       return null;
     }
   } else if (action === 'delete') {
-    if (typeof raw.blockUUID !== 'string') {
+    if (typeof blockUUID !== 'string') {
       console.warn('[editCommandParser] delete requires blockUUID:', raw);
       return null;
     }
@@ -46,8 +50,8 @@ export function validateEditCommand(obj: unknown): EditCommand | null {
 
   const cmd: EditCommand = { action };
 
-  if (typeof raw.blockUUID === 'string') cmd.blockUUID = raw.blockUUID;
-  if (typeof raw.parentBlockUUID === 'string') cmd.parentBlockUUID = raw.parentBlockUUID;
+  if (typeof blockUUID === 'string') cmd.blockUUID = blockUUID;
+  if (typeof parentBlockUUID === 'string') cmd.parentBlockUUID = parentBlockUUID;
   if (typeof raw.content === 'string') cmd.content = raw.content;
   if (typeof raw.siblingOrder === 'number') cmd.siblingOrder = raw.siblingOrder;
 

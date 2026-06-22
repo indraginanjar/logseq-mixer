@@ -58,6 +58,8 @@ describe('getActivePageContext', () => {
       Editor: {
         getCurrentPage: vi.fn(),
         getPageBlocksTree: vi.fn(),
+        getCurrentBlock: vi.fn().mockResolvedValue(null),
+        getPage: vi.fn(),
       },
     };
   });
