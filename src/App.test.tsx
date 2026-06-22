@@ -37,6 +37,7 @@ vi.mock('./manager', () => ({
   enableAutoIndexer: vi.fn(),
   handleQuery: vi.fn(),
   indexEntireLogSeq: vi.fn(() => Promise.resolve({ outcome: 'completed', pagesProcessed: 0 })),
+  verifyResponse: vi.fn(() => Promise.resolve(null)),
 }));
 
 // Mock useAppVisible to always return true so the component renders
@@ -138,6 +139,7 @@ vi.mock('./components/ChangeSummary', () => ({
 vi.mock('./blockExecutor', () => ({
   executeAll: vi.fn(),
   executeOne: vi.fn(),
+  verifyAndCorrect: vi.fn(() => Promise.resolve([])),
 }));
 
 // Mock blockTreeFormatter

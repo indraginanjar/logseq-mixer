@@ -24,4 +24,11 @@ export interface ExecutionResult {
   failedCount: number;
   deniedCount: number;
   outcomes: OperationOutcome[];
+  verificationFailures?: VerificationFailure[];
+}
+
+export interface VerificationFailure {
+  command: EditCommand;
+  reason: string;
+  corrected: boolean;
 }

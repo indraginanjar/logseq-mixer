@@ -3,10 +3,10 @@ import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
-import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
+import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq, verifyResponse } from 'manager';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { executeAll } from './blockExecutor';
+import { executeAll, verifyAndCorrect } from './blockExecutor';
 import { getActivePageContext } from './blockTreeFormatter';
 import { getButtonState } from './buttonState';
 import { AutoEmbedToggle } from './components/AutoEmbedToggle';
@@ -681,14 +681,44 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
         if (editResp.commands.length > 0) {
           const result = await executeAll(editResp.commands);
+          // Verify edits actually took effect and retry failures
+          const failures = await verifyAndCorrect(result);
+          if (failures.length > 0) {
+            result.verificationFailures = failures;
+            const lines = failures.map(f => {
+              const action = f.command.action;
+              const status = f.corrected ? '✓ corrected' : '✗ still failing';
+              return `• ${action}: ${f.reason} [${status}]`;
+            });
+            setMessages(prev => [...prev, {
+              id: Date.now() + '_verify',
+              content: `⚠️ Verification found ${failures.length} issue(s):\n${lines.join('\n')}`,
+              sender: 'assistant',
+            }]);
+          }
           setEditResults(prev => new Map(prev).set(assistantMsgId, result));
         }
       } else {
+        const responseText = typeof resp === 'string' ? resp : resp.text;
+        const assistantMsgId = Date.now() + '_assistant';
         setMessages(prev => [...prev, {
-          id: Date.now() + '_assistant',
-          content: typeof resp === 'string' ? resp : resp.text,
+          id: assistantMsgId,
+          content: responseText,
           sender: 'assistant',
         }]);
+
+        // Verify long responses for correctness
+        const verification = await verifyResponse(messageToSend, responseText, settings);
+        if (verification?.corrected) {
+          setMessages(prev => prev.map(m =>
+            m.id === assistantMsgId ? { ...m, content: verification.correctedResponse } : m
+          ));
+          setMessages(prev => [...prev, {
+            id: Date.now() + '_verify',
+            content: `⚠️ The previous response was reviewed and corrected.\n\n**What was fixed:** ${verification.explanation}`,
+            sender: 'assistant',
+          }]);
+        }
       }
     } catch (err: any) {
       abortControllerRef.current = null;

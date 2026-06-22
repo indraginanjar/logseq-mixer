@@ -21,6 +21,9 @@ const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }
 // Set maximum number of history messages to include in the prompt (e.g., last 6 messages)
 const MAX_HISTORY_LENGTH = 6;
 
+/** Character length threshold above which responses trigger self-verification. */
+const VERIFY_RESPONSE_THRESHOLD = 800;
+
 export interface EditQueryResult {
   text: string;           // LLM response with json-edit blocks stripped
   commands: EditCommand[]; // parsed edit commands (may be empty)
@@ -330,3 +333,59 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   return assistantResponse;
 }
 
+
+export interface VerificationResult {
+  corrected: boolean;
+  correctedResponse: string;
+  explanation: string;
+}
+
+/**
+ * Verify a long/complex LLM response by sending it back for a correctness check.
+ * Returns null if the response is below threshold or passes verification.
+ * Returns a VerificationResult with the corrected response if issues were found.
+ */
+export async function verifyResponse(
+  query: string,
+  response: string,
+  settings: any,
+  signal?: AbortSignal
+): Promise<VerificationResult | null> {
+  if (response.length < VERIFY_RESPONSE_THRESHOLD) return null;
+
+  const verifyMessages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `You are a verification assistant. Review the following AI response for correctness, coherence, and factual accuracy given the user's original question. If the response is correct, reply with exactly: VERIFIED. If there are issues, reply in this exact format:\n---CORRECTION---\n<the corrected response>\n---EXPLANATION---\n<brief explanation of what was wrong and what you fixed>`,
+    },
+    {
+      role: 'user',
+      content: `Original question: ${query}\n\nAI response to verify:\n${response}`,
+    },
+  ];
+
+  try {
+    const result = await queryLiteLLM(verifyMessages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal);
+    const verdict = result.choices[0].message.content.trim();
+    if (verdict === 'VERIFIED' || verdict.startsWith('VERIFIED')) {
+      return null;
+    }
+    // Parse structured correction response
+    let correctedResponse = verdict;
+    let explanation = 'The response was corrected for accuracy.';
+    const correctionIdx = verdict.indexOf('---CORRECTION---');
+    const explanationIdx = verdict.indexOf('---EXPLANATION---');
+    if (correctionIdx !== -1 && explanationIdx !== -1) {
+      correctedResponse = verdict.slice(correctionIdx + '---CORRECTION---'.length, explanationIdx).trim();
+      explanation = verdict.slice(explanationIdx + '---EXPLANATION---'.length).trim();
+    }
+    // Replace the history entry with the corrected version
+    if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'assistant') {
+      conversationHistory[conversationHistory.length - 1].content = correctedResponse;
+    }
+    return { corrected: true, correctedResponse, explanation };
+  } catch (err) {
+    console.error('[verifyResponse] Verification failed, using original response:', err);
+    return null;
+  }
+}
