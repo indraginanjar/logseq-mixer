@@ -637,7 +637,16 @@ const getMarkdownComponents = (
         </code>
       </pre>
     );
-  }
+  },
+  img: ({ src, alt, ...props }: any) => (
+    <img
+      src={src}
+      alt={alt || ''}
+      {...props}
+      style={{ maxWidth: '100%', borderRadius: 6 }}
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+    />
+  )
 });
 
 const renderMarkdownWithProperties = (
