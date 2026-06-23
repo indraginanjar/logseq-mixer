@@ -11,10 +11,10 @@ export async function executeOne(command: EditCommand): Promise<OperationOutcome
         if (!command.parentBlockUUID) {
           return { command, status: 'error', error: 'Missing parentBlockUUID for insert command' };
         }
-        await logseq.Editor.insertBlock(command.parentBlockUUID, command.content ?? '', {
+        const newBlock = await logseq.Editor.insertBlock(command.parentBlockUUID, command.content ?? '', {
           sibling: false,
         });
-        return { command, status: 'success' };
+        return { command, status: 'success', insertedBlockUUID: newBlock?.uuid };
       }
       case 'update': {
         if (!command.blockUUID) {

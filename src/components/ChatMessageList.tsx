@@ -638,15 +638,46 @@ const getMarkdownComponents = (
       </pre>
     );
   },
-  img: ({ src, alt, ...props }: any) => (
-    <img
-      src={src}
-      alt={alt || ''}
-      {...props}
-      style={{ maxWidth: '100%', borderRadius: 6 }}
-      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-    />
-  )
+  img: ({ src, alt, ...props }: any) => {
+    const handleCopyImage = async () => {
+      try {
+        const res = await fetch(src);
+        const blob = await res.blob();
+        const pngBlob = blob.type === 'image/png' ? blob
+          : await new Promise<Blob>((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.getContext('2d')!.drawImage(img, 0, 0);
+                canvas.toBlob((b) => resolve(b!), 'image/png');
+              };
+              img.src = src;
+            });
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+        const btn = document.activeElement as HTMLElement;
+        if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = '📋 Copy Image'; }, 1500); }
+      } catch (err) {
+        console.error('Failed to copy image:', err);
+      }
+    };
+    return (
+      <span style={{ display: 'inline-block', position: 'relative' }}>
+        <img
+          src={src}
+          alt={alt || ''}
+          {...props}
+          style={{ maxWidth: '100%', borderRadius: 6, display: 'block' }}
+          onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
+        />
+        <button
+          onClick={handleCopyImage}
+          style={{ position: 'absolute', top: 4, right: 4, fontSize: 11, padding: '2px 6px', borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: 'rgba(255,255,255,0.9)', cursor: 'pointer' }}
+        >📋 Copy Image</button>
+      </span>
+    );
+  }
 });
 
 const renderMarkdownWithProperties = (

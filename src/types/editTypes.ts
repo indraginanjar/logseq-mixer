@@ -17,6 +17,7 @@ export type OperationOutcome = {
   command: EditCommand;
   status: 'success' | 'error' | 'denied';
   error?: string;
+  insertedBlockUUID?: string;
 };
 
 export interface ExecutionResult {

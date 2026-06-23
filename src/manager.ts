@@ -294,7 +294,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   if (vectorContextText) userMessage += vectorContextText;
   if (editContextText) userMessage += editContextText;
   if (editMode && imageDataUrl) {
-    userMessage += `\nAttached Image Data URI (use this in block content with ![](data_uri) syntax):\n${imageDataUrl}\n\n`;
+    userMessage += `\nNote: The user has attached an image to this message. You can see it in the image content. If inserting it into a block, use "![attached image]()" as placeholder — the system will handle the actual image embedding via Logseq's native paste mechanism.\n\n`;
   }
   userMessage += query;
 

@@ -704,7 +704,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         }
       }
 
-      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode, imageDataUrl ?? undefined);
+      const attachedImage = imageDataUrl;
+      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode, attachedImage ?? undefined);
       setImageDataUrl(null);
       abortControllerRef.current = null;
 
@@ -719,6 +720,30 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
         if (editResp.commands.length > 0) {
           const result = await executeAll(editResp.commands);
+
+          // If user attached an image and a command contains image placeholder,
+          // provide a downloadable link since plugin cannot write to clipboard or assets
+          if (attachedImage) {
+            const imgOutcome = result.outcomes.find(o =>
+              o.status === 'success' &&
+              (o.command.action === 'insert' || o.command.action === 'update') &&
+              o.command.content?.includes('![') && o.command.content?.includes(']()')
+            );
+            if (imgOutcome) {
+              const blockToEdit = imgOutcome.command.action === 'insert'
+                ? imgOutcome.insertedBlockUUID
+                : imgOutcome.command.blockUUID;
+              if (blockToEdit) {
+                try { await logseq.Editor.editBlock(blockToEdit); } catch {}
+              }
+              setMessages(prev => [...prev, {
+                id: Date.now() + '_imgpaste',
+                content: `📷 A block has been created for the image. To insert it:\n1. Right-click the image below and **"Copy Image"**\n2. Press **Ctrl+V** in the editing block\n\nLogseq will save it to assets automatically.\n\n![attached image](${attachedImage})`,
+                sender: 'assistant',
+              }]);
+            }
+          }
+
           // Verify edits actually took effect and retry failures
           const failures = await verifyAndCorrect(result);
           if (failures.length > 0) {
