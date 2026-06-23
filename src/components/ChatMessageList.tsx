@@ -13,6 +13,7 @@ export type ChatMessage = {
   id: string | number;
   content: string;
   sender: 'user' | 'assistant';
+  image?: string;
 };
 
 const fadeIn = keyframes({
@@ -876,6 +877,33 @@ export default function ChatMessageList({ messages, editResults, getBlockMetadat
             <MessageRow align={msg.sender}>
               {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
               <Bubble role={msg.sender}>
+                {msg.image && (
+                  <span style={{ display: 'inline-block', position: 'relative', marginBottom: 6 }}>
+                    <img src={msg.image} alt="attached" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(msg.image!);
+                          const blob = await res.blob();
+                          const pngBlob = blob.type === 'image/png' ? blob
+                            : await new Promise<Blob>((resolve) => {
+                                const img = new Image();
+                                img.onload = () => {
+                                  const c = document.createElement('canvas');
+                                  c.width = img.width; c.height = img.height;
+                                  c.getContext('2d')!.drawImage(img, 0, 0);
+                                  c.toBlob((b) => resolve(b!), 'image/png');
+                                };
+                                img.src = msg.image!;
+                              });
+                          await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+                        } catch {}
+                      }}
+                      title="Copy image"
+                      style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, padding: 0, border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4, background: 'rgba(255,255,255,0.85)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}
+                    >📋</button>
+                  </span>
+                )}
                 {renderMarkdownWithProperties(
                   msg.content,
                   msg.sender === 'assistant',

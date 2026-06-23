@@ -678,6 +678,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         id: Date.now() + '_user',
         content: messageToSend,
         sender: 'user',
+        image: imageDataUrl ?? undefined,
       };
       setMessages(prev => [...prev, userMessage]);
     }
