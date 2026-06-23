@@ -706,23 +706,30 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       }
 
       const attachedImage = imageDataUrl;
-      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode, attachedImage ?? undefined);
       setImageDataUrl(null);
+      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode, attachedImage ?? undefined);
       abortControllerRef.current = null;
 
       if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
         const editResp = resp;
         const assistantMsgId = Date.now() + '_assistant';
-        setMessages(prev => [...prev, {
-          id: assistantMsgId,
-          content: editResp.text,
-          sender: 'assistant',
-        }]);
 
         // Filter out commands that only contain image placeholders
         const commands = editResp.commands.filter(c =>
           !(c.content && /^!\[.*?\]\(\s*\)$/.test(c.content.trim()))
         );
+
+        // If image commands were filtered and text is minimal, use a better message
+        const filteredCount = editResp.commands.length - commands.length;
+        const displayText = (filteredCount > 0 && editResp.text.trim().length < 5)
+          ? 'Image received. Use the copy-paste instructions below to insert it into your page.'
+          : editResp.text;
+
+        setMessages(prev => [...prev, {
+          id: assistantMsgId,
+          content: displayText,
+          sender: 'assistant',
+        }]);
 
         if (commands.length > 0) {
           const result = await executeAll(commands);
