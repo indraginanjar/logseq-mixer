@@ -1108,23 +1108,6 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             )}
           </InputWrapper>
           <ToolbarRow>
-            {isIndexing ? (
-              <StatusIndicator variant="progress">
-                Indexing… {progressCount} pages processed
-              </StatusIndicator>
-            ) : indexingStatus?.outcome === 'completed' ? (
-              <StatusIndicator variant="success" dismissing={isDismissing || undefined}>
-                ✓ Indexing complete — {docCount?.toLocaleString()} chunks indexed{pageCount ? ` from ${pageCount.toLocaleString()} pages` : ''}
-              </StatusIndicator>
-            ) : indexingStatus?.outcome === 'paused' ? (
-              <StatusIndicator variant="paused">
-                ⏸ Indexing paused
-              </StatusIndicator>
-            ) : (
-              <StatusText>
-                {docCount !== null && <>📊 {docCount.toLocaleString()} chunks indexed{pageCount ? ` from ${pageCount.toLocaleString()} pages` : ''}</>}
-              </StatusText>
-            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
@@ -1139,6 +1122,17 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               </ToolbarButton>
             </div>
           </ToolbarRow>
+          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2, paddingLeft: 2 }}>
+            {isIndexing ? (
+              <span>Indexing… {progressCount} pages processed</span>
+            ) : indexingStatus?.outcome === 'completed' ? (
+              <span style={isDismissing ? { opacity: 0 } : undefined}>✓ Indexing complete · {docCount?.toLocaleString()} chunks{pageCount ? ` · ${pageCount.toLocaleString()} pages` : ''}</span>
+            ) : indexingStatus?.outcome === 'paused' ? (
+              <span>⏸ Indexing paused</span>
+            ) : docCount !== null ? (
+              <span>📊 {docCount.toLocaleString()} chunks{pageCount ? ` · ${pageCount.toLocaleString()} pages` : ''}</span>
+            ) : null}
+          </div>
           <div style={{ fontSize: 11, color: activePageName ? '#6b7280' : '#f59e0b', marginTop: 4, paddingLeft: 2 }}>
             {activePageName ? `📄 ${activePageName}` : '⚠ No active page'}
           </div>
