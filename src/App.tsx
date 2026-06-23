@@ -536,6 +536,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedDraft, setSavedDraft] = useState('');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [activePageName, setActivePageName] = useState<string | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
@@ -551,6 +552,23 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   // Cancel cooldown timer on unmount
   useEffect(() => {
     return () => { cancelCooldown(); };
+  }, []);
+
+  // Track active page name
+  useEffect(() => {
+    const updatePage = async () => {
+      try {
+        let page = await logseq.Editor.getCurrentPage();
+        if (!page) {
+          const block = await logseq.Editor.getCurrentBlock();
+          if (block?.page) page = await logseq.Editor.getPage(block.page.id);
+        }
+        setActivePageName(page?.name as string ?? null);
+      } catch { setActivePageName(null); }
+    };
+    updatePage();
+    const id = setInterval(updatePage, 3000);
+    return () => clearInterval(id);
   }, []);
 
   // Poll document, page count, and database size every 10 seconds
@@ -1121,6 +1139,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               </ToolbarButton>
             </div>
           </ToolbarRow>
+          <div style={{ fontSize: 11, color: activePageName ? '#6b7280' : '#f59e0b', marginTop: 4, paddingLeft: 2 }}>
+            {activePageName ? `📄 ${activePageName}` : '⚠ No active page'}
+          </div>
         </InputArea>
 
         {showDbPanel && (
