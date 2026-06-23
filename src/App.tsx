@@ -719,31 +719,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           sender: 'assistant',
         }]);
 
-        if (editResp.commands.length > 0) {
-          const result = await executeAll(editResp.commands);
+        // Filter out commands that only contain image placeholders
+        const commands = editResp.commands.filter(c =>
+          !(c.content && /^!\[.*?\]\(\s*\)$/.test(c.content.trim()))
+        );
 
-          // If user attached an image and a command contains image placeholder,
-          // provide a downloadable link since plugin cannot write to clipboard or assets
-          if (attachedImage) {
-            const imgOutcome = result.outcomes.find(o =>
-              o.status === 'success' &&
-              (o.command.action === 'insert' || o.command.action === 'update') &&
-              o.command.content?.includes('![') && o.command.content?.includes(']()')
-            );
-            if (imgOutcome) {
-              const blockToEdit = imgOutcome.command.action === 'insert'
-                ? imgOutcome.insertedBlockUUID
-                : imgOutcome.command.blockUUID;
-              if (blockToEdit) {
-                try { await logseq.Editor.editBlock(blockToEdit); } catch {}
-              }
-              setMessages(prev => [...prev, {
-                id: Date.now() + '_imgpaste',
-                content: `📷 A block has been created for the image. To insert it:\n1. Right-click the image below and **"Copy Image"**\n2. Press **Ctrl+V** in the editing block\n\nLogseq will save it to assets automatically.\n\n![attached image](${attachedImage})`,
-                sender: 'assistant',
-              }]);
-            }
-          }
+        if (commands.length > 0) {
+          const result = await executeAll(commands);
 
           // Verify edits actually took effect and retry failures
           const failures = await verifyAndCorrect(result);
@@ -761,6 +743,15 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             }]);
           }
           setEditResults(prev => new Map(prev).set(assistantMsgId, result));
+        }
+
+        // If user attached an image, show copy-paste instructions
+        if (attachedImage) {
+          setMessages(prev => [...prev, {
+            id: Date.now() + '_imgpaste',
+            content: `📷 To insert the image into your page:\n1. Click **"📋 Copy Image"** below\n2. Click the target block in Logseq\n3. Press **Ctrl+V**\n\n![attached image](${attachedImage})`,
+            sender: 'assistant',
+          }]);
         }
       } else {
         const responseText = typeof resp === 'string' ? resp : resp.text;
