@@ -41,7 +41,6 @@ By combining semantic vector embeddings with keyword search and the Logseq Edito
 - **Multi-Provider Support:** Supports any model compatible with **[LiteLLM](https://github.com/BerriAI/litellm)** (OpenAI, Anthropic Claude, Google Gemini, DeepSeek, local Ollama, etc.).
 - **Background Auto-Indexing:** Detects workspace changes and automatically re-indexes changed pages in the background after a customizable debounce period.
 - **Stop & Cooldown Controls:** Halt indexing at any point. The Re-Index button transforms into a "Stop" button during active runs, initiating a short cooldown to let the editor settle.
-- **Theme-Responsive UI Icons:** The toolbar button and chat panel logo dynamically adapt to Logseq's active theme, showing `icon.png` on light mode and a transparent `icon-dark-transparent.png` on dark mode.
 
 ---
 
