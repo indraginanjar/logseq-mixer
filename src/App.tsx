@@ -90,7 +90,7 @@ const HeaderLeft = styled('div', {
   gap: '8px',
 });
 
-const LogoIcon = styled('span', { fontSize: '18px' });
+const LogoIcon = styled('img', { width: '18px', height: '18px', borderRadius: '4px' });
 
 const Title = styled('h2', {
   margin: 0,
@@ -1039,7 +1039,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       <ChatPanel ref={panelRef} className={themeMode === 'dark' ? darkTheme.className : ''}>
         <Header>
           <HeaderLeft>
-            <LogoIcon>✍️</LogoIcon>
+            <LogoIcon src={themeMode === 'dark' ? 'icon-dark-transparent.png' : 'icon.png'} alt="Mixer Logo" />
             <Title>Mixer</Title>
           </HeaderLeft>
           <HeaderRight>
