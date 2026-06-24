@@ -122,6 +122,41 @@ Toggle the **AI Edit** switch in the chat panel's toolbar to allow the LLM to di
 
 ---
 
+## File & Image Attachments
+
+Attach files directly in the chat input to give the LLM additional context or ask questions about their content.
+
+### How to Attach
+- **Click the 📎 button** next to the text area to open a file picker (supports all file types).
+- **Paste an image** from clipboard directly into the text area (Ctrl+V).
+
+### Supported File Types
+
+| Type | Behavior |
+| :--- | :--- |
+| **Images** (PNG, JPG, GIF, etc.) | Displayed as a thumbnail preview. Sent to the LLM as vision content (requires a vision-capable model like GPT-4o). |
+| **Text files** (code, CSV, TXT, MD, JSON, etc.) | Content is read as text and appended to your message as context for the LLM. Shown as a `📎 filename` badge in the chat bubble. |
+
+### Re-using Attachments
+- **Images:** Click the **📋 Copy Image** button on any image in the chat to copy it to clipboard, then paste it into the input.
+- **Files:** Click the **📎 filename** badge on any previous message to re-attach that file for the next query.
+
+### Inserting Images into Logseq Pages
+When using AI Edit mode with an attached image, the plugin provides copy-paste instructions instead of writing the image directly into blocks:
+1. The image is displayed in the chat with a **"📋 Copy Image"** button.
+2. Click the button to copy the image to your clipboard.
+3. Click the target block in Logseq and press **Ctrl+V**.
+4. Logseq's native paste handler saves the image to the `assets/` folder and inserts a proper `![](../assets/...)` reference.
+
+### Limitations
+- **No direct asset writing:** Logseq's plugin API does not expose a method to write files to the graph's `assets/` folder. Images must be pasted manually into blocks using Logseq's native paste mechanism.
+- **Clipboard from iframe:** The plugin runs in a sandboxed iframe. Programmatic clipboard writes only work via a direct user click (the "📋 Copy Image" button). Right-click → "Copy Image" on data-URI images may not work in all environments.
+- **Large images as base64:** Images are sent to the LLM as base64 data URIs. Very large images increase token usage and may slow down responses.
+- **Text-only file reading:** Non-image files are read as plain text. Binary files (PDF, DOCX, ZIP, etc.) will produce garbled content — only use text-based file formats.
+- **Vision model required:** Image understanding requires a vision-capable model (e.g., GPT-4o, Claude 3.5 Sonnet). Non-vision models will ignore the image content.
+
+---
+
 ## Technical Documentation
 
 For details on the internals and design choices behind the plugin, check the technical specification files:

@@ -536,6 +536,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedDraft, setSavedDraft] = useState('');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
   const [activePageName, setActivePageName] = useState<string | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -655,11 +656,20 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const handleImageFile = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => setImageDataUrl(reader.result as string);
-    reader.readAsDataURL(file);
+  const handleFile = (file: File) => {
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => setImageDataUrl(reader.result as string);
+      reader.readAsDataURL(file);
+      setAttachedFile(null);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedFile({ name: file.name, content: reader.result as string });
+        setImageDataUrl(null);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -668,7 +678,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     for (const item of Array.from(items)) {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile();
-        if (file) handleImageFile(file);
+        if (file) handleFile(file);
         break;
       }
     }
@@ -697,6 +707,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         content: messageToSend,
         sender: 'user',
         image: imageDataUrl ?? undefined,
+        file: attachedFile ?? undefined,
       };
       setMessages(prev => [...prev, userMessage]);
     }
@@ -724,8 +735,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       }
 
       const attachedImage = imageDataUrl;
+      const fileContext = attachedFile;
       setImageDataUrl(null);
-      const resp = await handleQuery(messageToSend, settings, storageProvider, controller.signal, effectiveEditMode, attachedImage ?? undefined);
+      setAttachedFile(null);
+      const queryWithFile = fileContext
+        ? `${messageToSend}\n\n---\nAttached file: ${fileContext.name}\n\`\`\`\n${fileContext.content}\n\`\`\``
+        : messageToSend;
+      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImage ?? undefined);
       abortControllerRef.current = null;
 
       if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
@@ -1052,6 +1068,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               const provider = storageProvider as any;
               return provider.getBlockMetadata?.(uuid) ?? null;
             }}
+            onFileReattach={(file) => setAttachedFile(file)}
           />
           {loading && (
             <TypingIndicator>
@@ -1076,16 +1093,22 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <button onClick={() => setImageDataUrl(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>✕</button>
             </div>
           )}
+          {attachedFile && (
+            <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: 12 }}>
+              <span>📎 {attachedFile.name}</span>
+              <button onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>✕</button>
+            </div>
+          )}
           <InputWrapper>
             <input
               ref={imageFileRef}
               type="file"
-              accept="image/*"
+              accept="*/*"
               style={{ display: 'none' }}
-              onChange={(e) => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]); e.target.value = ''; }}
+              onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = ''; }}
             />
-            <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach image" disabled={loading}>
-              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z" fill="currentColor"/></svg>
+            <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" disabled={loading}>
+              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6h-1v9.5a2 2 0 0 0 4 0V5a3.5 3.5 0 0 0-7 0v12.5a5 5 0 0 0 10 0V6h-1z" fill="currentColor"/></svg>
             </ImageButton>
             <TextArea
               ref={textareaRef}

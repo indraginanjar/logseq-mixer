@@ -14,6 +14,7 @@ export type ChatMessage = {
   content: string;
   sender: 'user' | 'assistant';
   image?: string;
+  file?: { name: string; content: string };
 };
 
 const fadeIn = keyframes({
@@ -434,6 +435,7 @@ type ChatMessageListProps = {
   messages: ChatMessage[];
   editResults?: Map<string | number, ExecutionResult>;
   getBlockMetadata?: (uuid: string) => { pageName: string; contentPreview: string } | null;
+  onFileReattach?: (file: { name: string; content: string }) => void;
 };
 
 export function parseProperties(text: string): { properties: Record<string, string>; content: string } {
@@ -855,7 +857,7 @@ function MarkdownTabbedPanel({
   );
 }
 
-export default function ChatMessageList({ messages, editResults, getBlockMetadata }: ChatMessageListProps) {
+export default function ChatMessageList({ messages, editResults, getBlockMetadata, onFileReattach }: ChatMessageListProps) {
   if (messages.length === 0) {
     return (
       <EmptyState>
@@ -903,6 +905,13 @@ export default function ChatMessageList({ messages, editResults, getBlockMetadat
                       style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, padding: 0, border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4, background: 'rgba(255,255,255,0.85)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}
                     >📋</button>
                   </span>
+                )}
+                {msg.file && (
+                  <span
+                    onClick={() => onFileReattach?.(msg.file!)}
+                    style={{ display: 'inline-block', marginBottom: 4, padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                    title="Click to re-attach this file"
+                  >📎 {msg.file.name}</span>
                 )}
                 {renderMarkdownWithProperties(
                   msg.content,
