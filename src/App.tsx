@@ -535,8 +535,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedDraft, setSavedDraft] = useState('');
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-  const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
+  const [imageDataUrls, setImageDataUrls] = useState<string[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<{ name: string; content: string }[]>([]);
   const [activePageName, setActivePageName] = useState<string | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -659,14 +659,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const handleFile = (file: File) => {
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = () => setImageDataUrl(reader.result as string);
+      reader.onload = () => setImageDataUrls(prev => [...prev, reader.result as string]);
       reader.readAsDataURL(file);
-      setAttachedFile(null);
     } else {
       const reader = new FileReader();
       reader.onload = () => {
-        setAttachedFile({ name: file.name, content: reader.result as string });
-        setImageDataUrl(null);
+        setAttachedFiles(prev => [...prev, { name: file.name, content: reader.result as string }]);
       };
       reader.readAsText(file);
     }
@@ -706,8 +704,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         id: Date.now() + '_user',
         content: messageToSend,
         sender: 'user',
-        image: imageDataUrl ?? undefined,
-        file: attachedFile ?? undefined,
+        image: imageDataUrls.length > 0 ? imageDataUrls : undefined,
+        file: attachedFiles.length > 0 ? attachedFiles : undefined,
       };
       setMessages(prev => [...prev, userMessage]);
     }
@@ -734,14 +732,15 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         }
       }
 
-      const attachedImage = imageDataUrl;
-      const fileContext = attachedFile;
-      setImageDataUrl(null);
-      setAttachedFile(null);
-      const queryWithFile = fileContext
-        ? `${messageToSend}\n\n---\nAttached file: ${fileContext.name}\n\`\`\`\n${fileContext.content}\n\`\`\``
-        : messageToSend;
-      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImage ?? undefined);
+      const attachedImages = imageDataUrls;
+      const fileContexts = attachedFiles;
+      setImageDataUrls([]);
+      setAttachedFiles([]);
+      const fileAppendix = fileContexts.length > 0
+        ? '\n\n---\n' + fileContexts.map(f => `Attached file: ${f.name}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
+        : '';
+      const queryWithFile = messageToSend + fileAppendix;
+      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages[0] ?? undefined);
       abortControllerRef.current = null;
 
       if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
@@ -787,10 +786,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         }
 
         // If user attached an image, show copy-paste instructions
-        if (attachedImage) {
+        if (attachedImages.length > 0) {
           setMessages(prev => [...prev, {
             id: Date.now() + '_imgpaste',
-            content: `📷 To insert the image into your page:\n1. Click **"📋 Copy Image"** below\n2. Click the target block in Logseq\n3. Press **Ctrl+V**\n\n![attached image](${attachedImage})`,
+            content: `📷 To insert the image into your page:\n1. Click **"📋 Copy Image"** below\n2. Click the target block in Logseq\n3. Press **Ctrl+V**\n\n` + attachedImages.map(img => `![attached image](${img})`).join('\n\n'),
             sender: 'assistant',
           }]);
         }
@@ -1068,7 +1067,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               const provider = storageProvider as any;
               return provider.getBlockMetadata?.(uuid) ?? null;
             }}
-            onFileReattach={(file) => setAttachedFile(file)}
+            onFileReattach={(file) => setAttachedFiles(prev => [...prev, file])}
           />
           {loading && (
             <TypingIndicator>
@@ -1087,16 +1086,24 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         )}
 
         <InputArea>
-          {imageDataUrl && (
-            <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <img src={imageDataUrl} alt="attached" style={{ maxHeight: 48, maxWidth: 80, borderRadius: 4 }} />
-              <button onClick={() => setImageDataUrl(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>✕</button>
+          {imageDataUrls.length > 0 && (
+            <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {imageDataUrls.map((url, i) => (
+                <span key={i} style={{ position: 'relative', display: 'inline-block' }}>
+                  <img src={url} alt="attached" style={{ maxHeight: 48, maxWidth: 80, borderRadius: 4 }} />
+                  <button onClick={() => setImageDataUrls(prev => prev.filter((_, idx) => idx !== i))} style={{ position: 'absolute', top: -4, right: -4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 16, height: 16, fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                </span>
+              ))}
             </div>
           )}
-          {attachedFile && (
-            <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: 12 }}>
-              <span>📎 {attachedFile.name}</span>
-              <button onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>✕</button>
+          {attachedFiles.length > 0 && (
+            <div style={{ padding: '4px 8px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', fontSize: 12 }}>
+              {attachedFiles.map((f, i) => (
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'rgba(0,0,0,0.05)', borderRadius: 4, padding: '1px 6px' }}>
+                  📎 {f.name}
+                  <button onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: 0 }}>✕</button>
+                </span>
+              ))}
             </div>
           )}
           <InputWrapper>
@@ -1104,8 +1111,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               ref={imageFileRef}
               type="file"
               accept="*/*"
+              multiple
               style={{ display: 'none' }}
-              onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = ''; }}
+              onChange={(e) => { if (e.target.files) { Array.from(e.target.files).forEach(handleFile); } e.target.value = ''; }}
             />
             <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" disabled={loading}>
               <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6h-1v9.5a2 2 0 0 0 4 0V5a3.5 3.5 0 0 0-7 0v12.5a5 5 0 0 0 10 0V6h-1z" fill="currentColor"/></svg>

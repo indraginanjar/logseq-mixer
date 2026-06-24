@@ -13,8 +13,8 @@ export type ChatMessage = {
   id: string | number;
   content: string;
   sender: 'user' | 'assistant';
-  image?: string;
-  file?: { name: string; content: string };
+  image?: string | string[];
+  file?: { name: string; content: string }[];
 };
 
 const fadeIn = keyframes({
@@ -879,13 +879,13 @@ export default function ChatMessageList({ messages, editResults, getBlockMetadat
             <MessageRow align={msg.sender}>
               {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
               <Bubble role={msg.sender}>
-                {msg.image && (
-                  <span style={{ display: 'inline-block', position: 'relative', marginBottom: 6 }}>
-                    <img src={msg.image} alt="attached" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
+                {msg.image && (Array.isArray(msg.image) ? msg.image : [msg.image]).map((imgSrc, imgIdx) => (
+                  <span key={imgIdx} style={{ display: 'inline-block', position: 'relative', marginBottom: 6, marginRight: 4 }}>
+                    <img src={imgSrc} alt="attached" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
                     <button
                       onClick={async () => {
                         try {
-                          const res = await fetch(msg.image!);
+                          const res = await fetch(imgSrc);
                           const blob = await res.blob();
                           const pngBlob = blob.type === 'image/png' ? blob
                             : await new Promise<Blob>((resolve) => {
@@ -896,7 +896,7 @@ export default function ChatMessageList({ messages, editResults, getBlockMetadat
                                   c.getContext('2d')!.drawImage(img, 0, 0);
                                   c.toBlob((b) => resolve(b!), 'image/png');
                                 };
-                                img.src = msg.image!;
+                                img.src = imgSrc;
                               });
                           await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
                         } catch {}
@@ -905,13 +905,18 @@ export default function ChatMessageList({ messages, editResults, getBlockMetadat
                       style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, padding: 0, border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4, background: 'rgba(255,255,255,0.85)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}
                     >📋</button>
                   </span>
-                )}
-                {msg.file && (
-                  <span
-                    onClick={() => onFileReattach?.(msg.file!)}
-                    style={{ display: 'inline-block', marginBottom: 4, padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
-                    title="Click to re-attach this file"
-                  >📎 {msg.file.name}</span>
+                ))}
+                {msg.file && msg.file.length > 0 && (
+                  <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                    {msg.file.map((f, i) => (
+                      <span
+                        key={i}
+                        onClick={() => onFileReattach?.(f)}
+                        style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                        title="Click to re-attach this file"
+                      >📎 {f.name}</span>
+                    ))}
+                  </span>
                 )}
                 {renderMarkdownWithProperties(
                   msg.content,

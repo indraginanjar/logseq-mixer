@@ -127,8 +127,8 @@ Toggle the **AI Edit** switch in the chat panel's toolbar to allow the LLM to di
 Attach files directly in the chat input to give the LLM additional context or ask questions about their content.
 
 ### How to Attach
-- **Click the 📎 button** next to the text area to open a file picker (supports all file types).
-- **Paste an image** from clipboard directly into the text area (Ctrl+V).
+- **Click the 📎 button** next to the text area to open a file picker. Supports **multiple file selection** (images and text files can be mixed).
+- **Paste an image** from clipboard directly into the text area (Ctrl+V). Multiple pastes accumulate.
 
 ### Supported File Types
 
