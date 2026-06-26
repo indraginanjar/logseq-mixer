@@ -128,65 +128,20 @@ Logseq Mixer supports the **[Model Context Protocol (MCP)](https://modelcontextp
 
 ### Browser Sandbox & Transport Mode
 Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP transport is not directly supported** (the browser environment cannot spawn local shell processes). Instead, Mixer connects to MCP servers using **Server-Sent Events (SSE)**.
-
 - **For SSE Servers:** Connect directly using their HTTP/SSE URL (e.g. `http://localhost:3001/sse`).
-- **For Stdio-only Servers:** If you configure a stdio-based server using `command` and `args` in the setting, the plugin will mark it as unsupported and display the error message: 
-  **`"Stdio servers not supported in browser. Use an SSE bridge proxy."`**
-
-#### How to run a stdio-to-sse bridge proxy:
-To connect your local stdio servers, you can run a local proxy tool that translates stdio process communication into an SSE server:
-
-1. Run the **`supergateway`** bridge tool on your machine, passing your stdio command:
-   ```bash
-   # npx -y supergateway --port <port> --stdio "<command_to_run>"
-   npx -y supergateway --port 3002 --stdio "npx -y @browsermcp/mcp@latest"
-   ```
-2. Configure Logseq Mixer settings with the URL of the running bridge:
-   ```json
-   {
-     "browsermcp-bridge": {
-       "url": "http://localhost:3002/sse"
-     }
-   }
-   ```
-This forwards calls from the sandboxed browser iframe over HTTP/SSE to the local bridge proxy, which executes the stdio command on your machine.
-
-> [!TIP]
-> **Troubleshooting Relay Failures (e.g. `connect ECONNREFUSED 127.0.0.1:8082`):**
-> - **With `@browsermcp/mcp`**: If you run `@browsermcp/mcp` and receive a connection refused error on port `8082`, this is because the tool controls your active Chrome window and **requires the BrowserMCP Chrome Extension** to be installed and active. Make sure the extension is active in Chrome before starting.
-> - **`Failed to kill process on port 9009` on Windows**: This is a known bug in the `@browsermcp/mcp` startup cleanup script. The script scans port `9009` and attempts to kill any matching PID. However, because `netstat` returns multiple lines (for IPv4 and IPv6 listeners), the script tries to kill the same PID twice. On the second iteration, `taskkill` fails with "process not found" (exit code 128), crashing Node.js.
->   - **Solution:** Create a temporary file named `taskkill.bat` in your current working directory to intercept the command and force a successful exit code `0`:
->     ```batch
->     @echo off
->     C:\Windows\System32\taskkill.exe %*
->     exit /b 0
->     ```
->     Then run the `supergateway` command. Once the server starts, you can safely delete the `taskkill.bat` file.
-> - **`listen EADDRINUSE: address already in use :::3002` error**: This occurs if you try to start a new `supergateway` server on a port that is already occupied by another running bridge process.
->   - **Solution:** Either stop the other bridge (by pressing `Ctrl + C` in its terminal) or specify a different port (e.g., `--port 3003`) to run multiple MCP servers concurrently.
-> - **Self-Contained Test (Filesystem Server)**: If you want to test with a standard tool that does *not* require a browser extension, run the official Filesystem server through `supergateway`:
->   ```bash
->   npx -y supergateway --port 3002 --stdio "npx -y @modelcontextprotocol/server-filesystem C:\Users\indra\Desktop"
->   ```
->   *(Replace `C:\Users\indra\Desktop` with a valid directory on your machine, then configure the plugin settings URL to `http://localhost:3002/sse`)*
+- **For Stdio-only Servers:** Use a local bridge proxy (such as `supergateway` or `mcp-proxy`) to expose the stdio server as an SSE endpoint. For detailed instructions on setting up and troubleshooting Browser MCP over a bridge, see the [Browser MCP Guide](file:///C:/Users/indra/s/ig/work/indra/logseq-plugin/logseq-composer/docs/browsermcp-guide.md).
 
 ### Configuring MCP Servers
-To configure MCP servers, open Logseq Settings → Plugin Settings → **Mixer**, and configure the **`mcpServers`** setting.
-Mixer supports standard key-value map and wrapped JSON configuration layouts.
+To configure MCP servers, open Logseq Settings → Plugin Settings → **Mixer**, and configure the **`mcpServers`** setting. Mixer supports standard key-value map and wrapped JSON configuration layouts.
 
-Example configuration with one SSE server and one stdio server (connected via a local proxy on port 3002):
+Example configuration:
 ```json
 {
-  "local-files": {
-    "url": "http://localhost:3001/sse"
-  },
-  "git-tool": {
-    "command": "npx",
-    "args": ["@modelcontextprotocol/server-git"]
+  "filesystem-bridge": {
+    "url": "http://localhost:3002/sse"
   }
 }
 ```
-*Note: Stdio configurations (like `git-tool` above) will be displayed in the UI as unsupported with a prompt to connect them through a bridge.*
 
 ### Toggling Tools
 1. Click the **🔌 MCP Servers** button in the chat box toolbar row to open the MCP Servers Manager.
@@ -238,6 +193,7 @@ For details on the internals and design choices behind the plugin, check the tec
 - [Chunking Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
 - [Retrieval Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
 - [MCP Server Integration](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/mcp-integration.md) — EventSource/SSE transport layer, MCPManager lifecycle sync, and agentic tool-calling loop execution.
+- [Browser MCP Guide](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/browsermcp-guide.md) — Step-by-step setup, Windows port 9009 bug workaround, and multiple browser connection conflict resolutions.
 
 ---
 
