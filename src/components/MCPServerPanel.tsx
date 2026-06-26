@@ -193,6 +193,13 @@ const EmptyToolState = styled('div', {
   color: '$slate10',
 });
 
+const ErrorMessage = styled('div', {
+  padding: '0 14px 12px 14px',
+  fontSize: '11px',
+  color: '$red11',
+  lineHeight: 1.4,
+});
+
 // Toggle Switch Components
 const SwitchContainer = styled('label', {
   position: 'relative',
@@ -303,9 +310,12 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
             const enabledCount = client.tools.filter(t => manager.isToolEnabled(client.name, t.name)).length;
             const totalCount = client.tools.length;
 
+            const hasError = client.status === 'error';
+            const showToggle = isConnected || hasError;
+
             return (
-              <ServerCard key={client.name} style={!isConnected ? { opacity: 0.75 } : undefined}>
-                <ServerHeader onClick={() => isConnected && toggleExpand(client.name)}>
+              <ServerCard key={client.name} style={!isConnected && !hasError ? { opacity: 0.75 } : undefined}>
+                <ServerHeader onClick={() => showToggle && toggleExpand(client.name)}>
                   <ServerInfo>
                     <StatusIndicator status={client.status} />
                     <ServerName style={!isConnected ? { color: '$slate9' } : undefined}>
@@ -317,12 +327,16 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
                         : `(${getStatusLabel(client.status)})`}
                     </ToolCount>
                   </ServerInfo>
-                  {isConnected && (
+                  {showToggle && (
                     <HeaderRight>
                       <CaretIcon expanded={isExpanded}>▼</CaretIcon>
                     </HeaderRight>
                   )}
                 </ServerHeader>
+
+                {isExpanded && hasError && client.errorMessage && (
+                  <ErrorMessage>{client.errorMessage}</ErrorMessage>
+                )}
 
                 {isExpanded && isConnected && (
                   <ToolListContainer>

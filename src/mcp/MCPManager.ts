@@ -2,7 +2,9 @@ import { MCPClient, MCPTool } from './MCPClient';
 
 export interface MCPServerConfig {
   name: string;
-  url: string;
+  url?: string;
+  command?: string;
+  args?: string[];
 }
 
 export interface OpenAIFunctionTool {
@@ -89,14 +91,43 @@ export class MCPManager {
   public syncWithSettings() {
     try {
       const mcpSetting = window.logseq.settings?.mcpServers;
-      let configs: MCPServerConfig[] = [];
+      let parsed: any = null;
       if (mcpSetting && typeof mcpSetting === 'string') {
-        configs = JSON.parse(mcpSetting);
+        try {
+          parsed = JSON.parse(mcpSetting);
+        } catch (e) {
+          console.warn('[MCPManager] Failed to parse JSON configuration:', e);
+        }
       }
 
-      if (!Array.isArray(configs)) {
-        console.warn('[MCPManager] mcpServers setting is not a valid JSON array');
-        configs = [];
+      let configs: MCPServerConfig[] = [];
+
+      if (parsed) {
+        // If it's the wrapped format: { "mcpServers": { ... } }
+        if (parsed.mcpServers && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers)) {
+          parsed = parsed.mcpServers;
+        }
+
+        if (Array.isArray(parsed)) {
+          configs = parsed.map((item: any): MCPServerConfig => ({
+            name: String(item.name || ''),
+            url: item.url ? String(item.url) : undefined,
+            command: item.command ? String(item.command) : undefined,
+            args: Array.isArray(item.args) ? item.args.map(String) : undefined,
+          })).filter(c => c.name);
+        } else if (typeof parsed === 'object') {
+          configs = Object.entries(parsed).map(([name, val]: [string, any]): MCPServerConfig | null => {
+            if (val && typeof val === 'object') {
+              return {
+                name,
+                url: val.url ? String(val.url) : undefined,
+                command: val.command ? String(val.command) : undefined,
+                args: Array.isArray(val.args) ? val.args.map(String) : undefined,
+              };
+            }
+            return null;
+          }).filter((c): c is MCPServerConfig => c !== null && !!c.name);
+        }
       }
 
       const activeNames = new Set(configs.map((c) => c.name));
@@ -113,17 +144,18 @@ export class MCPManager {
       // Add or update servers from settings
       configs.forEach((config) => {
         const existing = this.clients.get(config.name);
+        const configUrl = config.url || '';
         if (existing) {
-          if (existing.url !== config.url) {
-            console.info(`[MCPManager] Updating URL for MCP server ${config.name} to ${config.url}`);
+          if (existing.url !== configUrl) {
+            console.info(`[MCPManager] Updating URL for MCP server ${config.name} to ${configUrl}`);
             existing.disconnect();
-            existing.url = config.url;
+            existing.url = configUrl;
             existing.connect().catch((err) => {
               console.error(`[MCPManager] Failed to reconnect to ${config.name}:`, err);
             });
           }
         } else {
-          console.info(`[MCPManager] Adding new MCP server ${config.name} with URL ${config.url}`);
+          console.info(`[MCPManager] Adding new MCP server ${config.name}`);
           const client = new MCPClient(config.name, config.url);
           client.subscribeStatus(() => this.notifyClientsChange());
           this.clients.set(config.name, client);

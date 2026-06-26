@@ -28,9 +28,13 @@ export class MCPClient {
 
   private onStatusChangeCallbacks = new Set<(status: MCPClientStatus) => void>();
 
-  constructor(name: string, url: string) {
+  constructor(name: string, url?: string) {
     this.name = name;
-    this.url = url;
+    this.url = url || '';
+    if (!url) {
+      this.status = 'error';
+      this.errorMessage = 'Stdio servers not supported in browser. Use an SSE bridge proxy.';
+    }
   }
 
   public subscribeStatus(callback: (status: MCPClientStatus) => void): () => void {
@@ -48,6 +52,10 @@ export class MCPClient {
 
   public async connect(): Promise<void> {
     if (this.status === 'connected' || this.status === 'connecting') return;
+    if (!this.url) {
+      this.setStatus('error', 'Stdio servers not supported in browser. Use an SSE bridge proxy.');
+      return;
+    }
 
     this.setStatus('connecting');
     try {

@@ -112,8 +112,8 @@ const settings: SettingSchemaDesc[] = [
     key: 'mcpServers',
     type: 'string',
     title: 'MCP Servers Configuration',
-    description: 'A JSON list of active MCP servers to connect to. Example:\n[{"name": "filesystem", "url": "http://localhost:3001/sse"}]',
-    default: '[]',
+    description: 'A JSON object mapping server names to their configurations. Stdio-based servers are not directly supported in the browser sandbox; please use an SSE bridge proxy (e.g. mcp-sse-bridge) to connect them.\nExample:\n{\n  "filesystem": {\n    "url": "http://localhost:3001/sse"\n  }\n}',
+    default: '{}',
   }
 ];
 
