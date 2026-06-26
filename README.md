@@ -154,12 +154,14 @@ This forwards calls from the sandboxed browser iframe over HTTP/SSE to the local
 > [!TIP]
 > **Troubleshooting Relay Failures (e.g. `connect ECONNREFUSED 127.0.0.1:8082`):**
 > - **With `@browsermcp/mcp`**: If you run `@browsermcp/mcp` and receive a connection refused error on port `8082`, this is because the tool controls your active Chrome window and **requires the BrowserMCP Chrome Extension** to be installed and active. Make sure the extension is active in Chrome before starting.
-> - **`Failed to kill process on port 9009` on Windows**: This is a known bug in the `@browsermcp/mcp` startup cleanup script on Windows. If port `9009` is not in use, the script fails to find a process to kill and crashes Node.js.
->   - **Workaround:** Start a dummy process on port `9009` in another terminal so the cleanup command has something to find and successfully kill:
->     ```bash
->     node -e "require('net').createServer().listen(9009)"
+> - **`Failed to kill process on port 9009` on Windows**: This is a known bug in the `@browsermcp/mcp` startup cleanup script. The script scans port `9009` and attempts to kill any matching PID. However, because `netstat` returns multiple lines (for IPv4 and IPv6 listeners), the script tries to kill the same PID twice. On the second iteration, `taskkill` fails with "process not found" (exit code 128), crashing Node.js.
+>   - **Solution:** Create a temporary file named `taskkill.bat` in your current working directory to intercept the command and force a successful exit code `0`:
+>     ```batch
+>     @echo off
+>     C:\Windows\System32\taskkill.exe %*
+>     exit /b 0
 >     ```
->     Then start the bridge again.
+>     Then run the `supergateway` command. Once the server starts, you can safely delete the `taskkill.bat` file.
 > - **Do not use `mcp-sse-bridge`**: The `mcp-sse-bridge` npm package does the **opposite** of what we want (it bridges SSE upstream to local Stdio for Claude Desktop). Running it without a remote SSE server defaults to port `8082`, causing ECONNREFUSED errors.
 > - **Self-Contained Test (Filesystem Server)**: If you want to test with a standard tool that does *not* require a browser extension, run the official Filesystem server through `supergateway`:
 >   ```bash
