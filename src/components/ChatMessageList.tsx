@@ -13,7 +13,7 @@ export type ChatMessage = {
   id: string | number;
   content: string;
   sender: 'user' | 'assistant';
-  image?: string | string[];
+  image?: { name: string; content: string }[];
   file?: { name: string; content: string }[];
 };
 
@@ -436,6 +436,7 @@ type ChatMessageListProps = {
   editResults?: Map<string | number, ExecutionResult>;
   getBlockMetadata?: (uuid: string) => { pageName: string; contentPreview: string } | null;
   onFileReattach?: (file: { name: string; content: string }) => void;
+  onImageReattach?: (image: { name: string; content: string }) => void;
 };
 
 export function parseProperties(text: string): { properties: Record<string, string>; content: string } {
@@ -857,7 +858,7 @@ function MarkdownTabbedPanel({
   );
 }
 
-export default function ChatMessageList({ messages, editResults, getBlockMetadata, onFileReattach }: ChatMessageListProps) {
+export default function ChatMessageList({ messages, editResults, getBlockMetadata, onFileReattach, onImageReattach }: ChatMessageListProps) {
   if (messages.length === 0) {
     return (
       <EmptyState>
@@ -879,33 +880,27 @@ export default function ChatMessageList({ messages, editResults, getBlockMetadat
             <MessageRow align={msg.sender}>
               {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
               <Bubble role={msg.sender}>
-                {msg.image && (Array.isArray(msg.image) ? msg.image : [msg.image]).map((imgSrc, imgIdx) => (
-                  <span key={imgIdx} style={{ display: 'inline-block', position: 'relative', marginBottom: 6, marginRight: 4 }}>
-                    <img src={imgSrc} alt="attached" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
-                    <button
-                      onClick={async () => {
-                        try {
-                          const res = await fetch(imgSrc);
-                          const blob = await res.blob();
-                          const pngBlob = blob.type === 'image/png' ? blob
-                            : await new Promise<Blob>((resolve) => {
-                                const img = new Image();
-                                img.onload = () => {
-                                  const c = document.createElement('canvas');
-                                  c.width = img.width; c.height = img.height;
-                                  c.getContext('2d')!.drawImage(img, 0, 0);
-                                  c.toBlob((b) => resolve(b!), 'image/png');
-                                };
-                                img.src = imgSrc;
-                              });
-                          await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
-                        } catch {}
-                      }}
-                      title="Copy image"
-                      style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, padding: 0, border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4, background: 'rgba(255,255,255,0.85)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}
-                    >📋</button>
-                  </span>
-                ))}
+                {msg.image && msg.image.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {msg.image.map((img, imgIdx) => (
+                        <span key={imgIdx} style={{ display: 'inline-block', position: 'relative' }}>
+                          <img src={img.content} alt={img.name} style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {msg.image.map((img, i) => (
+                        <span
+                          key={i}
+                          onClick={() => onImageReattach?.(img)}
+                          style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                          title="Click to re-attach this image"
+                        >📷 {img.name}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {msg.file && msg.file.length > 0 && (
                   <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
                     {msg.file.map((f, i) => (

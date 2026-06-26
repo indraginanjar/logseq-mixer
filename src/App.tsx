@@ -535,7 +535,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedDraft, setSavedDraft] = useState('');
-  const [imageDataUrls, setImageDataUrls] = useState<string[]>([]);
+  const [imageDataUrls, setImageDataUrls] = useState<{ name: string; content: string }[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; content: string }[]>([]);
   const [activePageName, setActivePageName] = useState<string | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
@@ -659,7 +659,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const handleFile = (file: File) => {
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = () => setImageDataUrls(prev => [...prev, reader.result as string]);
+      reader.onload = () => setImageDataUrls(prev => [...prev, { name: file.name, content: reader.result as string }]);
       reader.readAsDataURL(file);
     } else {
       const reader = new FileReader();
@@ -740,7 +740,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         ? '\n\n---\n' + fileContexts.map(f => `Attached file: ${f.name}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
         : '';
       const queryWithFile = messageToSend + fileAppendix;
-      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages[0] ?? undefined);
+      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages[0]?.content ?? undefined);
       abortControllerRef.current = null;
 
       if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
@@ -789,7 +789,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         if (attachedImages.length > 0) {
           setMessages(prev => [...prev, {
             id: Date.now() + '_imgpaste',
-            content: `📷 To insert the image into your page:\n1. Click **"📋 Copy Image"** below\n2. Click the target block in Logseq\n3. Press **Ctrl+V**\n\n` + attachedImages.map(img => `![attached image](${img})`).join('\n\n'),
+            content: `📷 To insert the image into your page:\n1. Click **"📋 Copy Image"** below\n2. Click the target block in Logseq\n3. Press **Ctrl+V**\n\n` + attachedImages.map(img => `![attached image](${img.content})`).join('\n\n'),
             sender: 'assistant',
           }]);
         }
@@ -1068,6 +1068,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               return provider.getBlockMetadata?.(uuid) ?? null;
             }}
             onFileReattach={(file) => setAttachedFiles(prev => [...prev, file])}
+            onImageReattach={(image) => setImageDataUrls(prev => [...prev, image])}
           />
           {loading && (
             <TypingIndicator>
@@ -1088,9 +1089,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         <InputArea>
           {imageDataUrls.length > 0 && (
             <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {imageDataUrls.map((url, i) => (
+              {imageDataUrls.map((img, i) => (
                 <span key={i} style={{ position: 'relative', display: 'inline-block' }}>
-                  <img src={url} alt="attached" style={{ maxHeight: 48, maxWidth: 80, borderRadius: 4 }} />
+                  <img src={img.content} alt={img.name} style={{ maxHeight: 48, maxWidth: 80, borderRadius: 4 }} />
                   <button onClick={() => setImageDataUrls(prev => prev.filter((_, idx) => idx !== i))} style={{ position: 'absolute', top: -4, right: -4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 16, height: 16, fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </span>
               ))}

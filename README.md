@@ -20,7 +20,7 @@
 By combining semantic vector embeddings with keyword search and the Logseq Editor API, Logseq Mixer goes beyond simple chat interfaces: it understands the structure of your notes, retrieves the most relevant context, and can even edit your blocks directly from the chat.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/indraginanjar/logseq-mixer/dev/docs/assets/demo.gif" alt="Logseq Mixer Demo" width="800">
+  <img src="https://raw.githubusercontent.com/indraginanjar/logseq-mixer/main/docs/assets/demo.gif" alt="Logseq Mixer Demo" width="800">
 </p>
 
 > [!IMPORTANT]
