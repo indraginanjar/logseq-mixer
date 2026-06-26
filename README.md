@@ -127,9 +127,29 @@ Toggle the **AI Edit** switch in the chat panel's toolbar to allow the LLM to di
 Logseq Mixer supports the **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)**, allowing the AI assistant to dynamically discover and invoke external tools (such as reading local files, querying databases, running web searches, etc.).
 
 ### Browser Sandbox & Transport Mode
-Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP transport is not directly supported**. Instead, Mixer connects to MCP servers using **Server-Sent Events (SSE)**.
+Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP transport is not directly supported** (the browser environment cannot spawn local shell processes). Instead, Mixer connects to MCP servers using **Server-Sent Events (SSE)**.
+
 - **For SSE Servers:** Connect directly using their HTTP/SSE URL (e.g. `http://localhost:3001/sse`).
-- **For Stdio Servers:** Use a local stdio-to-sse bridge proxy (such as `mcp-sse-bridge` or `mcp-proxy`) to expose the stdio server as an SSE endpoint.
+- **For Stdio-only Servers:** If you configure a stdio-based server using `command` and `args` in the setting, the plugin will mark it as unsupported and display the error message: 
+  **`"Stdio servers not supported in browser. Use an SSE bridge proxy."`**
+
+#### How to run a stdio-to-sse bridge proxy:
+To connect your local stdio servers, you can run a local proxy tool that translates stdio process communication into an SSE server:
+
+1. Run an SSE bridge tool (such as `mcp-sse-bridge`) on your machine:
+   ```bash
+   # Run the bridge and specify the command of your stdio server
+   npx mcp-sse-bridge -c "npx @browsermcp/mcp@latest" -p 3002
+   ```
+2. Configure Logseq Mixer settings with the URL of the running bridge:
+   ```json
+   {
+     "browsermcp-bridge": {
+       "url": "http://localhost:3002/sse"
+     }
+   }
+   ```
+This forwards calls from the sandboxed browser iframe over HTTP/SSE to the local bridge proxy, which executes the stdio command on your machine.
 
 ### Configuring MCP Servers
 To configure MCP servers, open Logseq Settings → Plugin Settings → **Mixer**, and configure the **`mcpServers`** setting.
