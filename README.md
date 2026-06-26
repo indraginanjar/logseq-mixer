@@ -162,7 +162,8 @@ This forwards calls from the sandboxed browser iframe over HTTP/SSE to the local
 >     exit /b 0
 >     ```
 >     Then run the `supergateway` command. Once the server starts, you can safely delete the `taskkill.bat` file.
-> - **Do not use `mcp-sse-bridge`**: The `mcp-sse-bridge` npm package does the **opposite** of what we want (it bridges SSE upstream to local Stdio for Claude Desktop). Running it without a remote SSE server defaults to port `8082`, causing ECONNREFUSED errors.
+> - **`listen EADDRINUSE: address already in use :::3002` error**: This occurs if you try to start a new `supergateway` server on a port that is already occupied by another running bridge process.
+>   - **Solution:** Either stop the other bridge (by pressing `Ctrl + C` in its terminal) or specify a different port (e.g., `--port 3003`) to run multiple MCP servers concurrently.
 > - **Self-Contained Test (Filesystem Server)**: If you want to test with a standard tool that does *not* require a browser extension, run the official Filesystem server through `supergateway`:
 >   ```bash
 >   npx -y supergateway --port 3002 --stdio "npx -y @modelcontextprotocol/server-filesystem C:\Users\indra\Desktop"
