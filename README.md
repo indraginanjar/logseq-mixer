@@ -154,6 +154,12 @@ This forwards calls from the sandboxed browser iframe over HTTP/SSE to the local
 > [!TIP]
 > **Troubleshooting Relay Failures (e.g. `connect ECONNREFUSED 127.0.0.1:8082`):**
 > - **With `@browsermcp/mcp`**: If you run `@browsermcp/mcp` and receive a connection refused error on port `8082`, this is because the tool controls your active Chrome window and **requires the BrowserMCP Chrome Extension** to be installed and active. Make sure the extension is active in Chrome before starting.
+> - **`Failed to kill process on port 9009` on Windows**: This is a known bug in the `@browsermcp/mcp` startup cleanup script on Windows. If port `9009` is not in use, the script fails to find a process to kill and crashes Node.js.
+>   - **Workaround:** Start a dummy process on port `9009` in another terminal so the cleanup command has something to find and successfully kill:
+>     ```bash
+>     node -e "require('net').createServer().listen(9009)"
+>     ```
+>     Then start the bridge again.
 > - **Do not use `mcp-sse-bridge`**: The `mcp-sse-bridge` npm package does the **opposite** of what we want (it bridges SSE upstream to local Stdio for Claude Desktop). Running it without a remote SSE server defaults to port `8082`, causing ECONNREFUSED errors.
 > - **Self-Contained Test (Filesystem Server)**: If you want to test with a standard tool that does *not* require a browser extension, run the official Filesystem server through `supergateway`:
 >   ```bash
