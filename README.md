@@ -117,8 +117,42 @@ Toggle the **AI Edit** switch in the chat panel's toolbar to allow the LLM to di
 3. **Execution:** The plugin runs the edits using Logseq's native API:
    - **Insert:** Add a nested block under any block UUID.
    - **Update:** Edit the text or properties of an existing block.
-   - **Delete:** Safely remove blocks.
+    - **Delete:** Safely remove blocks.
 4. **Summary:** A change summary is displayed showing exactly what blocks were created or altered.
+
+---
+
+## Model Context Protocol (MCP) Support
+
+Logseq Mixer supports the **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)**, allowing the AI assistant to dynamically discover and invoke external tools (such as reading local files, querying databases, running web searches, etc.).
+
+### Browser Sandbox & Transport Mode
+Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP transport is not directly supported**. Instead, Mixer connects to MCP servers using **Server-Sent Events (SSE)**.
+- **For SSE Servers:** Connect directly using their HTTP/SSE URL (e.g. `http://localhost:3001/sse`).
+- **For Stdio Servers:** Use a local stdio-to-sse bridge proxy (such as `mcp-sse-bridge` or `mcp-proxy`) to expose the stdio server as an SSE endpoint.
+
+### Configuring MCP Servers
+To configure MCP servers, open Logseq Settings → Plugin Settings → **Mixer**, and configure the **`mcpServers`** setting.
+Mixer supports standard key-value map and wrapped JSON configuration layouts.
+
+Example configuration with one SSE server and one stdio server (connected via a local proxy on port 3002):
+```json
+{
+  "local-files": {
+    "url": "http://localhost:3001/sse"
+  },
+  "git-tool": {
+    "command": "npx",
+    "args": ["@modelcontextprotocol/server-git"]
+  }
+}
+```
+*Note: Stdio configurations (like `git-tool` above) will be displayed in the UI as unsupported with a prompt to connect them through a bridge.*
+
+### Toggling Tools
+1. Click the **🔌 MCP Servers** button in the chat box toolbar row to open the MCP Servers Manager.
+2. In the panel, you will see all registered servers, their connection status (`online`, `offline`, `connecting`, or `error`), and tool count.
+3. Click a server card to expand it and use the toggle switches to enable or disable individual tools. Enabled tools are automatically exposed to the LLM during conversation.
 
 ---
 
@@ -164,6 +198,7 @@ For details on the internals and design choices behind the plugin, check the tec
 - [Embedding Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/embedding-strategy.md) — Chunking mechanisms, vector generation, and performance optimization.
 - [Chunking Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
 - [Retrieval Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
+- [MCP Server Integration](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/mcp-integration.md) — EventSource/SSE transport layer, MCPManager lifecycle sync, and agentic tool-calling loop execution.
 
 ---
 
