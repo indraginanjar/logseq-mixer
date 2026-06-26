@@ -4,8 +4,11 @@ export type MessageContentPart =
   | { type: 'image_url'; image_url: { url: string } };
 
 export type ChatMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string | MessageContentPart[];
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content?: string | MessageContentPart[];
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: any[];
 };
 
 /** Max output tokens per model. Falls back to 4096 for unknown models. */
@@ -75,7 +78,8 @@ export async function queryLiteLLM(
   model: string,
   apiKey: string,
   endpoint: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  tools?: any[]
 ): Promise<any> {
   const useMaxCompletionTokens = 
     model.toLowerCase().includes('o1-') || 
@@ -89,6 +93,10 @@ export async function queryLiteLLM(
     messages: messages,
     "api_key": apiKey
   };
+
+  if (tools && tools.length > 0) {
+    requestBody.tools = tools;
+  }
 
   if (useMaxCompletionTokens) {
     requestBody.max_completion_tokens = getMaxTokensForModel(model);

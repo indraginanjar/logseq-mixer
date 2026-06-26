@@ -1,5 +1,7 @@
 import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
+import MCPServerPanel from 'components/MCPServerPanel';
+import { MCPManager } from 'mcp/MCPManager';
 import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
@@ -549,10 +551,24 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [autoEmbedEnabled, setAutoEmbedEnabled] = useState(() => (logseq.settings?.autoEmbedEnabled as boolean) ?? true);
   const [cooldownActive, setCooldownActive] = useState(false);
   const [showDbPanel, setShowDbPanel] = useState(false);
+  const [showMcpPanel, setShowMcpPanel] = useState(false);
 
   // Cancel cooldown timer on unmount
   useEffect(() => {
     return () => { cancelCooldown(); };
+  }, []);
+
+  // Initialize and lifecycle manage MCPManager
+  useEffect(() => {
+    const manager = MCPManager.getInstance();
+    manager.initialize();
+    const onSettingsChanged = () => {
+      manager.syncWithSettings();
+    };
+    window.logseq.onSettingsChanged(onSettingsChanged);
+    return () => {
+      manager.shutdown();
+    };
   }, []);
 
   // Track active page name
@@ -1007,6 +1023,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   };
 
   const handleOpenDbPanel = async () => {
+    setShowMcpPanel(false);
     setShowDbPanel(true);
     if (storageProvider.getDocumentCount) {
       try {
@@ -1026,6 +1043,11 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         setDbSize(size);
       } catch { /* ignore */ }
     }
+  };
+
+  const handleOpenMcpPanel = () => {
+    setShowDbPanel(false);
+    setShowMcpPanel(prev => !prev);
   };
 
   if (!isVisible) return null;
@@ -1144,6 +1166,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
               <ToolbarButton onClick={handleOpenDbPanel}>🗄️ Database</ToolbarButton>
+              <ToolbarButton onClick={handleOpenMcpPanel}>🔌 MCP Servers</ToolbarButton>
               <ToolbarButton
                 variant={buttonProps.variant}
                 onClick={handleIndexDB}
@@ -1170,6 +1193,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           </div>
         </InputArea>
 
+        {showMcpPanel && <MCPServerPanel onClose={() => setShowMcpPanel(false)} />}
         {showDbPanel && (
           <DbPanel>
             <DbPanelHeader>

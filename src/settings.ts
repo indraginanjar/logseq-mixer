@@ -107,6 +107,13 @@ const settings: SettingSchemaDesc[] = [
     title: 'Auto-Index Debounce (seconds)',
     description: 'How long to wait after the last page change before auto-indexing starts. Higher values reduce API calls but delay index updates. Minimum 10 seconds.',
     default: 300,
+  },
+  {
+    key: 'mcpServers',
+    type: 'string',
+    title: 'MCP Servers Configuration',
+    description: 'A JSON list of active MCP servers to connect to. Example:\n[{"name": "filesystem", "url": "http://localhost:3001/sse"}]',
+    default: '[]',
   }
 ];
 

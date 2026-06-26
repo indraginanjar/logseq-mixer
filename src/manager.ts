@@ -11,6 +11,7 @@ import { countTokens, encode, decode } from 'tokenizer';
 import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
 import type { PerDocumentStorageProvider, StorageProvider } from './storage/StorageProvider';
+import { MCPManager } from 'mcp/MCPManager';
 import type { VectorSearchAccelerator } from './storage/VectorSearchAccelerator';
 import type { EditCommand } from './types/editTypes';
 
@@ -317,8 +318,64 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   console.info(`[handleQuery] User message length: ${userMessage.length} chars`);
 
   // Query the LLM with the complete messages.
-  const llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal);
-  const assistantResponse = llmOutput.choices[0].message["content"];
+  const tools = MCPManager.getInstance().getEnabledTools();
+  let llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal, tools.length > 0 ? tools : undefined);
+  let assistantMessage = llmOutput.choices[0]?.message;
+
+  if (!assistantMessage) {
+    throw new Error("No response message received from LiteLLM.");
+  }
+
+  // Tool calling loop
+  let loopCount = 0;
+  while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0 && loopCount < 10) {
+    loopCount++;
+    console.info(`[handleQuery] Executing tool call loop step ${loopCount}, calls:`, assistantMessage.tool_calls);
+
+    // 1. Append assistant message containing the tool calls
+    messages.push({
+      role: 'assistant',
+      content: assistantMessage.content || '',
+      tool_calls: assistantMessage.tool_calls
+    });
+
+    // 2. Execute all tool calls
+    for (const toolCall of assistantMessage.tool_calls) {
+      const funcName = toolCall.function.name;
+      let args: any = {};
+      try {
+        args = typeof toolCall.function.arguments === 'string'
+          ? JSON.parse(toolCall.function.arguments)
+          : toolCall.function.arguments;
+      } catch (e) {
+        console.error(`[handleQuery] Failed to parse tool call arguments for ${funcName}:`, e);
+      }
+
+      let toolResult = "";
+      try {
+        toolResult = await MCPManager.getInstance().executeToolCall(funcName, args);
+      } catch (err: any) {
+        console.error(`[handleQuery] Error executing tool call ${funcName}:`, err);
+        toolResult = `Error: ${err.message || err}`;
+      }
+
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        name: funcName,
+        content: toolResult
+      });
+    }
+
+    // 3. Query LiteLLM again with updated messages
+    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal, tools);
+    assistantMessage = llmOutput.choices[0]?.message;
+    if (!assistantMessage) {
+      throw new Error("No response message received from LiteLLM after executing tool call.");
+    }
+  }
+
+  const assistantResponse = assistantMessage.content || '';
 
   console.info(`[handleQuery] Raw LLM response preview: ${assistantResponse.slice(0, 500)}`);
   console.info('[handleQuery] Contains [[: ' + assistantResponse.includes('[[') + ', Contains ((: ' + assistantResponse.includes('(('));
