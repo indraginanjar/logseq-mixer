@@ -253,16 +253,19 @@ interface MCPServerPanelProps {
 export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
   const manager = MCPManager.getInstance();
   const [servers, setServers] = useState(manager.getServers());
+  const [configError, setConfigError] = useState(manager.configError);
   const [expandedServers, setExpandedServers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     // Sync UI with manager updates (e.g. connections, status, tool listings)
     const unsubscribe = manager.subscribeClientsChange(() => {
       setServers(manager.getServers());
+      setConfigError(manager.configError);
     });
     // Trigger first settings check/sync
     manager.syncWithSettings();
     setServers(manager.getServers());
+    setConfigError(manager.configError);
     return unsubscribe;
   }, [manager]);
 
@@ -298,6 +301,15 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
       </HelpText>
 
       <ScrollableArea>
+        {configError && (
+          <div style={{ padding: '12px 14px', backgroundColor: '#fcf3f3', border: '1px solid #e5484d', borderRadius: '8px', color: '#e5484d', fontSize: '12px', marginBottom: '12px', lineHeight: 1.4 }}>
+            <strong>Configuration Error:</strong> {configError}
+            <div style={{ marginTop: '4px', fontSize: '11px', opacity: 0.8 }}>
+              Please verify your MCP Settings JSON syntax in Logseq settings.
+            </div>
+          </div>
+        )}
+
         {servers.length === 0 ? (
           <EmptyToolState style={{ padding: '24px 0', border: '1px dashed $slate6', borderRadius: '8px' }}>
             No MCP Servers configured.<br />

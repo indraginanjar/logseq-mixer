@@ -24,6 +24,7 @@ export class MCPManager {
   // Mapping of generated function names to their corresponding server and tool details
   private functionMapping = new Map<string, { serverName: string; originalToolName: string }>();
   
+  public configError: string | null = null;
   private onClientsChangeCallbacks = new Set<() => void>();
 
   private constructor() {
@@ -92,11 +93,13 @@ export class MCPManager {
     try {
       const mcpSetting = window.logseq.settings?.mcpServers;
       let parsed: any = null;
+      this.configError = null;
       if (mcpSetting && typeof mcpSetting === 'string') {
         try {
           parsed = JSON.parse(mcpSetting);
-        } catch (e) {
+        } catch (e: any) {
           console.warn('[MCPManager] Failed to parse JSON configuration:', e);
+          this.configError = e.message || 'Invalid JSON syntax';
         }
       }
 
