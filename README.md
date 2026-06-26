@@ -151,6 +151,16 @@ To connect your local stdio servers, you can run a local proxy tool that transla
    ```
 This forwards calls from the sandboxed browser iframe over HTTP/SSE to the local bridge proxy, which executes the stdio command on your machine.
 
+> [!TIP]
+> **Troubleshooting Relay Failures (e.g. `connect ECONNREFUSED 127.0.0.1:8082`):**
+> If you run the command above and receive a connection refused error, this is because `@browsermcp/mcp` is designed to control your browser and **requires the BrowserMCP Chrome Extension** to be installed and active. The extension opens a local port on `8082`.
+> - **Solution:** Make sure you have the BrowserMCP Chrome extension installed from the Chrome Web Store and keep Chrome open.
+> - **Self-Contained Test (Filesystem Server):** If you want to test with a standard tool that does *not* require a browser extension, run the official Filesystem server through the bridge instead:
+>   ```bash
+>   npx mcp-sse-bridge -c "npx -y @modelcontextprotocol/server-filesystem C:\Users\indra\Desktop" -p 3002
+>   ```
+>   *(Replace `C:\Users\indra\Desktop` with a valid directory on your machine, then configure the plugin settings URL to `http://localhost:3002/sse`)*
+
 ### Configuring MCP Servers
 To configure MCP servers, open Logseq Settings → Plugin Settings → **Mixer**, and configure the **`mcpServers`** setting.
 Mixer supports standard key-value map and wrapped JSON configuration layouts.
