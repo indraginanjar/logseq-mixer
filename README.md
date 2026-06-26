@@ -136,10 +136,10 @@ Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP t
 #### How to run a stdio-to-sse bridge proxy:
 To connect your local stdio servers, you can run a local proxy tool that translates stdio process communication into an SSE server:
 
-1. Run an SSE bridge tool (such as `mcp-sse-bridge`) on your machine:
+1. Run the **`supergateway`** bridge tool on your machine, passing your stdio command:
    ```bash
-   # Run the bridge and specify the command of your stdio server
-   npx mcp-sse-bridge -c "npx @browsermcp/mcp@latest" -p 3002
+   # npx -y supergateway --port <port> --stdio "<command_to_run>"
+   npx -y supergateway --port 3002 --stdio "npx -y @browsermcp/mcp@latest"
    ```
 2. Configure Logseq Mixer settings with the URL of the running bridge:
    ```json
@@ -153,11 +153,11 @@ This forwards calls from the sandboxed browser iframe over HTTP/SSE to the local
 
 > [!TIP]
 > **Troubleshooting Relay Failures (e.g. `connect ECONNREFUSED 127.0.0.1:8082`):**
-> If you run the command above and receive a connection refused error, this is because `@browsermcp/mcp` is designed to control your browser and **requires the BrowserMCP Chrome Extension** to be installed and active. The extension opens a local port on `8082`.
-> - **Solution:** Make sure you have the BrowserMCP Chrome extension installed from the Chrome Web Store and keep Chrome open.
-> - **Self-Contained Test (Filesystem Server):** If you want to test with a standard tool that does *not* require a browser extension, run the official Filesystem server through the bridge instead:
+> - **With `@browsermcp/mcp`**: If you run `@browsermcp/mcp` and receive a connection refused error on port `8082`, this is because the tool controls your active Chrome window and **requires the BrowserMCP Chrome Extension** to be installed and active. Make sure the extension is active in Chrome before starting.
+> - **Do not use `mcp-sse-bridge`**: The `mcp-sse-bridge` npm package does the **opposite** of what we want (it bridges SSE upstream to local Stdio for Claude Desktop). Running it without a remote SSE server defaults to port `8082`, causing ECONNREFUSED errors.
+> - **Self-Contained Test (Filesystem Server)**: If you want to test with a standard tool that does *not* require a browser extension, run the official Filesystem server through `supergateway`:
 >   ```bash
->   npx mcp-sse-bridge -c "npx -y @modelcontextprotocol/server-filesystem C:\Users\indra\Desktop" -p 3002
+>   npx -y supergateway --port 3002 --stdio "npx -y @modelcontextprotocol/server-filesystem C:\Users\indra\Desktop"
 >   ```
 >   *(Replace `C:\Users\indra\Desktop` with a valid directory on your machine, then configure the plugin settings URL to `http://localhost:3002/sse`)*
 

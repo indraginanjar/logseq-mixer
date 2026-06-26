@@ -10,7 +10,7 @@ Logseq plugins run inside sandboxed browser iframes. This sandbox imposes strict
 - Direct process spawning or standard input/output (stdio-based MCP transport) is **not possible** directly from within the browser sandbox.
 - Consequently, this integration focuses on **Server-Sent Events (SSE)** based transport.
 
-To use stdio-based servers (which are common in desktop tools), users can run a local **stdio-to-sse bridge proxy** (such as `mcp-sse-bridge` or `mcp-proxy`). The bridge runs locally as a process, connects to the stdio server, and exposes an HTTP/SSE endpoint that the Logseq plugin can connect to.
+To use stdio-based servers (which are common in desktop tools), users can run a local **stdio-to-sse bridge proxy** (such as `supergateway` or `mcp-proxy`). The bridge runs locally as a process, connects to the stdio server, and exposes an HTTP/SSE endpoint that the Logseq plugin can connect to.
 
 ---
 
