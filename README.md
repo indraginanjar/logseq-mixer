@@ -132,12 +132,12 @@ Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP t
 - **For Stdio-only Servers:** Use a local bridge proxy (such as `supergateway` or `mcp-proxy`) to expose the stdio server as an SSE endpoint. For detailed instructions on setting up and troubleshooting Browser MCP over a bridge, see the [Browser MCP Guide](file:///C:/Users/indra/s/ig/work/indra/logseq-plugin/logseq-composer/docs/browsermcp-guide.md).
 
 #### SSE Bridge Examples (e.g., Playwright MCP Server)
-If you want to run the Playwright MCP server (`@modelcontextprotocol/server-playwright`), which only supports stdio natively, you can expose it as an SSE server using one of the following bridge proxies:
+If you want to run the Playwright MCP server (`@playwright/mcp@latest`), which only supports stdio natively, you can expose it as an SSE server using one of the following bridge proxies:
 
 ##### Option A: Using `supergateway`
 Run the gateway server in your terminal:
 ```bash
-npx -y supergateway --port 3002 --stdio "npx -y @modelcontextprotocol/server-playwright"
+npx -y supergateway --port 3002 --stdio "npx -y @playwright/mcp@latest"
 ```
 Then configure the server URL in your Mixer settings as:
 ```json
@@ -151,7 +151,7 @@ Then configure the server URL in your Mixer settings as:
 ##### Option B: Using `mcp-proxy`
 Alternatively, run `mcp-proxy` in your terminal:
 ```bash
-npx -y mcp-proxy --port 3002 -- npx -y @modelcontextprotocol/server-playwright
+npx -y mcp-proxy --port 3002 -- npx -y @playwright/mcp@latest
 ```
 Then configure the server URL in your Mixer settings as:
 ```json
