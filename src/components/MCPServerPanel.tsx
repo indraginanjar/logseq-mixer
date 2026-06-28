@@ -350,6 +350,8 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
     });
     // Trigger first settings check/sync
     manager.syncWithSettings();
+    // Auto-reconnect any servers in error/disconnected state
+    manager.reconnectAll();
     setServers(manager.getServers());
     setConfigError(manager.configError);
     return unsubscribe;
@@ -420,9 +422,14 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
         <PanelTitle>🔌 MCP Servers Manager</PanelTitle>
         <HeaderButtons>
           {!isEditingJson ? (
-            <HeaderButton onClick={handleStartEditJson} title="Edit JSON Configuration">
-              ⚙️ Edit JSON
-            </HeaderButton>
+            <>
+              <HeaderButton onClick={() => manager.reconnectAll()} title="Refresh & Reconnect Servers">
+                🔄 Refresh
+              </HeaderButton>
+              <HeaderButton onClick={handleStartEditJson} title="Edit JSON Configuration">
+                ⚙️ Edit JSON
+              </HeaderButton>
+            </>
           ) : (
             <HeaderButton onClick={() => setIsEditingJson(false)}>
               ← Back

@@ -182,6 +182,16 @@ export class MCPManager {
     this.onClientsChangeCallbacks.clear();
   }
 
+  public reconnectAll() {
+    this.clients.forEach((client) => {
+      if (client.status === 'error' || client.status === 'disconnected') {
+        client.connect().catch((err) => {
+          console.error(`[MCPManager] Failed to reconnect ${client.name}:`, err);
+        });
+      }
+    });
+  }
+
   /**
    * Generates a safe name for OpenAI function calling
    */
