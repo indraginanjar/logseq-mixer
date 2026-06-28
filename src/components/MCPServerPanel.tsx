@@ -25,6 +25,7 @@ const PanelContainer = styled('div', {
   flexDirection: 'column',
   padding: '24px 20px',
   animation: `${fadeIn} 0.2s ease-out`,
+  overflow: 'hidden',
 });
 
 const PanelHeader = styled('div', {
@@ -70,6 +71,7 @@ const ScrollableArea = styled('div', {
   flexDirection: 'column',
   gap: '12px',
   paddingRight: '4px',
+  minHeight: 0,
 });
 
 const HelpText = styled('p', {
@@ -77,6 +79,14 @@ const HelpText = styled('p', {
   color: '$slate11',
   margin: '0 0 12px 0',
   lineHeight: 1.4,
+});
+
+const PanelBody = styled('div', {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 0,
+  overflow: 'hidden',
 });
 
 const ServerCard = styled('div', {
@@ -155,6 +165,8 @@ const ToolListContainer = styled('div', {
   backgroundColor: '$elevation0',
   padding: '6px 14px',
   animation: `${slideDown} 0.15s ease-out both`,
+  maxHeight: '300px',
+  overflowY: 'auto',
 });
 
 const ToolItem = styled('div', {
@@ -486,7 +498,7 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
       </PanelHeader>
 
       {isEditingJson ? (
-        <React.Fragment>
+        <PanelBody>
           <HelpText style={{ marginBottom: '8px' }}>
             Directly edit the JSON configuration for MCP Servers. This updates the Logseq plugin settings.
           </HelpText>
@@ -507,9 +519,9 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
               Save Settings
             </SaveButton>
           </EditorActions>
-        </React.Fragment>
+        </PanelBody>
       ) : (
-        <React.Fragment>
+        <PanelBody>
           <HelpText>
             Configure server settings via Logseq Plugin settings. Actively connected servers expose tools that the AI assistant can execute during chat.
           </HelpText>
@@ -610,7 +622,7 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
               })
             )}
           </ScrollableArea>
-        </React.Fragment>
+        </PanelBody>
       )}
     </PanelContainer>
   );
