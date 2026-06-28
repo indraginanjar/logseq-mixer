@@ -19,6 +19,7 @@ const PanelContainer = styled('div', {
   left: 0,
   right: 0,
   bottom: 0,
+  boxSizing: 'border-box',
   backgroundColor: '$elevation0',
   zIndex: 10,
   display: 'flex',
@@ -35,6 +36,7 @@ const PanelHeader = styled('div', {
   marginBottom: '16px',
   borderBottom: '1px solid $slate6',
   paddingBottom: '10px',
+  flexShrink: 0,
 });
 
 const PanelTitle = styled('h3', {
@@ -66,12 +68,23 @@ const CloseButton = styled('button', {
 
 const ScrollableArea = styled('div', {
   flex: 1,
-  overflowY: 'auto',
+  height: 0,
+  overflowY: 'scroll',
   display: 'flex',
   flexDirection: 'column',
   gap: '12px',
   paddingRight: '4px',
-  minHeight: 0,
+  boxSizing: 'border-box',
+  '&::-webkit-scrollbar': {
+    width: '6px',
+  },
+  '&::-webkit-scrollbar-track': {
+    background: 'transparent',
+  },
+  '&::-webkit-scrollbar-thumb': {
+    backgroundColor: '$slate8',
+    borderRadius: '3px',
+  },
 });
 
 const HelpText = styled('p', {
@@ -79,21 +92,16 @@ const HelpText = styled('p', {
   color: '$slate11',
   margin: '0 0 12px 0',
   lineHeight: 1.4,
+  flexShrink: 0,
 });
 
-const PanelBody = styled('div', {
-  flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  minHeight: 0,
-  overflow: 'hidden',
-});
+// Server Card Components
 
 const ServerCard = styled('div', {
   border: '1px solid $slate5',
   borderRadius: '8px',
   backgroundColor: '$slate2',
-  overflow: 'hidden',
+  overflow: 'visible',
   display: 'flex',
   flexDirection: 'column',
 });
@@ -165,8 +173,6 @@ const ToolListContainer = styled('div', {
   backgroundColor: '$elevation0',
   padding: '6px 14px',
   animation: `${slideDown} 0.15s ease-out both`,
-  maxHeight: '300px',
-  overflowY: 'auto',
 });
 
 const ToolItem = styled('div', {
@@ -498,7 +504,7 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
       </PanelHeader>
 
       {isEditingJson ? (
-        <PanelBody>
+        <React.Fragment>
           <HelpText style={{ marginBottom: '8px' }}>
             Directly edit the JSON configuration for MCP Servers. This updates the Logseq plugin settings.
           </HelpText>
@@ -519,14 +525,14 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
               Save Settings
             </SaveButton>
           </EditorActions>
-        </PanelBody>
+        </React.Fragment>
       ) : (
-        <PanelBody>
+        <React.Fragment>
           <HelpText>
             Configure server settings via Logseq Plugin settings. Actively connected servers expose tools that the AI assistant can execute during chat.
           </HelpText>
 
-          <ScrollableArea>
+          <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 53px - 48px - 50px - 35px)', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '4px' }}>
             {configError && (
               <div style={{ padding: '12px 14px', backgroundColor: '#fcf3f3', border: '1px solid #e5484d', borderRadius: '8px', color: '#e5484d', fontSize: '12px', marginBottom: '12px', lineHeight: 1.4 }}>
                 <strong>Configuration Error:</strong> {configError}
@@ -621,8 +627,8 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
                 );
               })
             )}
-          </ScrollableArea>
-        </PanelBody>
+          </div>
+        </React.Fragment>
       )}
     </PanelContainer>
   );
