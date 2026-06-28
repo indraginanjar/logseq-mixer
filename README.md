@@ -150,9 +150,15 @@ Then configure the server URL in your Mixer settings as:
 
 ##### Option B: Using `mcp-proxy`
 Alternatively, run `mcp-proxy` in your terminal:
-```bash
-npx -y mcp-proxy --port 3002 -- npx -y @playwright/mcp@latest
-```
+- **macOS / Linux**:
+  ```bash
+  npx -y mcp-proxy --port 3002 -- npx -y @playwright/mcp@latest
+  ```
+- **Windows** (uses `cmd /c` to avoid Node.js `spawn` ENOENT/EINVAL errors with batch scripts):
+  ```bash
+  npx -y mcp-proxy --port 3002 -- cmd /c npx -y @playwright/mcp@latest
+  ```
+
 Then configure the server URL in your Mixer settings as:
 ```json
 {
