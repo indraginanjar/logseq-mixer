@@ -5,6 +5,7 @@ export interface MCPServerConfig {
   url?: string;
   command?: string;
   args?: string[];
+  disabled?: boolean;
 }
 
 export interface OpenAIFunctionTool {
@@ -117,6 +118,7 @@ export class MCPManager {
             url: item.url ? String(item.url) : undefined,
             command: item.command ? String(item.command) : undefined,
             args: Array.isArray(item.args) ? item.args.map(String) : undefined,
+            disabled: typeof item.disabled === 'boolean' ? item.disabled : undefined,
           })).filter(c => c.name);
         } else if (typeof parsed === 'object') {
           configs = Object.entries(parsed).map(([name, val]: [string, any]): MCPServerConfig | null => {
@@ -126,6 +128,7 @@ export class MCPManager {
                 url: val.url ? String(val.url) : undefined,
                 command: val.command ? String(val.command) : undefined,
                 args: Array.isArray(val.args) ? val.args.map(String) : undefined,
+                disabled: typeof val.disabled === 'boolean' ? val.disabled : undefined,
               };
             }
             return null;
@@ -149,22 +152,40 @@ export class MCPManager {
         const existing = this.clients.get(config.name);
         const configUrl = config.url || '';
         if (existing) {
-          if (existing.url !== configUrl) {
-            console.info(`[MCPManager] Updating URL for MCP server ${config.name} to ${configUrl}`);
+          existing.disabled = !!config.disabled;
+          if (existing.disabled) {
             existing.disconnect();
-            existing.url = configUrl;
-            existing.connect().catch((err) => {
-              console.error(`[MCPManager] Failed to reconnect to ${config.name}:`, err);
-            });
+            existing.status = 'disabled';
+          } else {
+            if (existing.status === 'disabled') {
+              existing.status = 'disconnected';
+            }
+            if (existing.url !== configUrl) {
+              console.info(`[MCPManager] Updating URL for MCP server ${config.name} to ${configUrl}`);
+              existing.disconnect();
+              existing.url = configUrl;
+              existing.connect().catch((err) => {
+                console.error(`[MCPManager] Failed to reconnect to ${config.name}:`, err);
+              });
+            } else if (existing.status === 'disconnected') {
+              existing.connect().catch((err) => {
+                console.error(`[MCPManager] Failed to reconnect to ${config.name}:`, err);
+              });
+            }
           }
         } else {
           console.info(`[MCPManager] Adding new MCP server ${config.name}`);
           const client = new MCPClient(config.name, config.url);
           client.subscribeStatus(() => this.notifyClientsChange());
+          client.disabled = !!config.disabled;
           this.clients.set(config.name, client);
-          client.connect().catch((err) => {
-            console.error(`[MCPManager] Failed to connect to new server ${config.name}:`, err);
-          });
+          if (client.disabled) {
+            client.status = 'disabled';
+          } else {
+            client.connect().catch((err) => {
+              console.error(`[MCPManager] Failed to connect to new server ${config.name}:`, err);
+            });
+          }
         }
       });
 

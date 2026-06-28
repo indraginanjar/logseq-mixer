@@ -9,7 +9,7 @@ export interface MCPTool {
   };
 }
 
-export type MCPClientStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type MCPClientStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'disabled';
 
 export class MCPClient {
   public name: string;
@@ -17,6 +17,7 @@ export class MCPClient {
   public status: MCPClientStatus = 'disconnected';
   public tools: MCPTool[] = [];
   public errorMessage: string | null = null;
+  public disabled: boolean = false;
 
   private eventSource: EventSource | null = null;
   private postEndpoint: string | null = null;
@@ -51,6 +52,10 @@ export class MCPClient {
   }
 
   public async connect(): Promise<void> {
+    if (this.disabled) {
+      this.setStatus('disabled');
+      return;
+    }
     if (this.status === 'connected' || this.status === 'connecting') return;
     if (!this.url) {
       this.setStatus('error', 'Stdio servers not supported in browser. Use an SSE bridge proxy (see README.md).');

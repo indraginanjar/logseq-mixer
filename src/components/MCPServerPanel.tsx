@@ -116,6 +116,7 @@ const StatusIndicator = styled('span', {
       connecting: { backgroundColor: '$amber9' },
       disconnected: { backgroundColor: '$slate9' },
       error: { backgroundColor: '$red9' },
+      disabled: { backgroundColor: '$slate7' },
     },
   },
 });
@@ -374,6 +375,7 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
       case 'connecting': return 'connecting…';
       case 'disconnected': return 'offline';
       case 'error': return 'error';
+      case 'disabled': return 'disabled';
     }
   };
 
@@ -413,6 +415,50 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
       setIsEditingJson(false);
     } catch (e: any) {
       setValidationError(e.message || 'Invalid JSON syntax');
+    }
+  };
+
+  const handleToggleServer = async (serverName: string, enabled: boolean) => {
+    try {
+      const rawVal = window.logseq.settings?.mcpServers || '{}';
+      let parsed: any = {};
+      try {
+        parsed = typeof rawVal === 'string' ? JSON.parse(rawVal) : rawVal;
+      } catch {
+        // Keep empty object
+      }
+
+      let target = parsed;
+      let isWrapped = false;
+      if (parsed.mcpServers && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers)) {
+        target = parsed.mcpServers;
+        isWrapped = true;
+      }
+
+      if (Array.isArray(target)) {
+        target = target.map((item: any) => {
+          if (item.name === serverName) {
+            return { ...item, disabled: !enabled };
+          }
+          return item;
+        });
+      } else if (typeof target === 'object') {
+        if (target[serverName]) {
+          target[serverName] = {
+            ...target[serverName],
+            disabled: !enabled
+          };
+        } else {
+          target[serverName] = {
+            disabled: !enabled
+          };
+        }
+      }
+
+      const updatedSettingsVal = isWrapped ? { mcpServers: JSON.stringify(parsed) } : { mcpServers: JSON.stringify(target) };
+      await window.logseq.updateSettings(updatedSettingsVal);
+    } catch (err) {
+      console.error('[MCPServerPanel] Failed to toggle server status:', err);
     }
   };
 
@@ -494,24 +540,38 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
                 const showToggle = isConnected || hasError;
 
                 return (
-                  <ServerCard key={client.name} style={!isConnected && !hasError ? { opacity: 0.75 } : undefined}>
+                  <ServerCard key={client.name} style={!isConnected && client.status !== 'disabled' && !hasError ? { opacity: 0.75 } : client.status === 'disabled' ? { opacity: 0.5 } : undefined}>
                     <ServerHeader onClick={() => showToggle && toggleExpand(client.name)}>
                       <ServerInfo>
                         <StatusIndicator status={client.status} />
-                        <ServerName style={!isConnected ? { color: '$slate9' } : undefined}>
+                        <ServerName style={
+                          client.status === 'disabled'
+                            ? { color: '$slate8', textDecoration: 'line-through' }
+                            : !isConnected ? { color: '$slate9' } : undefined
+                        }>
                           {client.name}
                         </ServerName>
                         <ToolCount>
-                          {isConnected 
-                            ? `(${enabledCount}/${totalCount} active)` 
-                            : `(${getStatusLabel(client.status)})`}
+                          {client.status === 'disabled'
+                            ? '(disabled)'
+                            : isConnected 
+                              ? `(${enabledCount}/${totalCount} active)` 
+                              : `(${getStatusLabel(client.status)})`}
                         </ToolCount>
                       </ServerInfo>
-                      {showToggle && (
-                        <HeaderRight>
+                      <HeaderRight onClick={(e) => e.stopPropagation()}>
+                        <SwitchContainer style={{ marginRight: '8px', cursor: 'pointer' }}>
+                          <SwitchInput
+                            type="checkbox"
+                            checked={client.status !== 'disabled'}
+                            onChange={(e) => handleToggleServer(client.name, e.target.checked)}
+                          />
+                          <SwitchSlider active={client.status !== 'disabled'} />
+                        </SwitchContainer>
+                        {showToggle && (
                           <CaretIcon expanded={isExpanded}>▼</CaretIcon>
-                        </HeaderRight>
-                      )}
+                        )}
+                      </HeaderRight>
                     </ServerHeader>
 
                     {isExpanded && hasError && client.errorMessage && (
