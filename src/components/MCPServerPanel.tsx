@@ -200,6 +200,88 @@ const ErrorMessage = styled('div', {
   lineHeight: 1.4,
 });
 
+const HeaderButtons = styled('div', {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+});
+
+const HeaderButton = styled('button', {
+  background: 'none',
+  border: '1px solid $slate6',
+  borderRadius: '4px',
+  fontSize: '11px',
+  color: '$slate11',
+  cursor: 'pointer',
+  padding: '4px 8px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  '&:hover': {
+    backgroundColor: '$slate4',
+    color: '$highContrast',
+    borderColor: '$slate8',
+  },
+});
+
+const JsonTextarea = styled('textarea', {
+  width: '100%',
+  flex: 1,
+  minHeight: '260px',
+  fontFamily: 'monospace',
+  fontSize: '12px',
+  padding: '10px',
+  backgroundColor: '$elevation1',
+  border: '1px solid $slate6',
+  borderRadius: '6px',
+  color: '$highContrast',
+  resize: 'none',
+  outline: 'none',
+  '&:focus': {
+    borderColor: '$blue9',
+  },
+});
+
+const EditorActions = styled('div', {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: '10px',
+  marginTop: '12px',
+});
+
+const SaveButton = styled('button', {
+  backgroundColor: '$blue9',
+  color: 'white',
+  border: 'none',
+  borderRadius: '4px',
+  fontSize: '13px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  padding: '6px 16px',
+  '&:hover': {
+    backgroundColor: '$blue10',
+  },
+  '&:disabled': {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+});
+
+const CancelButton = styled('button', {
+  backgroundColor: 'transparent',
+  border: '1px solid $slate6',
+  borderRadius: '4px',
+  fontSize: '13px',
+  color: '$slate11',
+  cursor: 'pointer',
+  padding: '6px 16px',
+  '&:hover': {
+    backgroundColor: '$slate4',
+    color: '$highContrast',
+    borderColor: '$slate8',
+  },
+});
+
 // Toggle Switch Components
 const SwitchContainer = styled('label', {
   position: 'relative',
@@ -256,6 +338,10 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
   const [configError, setConfigError] = useState(manager.configError);
   const [expandedServers, setExpandedServers] = useState<Record<string, boolean>>({});
 
+  const [isEditingJson, setIsEditingJson] = useState(false);
+  const [jsonInput, setJsonInput] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   useEffect(() => {
     // Sync UI with manager updates (e.g. connections, status, tool listings)
     const unsubscribe = manager.subscribeClientsChange(() => {
@@ -289,99 +375,176 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
     }
   };
 
+  const handleStartEditJson = () => {
+    const rawVal = (window.logseq.settings?.mcpServers as any) || '{}';
+    let formatted = typeof rawVal === 'string' ? rawVal : JSON.stringify(rawVal, null, 2);
+    try {
+      const parsed = typeof rawVal === 'string' ? JSON.parse(rawVal) : rawVal;
+      formatted = JSON.stringify(parsed, null, 2);
+    } catch {
+      // Keep as-is
+    }
+    setJsonInput(formatted);
+    setValidationError(null);
+    setIsEditingJson(true);
+  };
+
+  const handleJsonChange = (val: string) => {
+    setJsonInput(val);
+    if (!val.trim()) {
+      setValidationError(null);
+      return;
+    }
+    try {
+      JSON.parse(val);
+      setValidationError(null);
+    } catch (e: any) {
+      setValidationError(e.message || 'Invalid JSON syntax');
+    }
+  };
+
+  const handleSaveJson = async () => {
+    try {
+      const parsed = JSON.parse(jsonInput);
+      const minified = JSON.stringify(parsed);
+      await window.logseq.updateSettings({ mcpServers: minified });
+      setIsEditingJson(false);
+    } catch (e: any) {
+      setValidationError(e.message || 'Invalid JSON syntax');
+    }
+  };
+
   return (
     <PanelContainer>
       <PanelHeader>
         <PanelTitle>🔌 MCP Servers Manager</PanelTitle>
-        <CloseButton onClick={onClose} aria-label="Close MCP Panel">✕</CloseButton>
+        <HeaderButtons>
+          {!isEditingJson ? (
+            <HeaderButton onClick={handleStartEditJson} title="Edit JSON Configuration">
+              ⚙️ Edit JSON
+            </HeaderButton>
+          ) : (
+            <HeaderButton onClick={() => setIsEditingJson(false)}>
+              ← Back
+            </HeaderButton>
+          )}
+          <CloseButton onClick={onClose} aria-label="Close MCP Panel">✕</CloseButton>
+        </HeaderButtons>
       </PanelHeader>
 
-      <HelpText>
-        Configure server settings via Logseq Plugin settings. Actively connected servers expose tools that the AI assistant can execute during chat.
-      </HelpText>
-
-      <ScrollableArea>
-        {configError && (
-          <div style={{ padding: '12px 14px', backgroundColor: '#fcf3f3', border: '1px solid #e5484d', borderRadius: '8px', color: '#e5484d', fontSize: '12px', marginBottom: '12px', lineHeight: 1.4 }}>
-            <strong>Configuration Error:</strong> {configError}
-            <div style={{ marginTop: '4px', fontSize: '11px', opacity: 0.8 }}>
-              Please verify your MCP Settings JSON syntax in Logseq settings.
+      {isEditingJson ? (
+        <React.Fragment>
+          <HelpText style={{ marginBottom: '8px' }}>
+            Directly edit the JSON configuration for MCP Servers. This updates the Logseq plugin settings.
+          </HelpText>
+          <JsonTextarea
+            value={jsonInput}
+            onChange={(e) => handleJsonChange(e.target.value)}
+            placeholder='{\n  "server-name": {\n    "url": "http://localhost:3000/sse"\n  }\n}'
+            spellCheck={false}
+          />
+          {validationError && (
+            <div style={{ color: '#e5484d', fontSize: '11px', marginTop: '6px', lineHeight: 1.4 }}>
+              ⚠️ {validationError}
             </div>
-          </div>
-        )}
+          )}
+          <EditorActions>
+            <CancelButton onClick={() => setIsEditingJson(false)}>Cancel</CancelButton>
+            <SaveButton onClick={handleSaveJson} disabled={!!validationError}>
+              Save Settings
+            </SaveButton>
+          </EditorActions>
+        </React.Fragment>
+      ) : (
+        <React.Fragment>
+          <HelpText>
+            Configure server settings via Logseq Plugin settings. Actively connected servers expose tools that the AI assistant can execute during chat.
+          </HelpText>
 
-        {servers.length === 0 ? (
-          <EmptyToolState style={{ padding: '24px 0', border: '1px dashed $slate6', borderRadius: '8px' }}>
-            No MCP Servers configured.<br />
-            Configure MCP Servers JSON in settings to start.
-          </EmptyToolState>
-        ) : (
-          servers.map((client) => {
-            const isExpanded = expandedServers[client.name];
-            const isConnected = client.status === 'connected';
-            const enabledCount = client.tools.filter(t => manager.isToolEnabled(client.name, t.name)).length;
-            const totalCount = client.tools.length;
+          <ScrollableArea>
+            {configError && (
+              <div style={{ padding: '12px 14px', backgroundColor: '#fcf3f3', border: '1px solid #e5484d', borderRadius: '8px', color: '#e5484d', fontSize: '12px', marginBottom: '12px', lineHeight: 1.4 }}>
+                <strong>Configuration Error:</strong> {configError}
+                <div style={{ marginTop: '4px', fontSize: '11px', opacity: 0.8 }}>
+                  Please verify your MCP Settings JSON syntax in Logseq settings.
+                </div>
+              </div>
+            )}
 
-            const hasError = client.status === 'error';
-            const showToggle = isConnected || hasError;
+            {servers.length === 0 ? (
+              <EmptyToolState style={{ padding: '24px 0', border: '1px dashed $slate6', borderRadius: '8px' }}>
+                No MCP Servers configured.<br />
+                Configure MCP Servers JSON in settings to start.
+              </EmptyToolState>
+            ) : (
+              servers.map((client) => {
+                const isExpanded = expandedServers[client.name];
+                const isConnected = client.status === 'connected';
+                const enabledCount = client.tools.filter(t => manager.isToolEnabled(client.name, t.name)).length;
+                const totalCount = client.tools.length;
 
-            return (
-              <ServerCard key={client.name} style={!isConnected && !hasError ? { opacity: 0.75 } : undefined}>
-                <ServerHeader onClick={() => showToggle && toggleExpand(client.name)}>
-                  <ServerInfo>
-                    <StatusIndicator status={client.status} />
-                    <ServerName style={!isConnected ? { color: '$slate9' } : undefined}>
-                      {client.name}
-                    </ServerName>
-                    <ToolCount>
-                      {isConnected 
-                        ? `(${enabledCount}/${totalCount} active)` 
-                        : `(${getStatusLabel(client.status)})`}
-                    </ToolCount>
-                  </ServerInfo>
-                  {showToggle && (
-                    <HeaderRight>
-                      <CaretIcon expanded={isExpanded}>▼</CaretIcon>
-                    </HeaderRight>
-                  )}
-                </ServerHeader>
+                const hasError = client.status === 'error';
+                const showToggle = isConnected || hasError;
 
-                {isExpanded && hasError && client.errorMessage && (
-                  <ErrorMessage>{client.errorMessage}</ErrorMessage>
-                )}
+                return (
+                  <ServerCard key={client.name} style={!isConnected && !hasError ? { opacity: 0.75 } : undefined}>
+                    <ServerHeader onClick={() => showToggle && toggleExpand(client.name)}>
+                      <ServerInfo>
+                        <StatusIndicator status={client.status} />
+                        <ServerName style={!isConnected ? { color: '$slate9' } : undefined}>
+                          {client.name}
+                        </ServerName>
+                        <ToolCount>
+                          {isConnected 
+                            ? `(${enabledCount}/${totalCount} active)` 
+                            : `(${getStatusLabel(client.status)})`}
+                        </ToolCount>
+                      </ServerInfo>
+                      {showToggle && (
+                        <HeaderRight>
+                          <CaretIcon expanded={isExpanded}>▼</CaretIcon>
+                        </HeaderRight>
+                      )}
+                    </ServerHeader>
 
-                {isExpanded && isConnected && (
-                  <ToolListContainer>
-                    {client.tools.length === 0 ? (
-                      <EmptyToolState>No tools declared by this server.</EmptyToolState>
-                    ) : (
-                      client.tools.map((tool) => {
-                        const isEnabled = manager.isToolEnabled(client.name, tool.name);
-                        return (
-                          <ToolItem key={tool.name}>
-                            <ToolDetails>
-                              <ToolName>{tool.name}</ToolName>
-                              {tool.description && <ToolDesc>{tool.description}</ToolDesc>}
-                            </ToolDetails>
-                            <SwitchContainer>
-                              <SwitchInput
-                                type="checkbox"
-                                checked={isEnabled}
-                                onChange={(e) => handleToggleTool(client.name, tool.name, e.target.checked)}
-                              />
-                              <SwitchSlider active={isEnabled} />
-                            </SwitchContainer>
-                          </ToolItem>
-                        );
-                      })
+                    {isExpanded && hasError && client.errorMessage && (
+                      <ErrorMessage>{client.errorMessage}</ErrorMessage>
                     )}
-                  </ToolListContainer>
-                )}
-              </ServerCard>
-            );
-          })
-        )}
-      </ScrollableArea>
+
+                    {isExpanded && isConnected && (
+                      <ToolListContainer>
+                        {client.tools.length === 0 ? (
+                          <EmptyToolState>No tools declared by this server.</EmptyToolState>
+                        ) : (
+                          client.tools.map((tool) => {
+                            const isEnabled = manager.isToolEnabled(client.name, tool.name);
+                            return (
+                              <ToolItem key={tool.name}>
+                                <ToolDetails>
+                                  <ToolName>{tool.name}</ToolName>
+                                  {tool.description && <ToolDesc>{tool.description}</ToolDesc>}
+                                </ToolDetails>
+                                <SwitchContainer>
+                                  <SwitchInput
+                                    type="checkbox"
+                                    checked={isEnabled}
+                                    onChange={(e) => handleToggleTool(client.name, tool.name, e.target.checked)}
+                                  />
+                                  <SwitchSlider active={isEnabled} />
+                                </SwitchContainer>
+                              </ToolItem>
+                            );
+                          })
+                        )}
+                      </ToolListContainer>
+                    )}
+                  </ServerCard>
+                );
+              })
+            )}
+          </ScrollableArea>
+        </React.Fragment>
+      )}
     </PanelContainer>
   );
 }
