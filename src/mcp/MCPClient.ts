@@ -33,7 +33,7 @@ export class MCPClient {
     this.url = url || '';
     if (!url) {
       this.status = 'error';
-      this.errorMessage = 'Stdio servers not supported in browser. Use an SSE bridge proxy.';
+      this.errorMessage = 'Stdio servers not supported in browser. Use an SSE bridge proxy (see README.md).';
     }
   }
 
@@ -53,7 +53,7 @@ export class MCPClient {
   public async connect(): Promise<void> {
     if (this.status === 'connected' || this.status === 'connecting') return;
     if (!this.url) {
-      this.setStatus('error', 'Stdio servers not supported in browser. Use an SSE bridge proxy.');
+      this.setStatus('error', 'Stdio servers not supported in browser. Use an SSE bridge proxy (see README.md).');
       return;
     }
 
