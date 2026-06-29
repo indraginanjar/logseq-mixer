@@ -135,6 +135,36 @@ const settings: SettingSchemaDesc[] = [
     title: 'Memory Token Budget (%)',
     description: 'Percentage of context window allocated to memory retrieval (1-25).',
     default: 10,
+  },
+  {
+    key: 'agentEnabled',
+    type: 'boolean',
+    title: 'Enable Autonomous Agent',
+    description: 'Allow the AI to pursue multi-step goals autonomously.',
+    default: true,
+  },
+  {
+    key: 'agentAutonomy',
+    type: 'enum',
+    title: 'Agent Autonomy Level',
+    description: 'plan-first shows plan for approval. autopilot executes immediately.',
+    default: 'plan-first',
+    enumChoices: ['plan-first', 'autopilot'],
+    enumPicker: 'select',
+  },
+  {
+    key: 'agentTokenBudget',
+    type: 'number',
+    title: 'Agent Token Budget',
+    description: 'Maximum tokens the agent can use per autonomous run (0 = unlimited).',
+    default: 100000,
+  },
+  {
+    key: 'agentMaxRetries',
+    type: 'number',
+    title: 'Agent Max Retries Per Step',
+    description: 'How many times to retry a failed step before asking for help.',
+    default: 2,
   }
 ];
 

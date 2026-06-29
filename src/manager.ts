@@ -16,6 +16,7 @@ import type { VectorSearchAccelerator } from './storage/VectorSearchAccelerator'
 import type { EditCommand } from './types/editTypes';
 import { MemoryStore } from './memory/MemoryStore';
 import { detectExplicitMemory } from './memory/memoryDetector';
+import { detectGoal } from './agent/goalDetector';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -84,6 +85,10 @@ export function getMemoryStore(): MemoryStore | null {
 export function getLastMemorySaved(): boolean {
   return lastMemorySaved;
 }
+
+/** Pending agent goal detected by handleQuery. */
+export let pendingAgentGoal: string | null = null;
+export function clearPendingAgentGoal(): void { pendingAgentGoal = null; }
 
 /**
  * Ensure the BM25 index is initialized. If it hasn't been created yet,
@@ -162,6 +167,14 @@ function truncateToTokens(text: string, maxTokens: number): string {
 
 export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string): Promise<string | EditQueryResult> {
   lastMemorySaved = false;
+  pendingAgentGoal = null;
+
+  // Detect multi-step goals and route to agent loop
+  if (settings.agentEnabled && !editMode && detectGoal(query).isGoal) {
+    pendingAgentGoal = query;
+    return '__AGENT_GOAL_DETECTED__';
+  }
+
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 

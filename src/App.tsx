@@ -7,6 +7,10 @@ import { MemoryStore } from './memory/MemoryStore';
 import { setMemoryStore, getLastMemorySaved } from './manager';
 import { summarizeSession } from './memory/sessionSummarizer';
 import { writeMemoryPage } from './memory/logseqMemoryWriter';
+import { AgentLoop } from './agent/AgentLoop';
+import AgentProgress from './components/AgentProgress';
+import { pendingAgentGoal, clearPendingAgentGoal } from './manager';
+import type { AgentPlan, AgentProgressEvent } from './agent/types';
 import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
@@ -562,6 +566,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [memoryStoreInstance, setMemoryStoreInstance] = useState<MemoryStore | null>(null);
 
+  // Agent state
+  const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentTokensUsed, setAgentTokensUsed] = useState(0);
+  const [escalationQuestion, setEscalationQuestion] = useState<string | null>(null);
+  const agentLoopRef = useRef<AgentLoop | null>(null);
+  const escalationResolverRef = useRef<((answer: string) => void) | null>(null);
+
   // Cancel cooldown timer on unmount
   useEffect(() => {
     return () => { cancelCooldown(); };
@@ -778,6 +790,47 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       const queryWithFile = messageToSend + fileAppendix;
       const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages[0]?.content ?? undefined);
       abortControllerRef.current = null;
+
+      // Handle agent goal detection
+      if (resp === '__AGENT_GOAL_DETECTED__' && pendingAgentGoal) {
+        const goal = pendingAgentGoal;
+        clearPendingAgentGoal();
+        setLoading(true);
+        const loop = new AgentLoop({
+          settings,
+          signal: controller.signal,
+          tokenBudget: settings.agentTokenBudget || 100000,
+          maxRetries: settings.agentMaxRetries || 2,
+          onProgress: (event: AgentProgressEvent) => {
+            setAgentTokensUsed(event.tokensUsed);
+            if (event.step) {
+              setAgentPlan(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === event.step!.id ? event.step! : s) } : prev);
+            }
+            if (event.type === 'complete' || event.type === 'aborted') {
+              setAgentRunning(false);
+              setLoading(false);
+              if (event.type === 'complete' && memoryStoreInstance) {
+                memoryStoreInstance.addMemory('task_outcome', `Goal: ${goal}\nResult: ${event.message}`, 'auto');
+              }
+            }
+          },
+          onEscalate: (question: string) => new Promise<string>(resolve => {
+            setEscalationQuestion(question);
+            escalationResolverRef.current = resolve;
+          }),
+        });
+        agentLoopRef.current = loop;
+        const pageCtx = await getActivePageContext();
+        const ctxStr = pageCtx ? `Page: ${pageCtx.pageName}\n${pageCtx.formattedTree?.slice(0, 500) || ''}` : '';
+        const plan = await loop.generatePlan(goal, ctxStr);
+        setAgentPlan(plan);
+        setLoading(false);
+        if (settings.agentAutonomy === 'autopilot') {
+          setAgentRunning(true);
+          loop.run(plan);
+        }
+        return;
+      }
 
       if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
         const editResp = resp;
@@ -1126,6 +1179,19 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             onFileReattach={(file) => setAttachedFiles(prev => [...prev, file])}
             onImageReattach={(image) => setImageDataUrls(prev => [...prev, image])}
           />
+          {agentPlan && (
+            <AgentProgress
+              plan={agentPlan}
+              onApprove={() => { setAgentRunning(true); agentLoopRef.current?.run(agentPlan); }}
+              onCancel={() => { setAgentPlan(null); setAgentRunning(false); }}
+              onStop={() => { abortControllerRef.current?.abort(); setAgentRunning(false); }}
+              onEscalationResponse={(answer) => { escalationResolverRef.current?.(answer); setEscalationQuestion(null); }}
+              tokensUsed={agentTokensUsed}
+              tokenBudget={settings?.agentTokenBudget || 100000}
+              escalationQuestion={escalationQuestion}
+              isRunning={agentRunning}
+            />
+          )}
           {loading && (
             <TypingIndicator>
               <Dot delay={0} /><Dot delay={1} /><Dot delay={2} />

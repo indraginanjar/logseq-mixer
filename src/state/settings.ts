@@ -16,6 +16,10 @@ interface IPluginSettings {
   memoryEnabled?: boolean;
   autoSummarize?: boolean;
   memoryBudgetPercent?: number;
+  agentEnabled?: boolean;
+  agentAutonomy?: string;
+  agentTokenBudget?: number;
+  agentMaxRetries?: number;
 }
 
 const settingsChangedEffect: AtomEffect<IPluginSettings> = ({ setSelf }) => {
