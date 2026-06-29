@@ -8,7 +8,7 @@ const QUESTION_PATTERNS = [
   /\?$/,
 ];
 
-export function detectGoal(message: string): { isGoal: boolean; confidence: number } {
+export function detectGoal(message: string, threshold = 0.6): { isGoal: boolean; confidence: number } {
   const trimmed = message.trim();
   if (trimmed.length < 20) return { isGoal: false, confidence: 0 };
 
@@ -26,5 +26,5 @@ export function detectGoal(message: string): { isGoal: boolean; confidence: numb
   if (trimmed.length > 150) confidence += 0.1;
 
   confidence = Math.min(confidence, 1);
-  return { isGoal: confidence > 0.6, confidence };
+  return { isGoal: confidence >= threshold, confidence };
 }

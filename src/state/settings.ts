@@ -16,7 +16,8 @@ interface IPluginSettings {
   memoryEnabled?: boolean;
   autoSummarize?: boolean;
   memoryBudgetPercent?: number;
-  agentEnabled?: boolean;
+  agentMode?: string;
+  agentConfidenceThreshold?: number;
   agentAutonomy?: string;
   agentTokenBudget?: number;
   agentMaxRetries?: number;

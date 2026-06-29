@@ -170,7 +170,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   pendingAgentGoal = null;
 
   // Detect multi-step goals and route to agent loop
-  if (settings.agentEnabled && !editMode && detectGoal(query).isGoal) {
+  if (settings.agentMode === 'on' && !editMode && detectGoal(query, settings.agentConfidenceThreshold || 0.6).isGoal) {
     pendingAgentGoal = query;
     return '__AGENT_GOAL_DETECTED__';
   }
