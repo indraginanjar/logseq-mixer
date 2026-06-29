@@ -1,11 +1,16 @@
 import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import MCPServerPanel from 'components/MCPServerPanel';
+import MemoryPanel from './components/MemoryPanel';
 import { MCPManager } from 'mcp/MCPManager';
+import { MemoryStore } from './memory/MemoryStore';
+import { setMemoryStore, getLastMemorySaved } from './manager';
+import { summarizeSession } from './memory/sessionSummarizer';
+import { writeMemoryPage } from './memory/logseqMemoryWriter';
 import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
-import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq, verifyResponse } from 'manager';
+import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { executeAll, verifyAndCorrect } from './blockExecutor';
@@ -552,6 +557,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [cooldownActive, setCooldownActive] = useState(false);
   const [showDbPanel, setShowDbPanel] = useState(false);
   const [showMcpPanel, setShowMcpPanel] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [memoryCount, setMemoryCount] = useState(0);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [memoryStoreInstance, setMemoryStoreInstance] = useState<MemoryStore | null>(null);
 
   // Cancel cooldown timer on unmount
   useEffect(() => {
@@ -570,6 +579,17 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       manager.shutdown();
     };
   }, []);
+
+  // Initialize MemoryStore from SQLite db
+  useEffect(() => {
+    const provider = storageProvider as any;
+    if (provider?.db) {
+      const store = new MemoryStore(provider.db);
+      setMemoryStoreInstance(store);
+      setMemoryStore(store);
+      setMemoryCount(store.getMemoryCount());
+    }
+  }, [storageProvider]);
 
   // Track active page name
   useEffect(() => {
@@ -817,19 +837,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           content: responseText,
           sender: 'assistant',
         }]);
+      }
 
-        // Verify long responses for correctness
-        const verification = await verifyResponse(messageToSend, responseText, settings);
-        if (verification?.corrected) {
-          setMessages(prev => prev.map(m =>
-            m.id === assistantMsgId ? { ...m, content: verification.correctedResponse } : m
-          ));
-          setMessages(prev => [...prev, {
-            id: Date.now() + '_verify',
-            content: `⚠️ The previous response was reviewed and corrected.\n\n**What was fixed:** ${verification.explanation}`,
-            sender: 'assistant',
-          }]);
-        }
+      // Check if a memory was saved during this query
+      if (getLastMemorySaved()) {
+        setMemoryCount(prev => prev + 1);
+        const memMsgId = `memory_saved_${Date.now()}`;
+        setMessages(prev => [...prev, { id: memMsgId, content: '💾 Remembered', sender: 'assistant' }]);
+        setTimeout(() => setMessages(prev => prev.filter(m => m.id !== memMsgId)), 3000);
       }
     } catch (err: any) {
       abortControllerRef.current = null;
@@ -921,12 +936,24 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   };
 
   const handleNewSession = () => {
+    const capturedMessages = messages.map(m => ({ role: m.sender === 'user' ? 'user' as const : 'assistant' as const, content: m.content }));
     setMessages([]);
     setInputMessage('');
     setError(null);
     setAiEditMode(false);
     setEditResults(new Map());
     clearConversationHistory();
+
+    if (settings?.memoryEnabled && settings?.autoSummarize && capturedMessages.length >= 4 && memoryStoreInstance) {
+      setIsSummarizing(true);
+      summarizeSession(capturedMessages, settings).then(summary => {
+        if (summary && memoryStoreInstance) {
+          memoryStoreInstance.addMemory('session_summary', summary, 'auto');
+          writeMemoryPage(summary, 'session_summary');
+          setMemoryCount(memoryStoreInstance.getMemoryCount());
+        }
+      }).finally(() => setIsSummarizing(false));
+    }
   };
 
   const handleAutoEmbedToggle = () => {
@@ -1047,7 +1074,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   const handleOpenMcpPanel = () => {
     setShowDbPanel(false);
+    setShowMemoryPanel(false);
     setShowMcpPanel(prev => !prev);
+  };
+
+  const handleOpenMemoryPanel = () => {
+    setShowDbPanel(false);
+    setShowMcpPanel(false);
+    setShowMemoryPanel(prev => !prev);
   };
 
   if (!isVisible) return null;
@@ -1167,6 +1201,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
               <ToolbarButton onClick={handleOpenDbPanel}>🗄️ Database</ToolbarButton>
               <ToolbarButton onClick={handleOpenMcpPanel}>🔌 MCP Servers</ToolbarButton>
+              <ToolbarButton onClick={handleOpenMemoryPanel}>
+                🧠 Memory{memoryCount > 0 && <span style={{ fontSize: '10px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', padding: '1px 5px', marginLeft: '4px' }}>{memoryCount}</span>}{isSummarizing && <span style={{ marginLeft: '4px' }}>⏳</span>}
+              </ToolbarButton>
               <ToolbarButton
                 variant={buttonProps.variant}
                 onClick={handleIndexDB}
@@ -1194,6 +1231,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         </InputArea>
 
         {showMcpPanel && <MCPServerPanel onClose={() => setShowMcpPanel(false)} />}
+        {showMemoryPanel && (
+          <MemoryPanel
+            onClose={() => setShowMemoryPanel(false)}
+            memoryStore={memoryStoreInstance}
+            memoryEnabled={(settings?.memoryEnabled as boolean) ?? true}
+            onCountChange={setMemoryCount}
+          />
+        )}
         {showDbPanel && (
           <DbPanel>
             <DbPanelHeader>

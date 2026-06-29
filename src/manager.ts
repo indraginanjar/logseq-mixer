@@ -14,6 +14,8 @@ import type { PerDocumentStorageProvider, StorageProvider } from './storage/Stor
 import { MCPManager } from 'mcp/MCPManager';
 import type { VectorSearchAccelerator } from './storage/VectorSearchAccelerator';
 import type { EditCommand } from './types/editTypes';
+import { MemoryStore } from './memory/MemoryStore';
+import { detectExplicitMemory } from './memory/memoryDetector';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -21,9 +23,6 @@ const CURRENT_CHUNKING_VERSION = '2'; // token-based
 const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = [];
 // Set maximum number of history messages to include in the prompt (e.g., last 6 messages)
 const MAX_HISTORY_LENGTH = 6;
-
-/** Character length threshold above which responses trigger self-verification. */
-const VERIFY_RESPONSE_THRESHOLD = 800;
 
 export interface EditQueryResult {
   text: string;           // LLM response with json-edit blocks stripped
@@ -68,6 +67,22 @@ export function setAccelerator(acc: VectorSearchAccelerator | null): void {
 /** Return the current VectorSearchAccelerator instance (may be null). */
 export function getAccelerator(): VectorSearchAccelerator | null {
   return accelerator;
+}
+
+/** Module-level memory store instance. */
+let memoryStore: MemoryStore | null = null;
+let lastMemorySaved = false;
+
+export function setMemoryStore(store: MemoryStore): void {
+  memoryStore = store;
+}
+
+export function getMemoryStore(): MemoryStore | null {
+  return memoryStore;
+}
+
+export function getLastMemorySaved(): boolean {
+  return lastMemorySaved;
 }
 
 /**
@@ -146,6 +161,7 @@ function truncateToTokens(text: string, maxTokens: number): string {
 }
 
 export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string): Promise<string | EditQueryResult> {
+  lastMemorySaved = false;
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
@@ -219,6 +235,24 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   let userBudget = Math.max(1024, totalInputBudget - systemTokens);
 
   console.info(`[handleQuery] Model: ${settings.selectedModel}, Context Limit: ${contextLimit}, Max Output: ${maxOutput}, Input Budget: ${totalInputBudget}, User Budget: ${userBudget}`);
+
+  // Inject agent memory into system prompt
+  if (settings.memoryEnabled && memoryStore) {
+    const memBudget = Math.floor(userBudget * Math.min(25, Math.max(1, settings.memoryBudgetPercent || 10)) / 100);
+    const preferences = memoryStore.getMemories({ category: 'preference' });
+    const summaries = memoryStore.getMemories({ category: 'session_summary' }).slice(0, 3);
+    const relevant = memoryStore.searchMemories(query);
+    const allMemories = [...preferences, ...summaries, ...relevant];
+    const seen = new Set<string>();
+    const unique = allMemories.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+    if (unique.length > 0) {
+      let memText = '\n\nYour memories from past interactions with this user:\n' + unique.map(m => `- [${m.category}] ${m.content}`).join('\n');
+      memText = truncateToTokens(memText, memBudget);
+      systemMessage += memText;
+      userBudget -= countTokens(memText);
+      memoryStore.updateLastAccessed(unique.map(m => m.id));
+    }
+  }
 
   // Build the user message parts budget-consciously.
   let editContextText = "";
@@ -388,6 +422,15 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     conversationHistory.splice(0, conversationHistory.length - MAX_HISTORY_LENGTH * 2);
   }
 
+  // Detect and store explicit memory requests
+  if (settings.memoryEnabled && memoryStore) {
+    const detected = detectExplicitMemory(query);
+    if (detected) {
+      memoryStore.addMemory(detected.category, detected.content);
+      lastMemorySaved = true;
+    }
+  }
+
   // When edit mode is enabled, parse edit commands from the response.
   if (editMode) {
     const parseResult = parseEditCommands(assistantResponse);
@@ -398,61 +441,4 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   }
 
   return assistantResponse;
-}
-
-
-export interface VerificationResult {
-  corrected: boolean;
-  correctedResponse: string;
-  explanation: string;
-}
-
-/**
- * Verify a long/complex LLM response by sending it back for a correctness check.
- * Returns null if the response is below threshold or passes verification.
- * Returns a VerificationResult with the corrected response if issues were found.
- */
-export async function verifyResponse(
-  query: string,
-  response: string,
-  settings: any,
-  signal?: AbortSignal
-): Promise<VerificationResult | null> {
-  if (response.length < VERIFY_RESPONSE_THRESHOLD) return null;
-
-  const verifyMessages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: `You are a verification assistant. Review the following AI response for correctness, coherence, and factual accuracy given the user's original question. If the response is correct, reply with exactly: VERIFIED. If there are issues, reply in this exact format:\n---CORRECTION---\n<the corrected response>\n---EXPLANATION---\n<brief explanation of what was wrong and what you fixed>`,
-    },
-    {
-      role: 'user',
-      content: `Original question: ${query}\n\nAI response to verify:\n${response}`,
-    },
-  ];
-
-  try {
-    const result = await queryLiteLLM(verifyMessages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal);
-    const verdict = result.choices[0].message.content.trim();
-    if (verdict === 'VERIFIED' || verdict.startsWith('VERIFIED')) {
-      return null;
-    }
-    // Parse structured correction response
-    let correctedResponse = verdict;
-    let explanation = 'The response was corrected for accuracy.';
-    const correctionIdx = verdict.indexOf('---CORRECTION---');
-    const explanationIdx = verdict.indexOf('---EXPLANATION---');
-    if (correctionIdx !== -1 && explanationIdx !== -1) {
-      correctedResponse = verdict.slice(correctionIdx + '---CORRECTION---'.length, explanationIdx).trim();
-      explanation = verdict.slice(explanationIdx + '---EXPLANATION---'.length).trim();
-    }
-    // Replace the history entry with the corrected version
-    if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'assistant') {
-      conversationHistory[conversationHistory.length - 1].content = correctedResponse;
-    }
-    return { corrected: true, correctedResponse, explanation };
-  } catch (err) {
-    console.error('[verifyResponse] Verification failed, using original response:', err);
-    return null;
-  }
 }

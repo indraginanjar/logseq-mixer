@@ -13,6 +13,9 @@ interface IPluginSettings {
   autoIndexDebounceSeconds: number;
   storageBackend?: string;
   embeddingProvider?: string;
+  memoryEnabled?: boolean;
+  autoSummarize?: boolean;
+  memoryBudgetPercent?: number;
 }
 
 const settingsChangedEffect: AtomEffect<IPluginSettings> = ({ setSelf }) => {

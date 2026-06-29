@@ -88,6 +88,17 @@ export class SQLiteVectorStore implements StorageProvider {
         contentPreview TEXT NOT NULL
       )`
     );
+    this._db.run(
+      `CREATE TABLE IF NOT EXISTS agent_memory (
+        id TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_accessed INTEGER,
+        source TEXT,
+        metadata TEXT
+      )`
+    );
 
     // Migrate legacy Orama blob if present (Req 6.1, 8.3)
     try {

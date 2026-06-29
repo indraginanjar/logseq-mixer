@@ -114,6 +114,27 @@ const settings: SettingSchemaDesc[] = [
     title: 'MCP Servers Configuration',
     description: 'A JSON object mapping server names to their configurations. Stdio-based servers are not directly supported in the browser sandbox; please use an SSE bridge proxy (e.g. supergateway) to connect them.\nExample:\n{\n  "filesystem": {\n    "url": "http://localhost:3001/sse"\n  }\n}',
     default: '{}',
+  },
+  {
+    key: 'memoryEnabled',
+    type: 'boolean',
+    title: 'Enable Agent Memory',
+    description: 'When enabled, the AI remembers context across sessions.',
+    default: true,
+  },
+  {
+    key: 'autoSummarize',
+    type: 'boolean',
+    title: 'Auto-summarize Sessions',
+    description: 'Automatically summarize conversations when starting a new session.',
+    default: true,
+  },
+  {
+    key: 'memoryBudgetPercent',
+    type: 'number',
+    title: 'Memory Token Budget (%)',
+    description: 'Percentage of context window allocated to memory retrieval (1-25).',
+    default: 10,
   }
 ];
 
