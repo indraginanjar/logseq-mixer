@@ -90,7 +90,7 @@ export function AutoEmbedToggle({ enabled, onToggle }: AutoEmbedToggleProps) {
   };
 
   return (
-    <Container>
+    <Container title="Auto-Embed">
       <Track
         role="switch"
         aria-checked={enabled}
@@ -101,7 +101,7 @@ export function AutoEmbedToggle({ enabled, onToggle }: AutoEmbedToggleProps) {
       >
         <Dot active={enabled} />
       </Track>
-      <Label>{enabled ? 'Auto-Embed: On' : 'Auto-Embed: Off'}</Label>
+      <Label>📇</Label>
     </Container>
   );
 }

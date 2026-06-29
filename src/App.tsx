@@ -22,6 +22,7 @@ import { getActivePageContext } from './blockTreeFormatter';
 import { getButtonState } from './buttonState';
 import { AutoEmbedToggle } from './components/AutoEmbedToggle';
 import { ChangeSummary } from './components/ChangeSummary';
+import { AgentToggle } from './components/AgentToggle';
 import { EditToggle } from './components/EditToggle';
 import { cancelCooldown, startCooldown } from './cooldownManager';
 import { useAppVisible } from './hooks/useAppVisible';
@@ -558,6 +559,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [isDismissing, setIsDismissing] = useState(false);
   const [progressCount, setProgressCount] = useState(getIndexingProgress);
   const [autoEmbedEnabled, setAutoEmbedEnabled] = useState(() => (logseq.settings?.autoEmbedEnabled as boolean) ?? true);
+  const [agentModeOn, setAgentModeOn] = useState(() => (logseq.settings?.agentMode as string) !== 'off');
   const [cooldownActive, setCooldownActive] = useState(false);
   const [showDbPanel, setShowDbPanel] = useState(false);
   const [showMcpPanel, setShowMcpPanel] = useState(false);
@@ -1038,6 +1040,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     }
   };
 
+  const handleAgentModeToggle = () => {
+    const newMode = agentModeOn ? 'off' : 'on';
+    setAgentModeOn(!agentModeOn);
+    logseq.updateSettings({ agentMode: newMode });
+  };
+
   const currentModel = settings?.selectedModel || 'gpt-3.5-turbo';
   const [fetchedModels, setFetchedModels] = useState<string[]>(MODEL_CHOICES);
 
@@ -1172,6 +1180,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               value={currentModel}
               onChange={handleModelChange}
               aria-label="Select Model"
+              title="Select Model"
             >
               {modelChoices.map((choice) => (
                 <option key={choice} value={choice}>
@@ -1179,8 +1188,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 </option>
               ))}
             </ModelSelect>
-            <HeaderButton onClick={handleNewSession} aria-label="New Session">✨ New</HeaderButton>
-            <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close">✕</CloseButton>
+            <HeaderButton onClick={handleNewSession} aria-label="New Session" title="New Session">✨ New</HeaderButton>
+            <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close" title="Close">✕</CloseButton>
           </HeaderRight>
         </Header>
 
@@ -1258,7 +1267,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               style={{ display: 'none' }}
               onChange={(e) => { if (e.target.files) { Array.from(e.target.files).forEach(handleFile); } e.target.value = ''; }}
             />
-            <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" disabled={loading}>
+            <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" title="Attach file" disabled={loading}>
               <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6h-1v9.5a2 2 0 0 0 4 0V5a3.5 3.5 0 0 0-7 0v12.5a5 5 0 0 0 10 0V6h-1z" fill="currentColor"/></svg>
             </ImageButton>
             <TextArea
@@ -1272,28 +1281,32 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               rows={4}
             />
             {loading ? (
-              <SendButton onClick={handleCancel} aria-label="Cancel" css={{ backgroundColor: '$red9', '&:hover:not(:disabled)': { backgroundColor: '$red10' } }}>
+              <SendButton onClick={handleCancel} aria-label="Cancel" title="Cancel" css={{ backgroundColor: '$red9', '&:hover:not(:disabled)': { backgroundColor: '$red10' } }}>
                 <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
               </SendButton>
             ) : (
-              <SendButton onClick={handleSubmit} disabled={!inputMessage.trim()} aria-label="Send">
+              <SendButton onClick={handleSubmit} disabled={!inputMessage.trim()} aria-label="Send" title="Send">
                 <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
               </SendButton>
             )}
           </InputWrapper>
           <ToolbarRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
-              <ToolbarButton onClick={handleOpenDbPanel}>🗄️ Database</ToolbarButton>
-              <ToolbarButton onClick={handleOpenMcpPanel}>🔌 MCP Servers</ToolbarButton>
-              <ToolbarButton onClick={handleOpenMemoryPanel}>
-                🧠 Memory{memoryCount > 0 && <span style={{ fontSize: '10px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', padding: '1px 5px', marginLeft: '4px' }}>{memoryCount}</span>}{isSummarizing && <span style={{ marginLeft: '4px' }}>⏳</span>}
+              <AgentToggle enabled={agentModeOn} onToggle={handleAgentModeToggle} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <ToolbarButton onClick={handleOpenDbPanel} title="Database">🗄️</ToolbarButton>
+              <ToolbarButton onClick={handleOpenMcpPanel} title="MCP Servers">🔌</ToolbarButton>
+              <ToolbarButton onClick={handleOpenMemoryPanel} title="Memory">
+                🧠{memoryCount > 0 && <span style={{ fontSize: '10px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', padding: '1px 5px', marginLeft: '2px' }}>{memoryCount}</span>}{isSummarizing && <span style={{ marginLeft: '2px' }}>⏳</span>}
               </ToolbarButton>
               <ToolbarButton
                 variant={buttonProps.variant}
                 onClick={handleIndexDB}
                 disabled={buttonProps.disabled}
+                title="Re-Index"
                 css={buttonProps.disabled ? { opacity: 0.5, cursor: 'default' } : undefined}
               >
                 {buttonProps.label}

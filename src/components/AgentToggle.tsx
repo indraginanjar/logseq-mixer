@@ -1,14 +1,10 @@
 import React from 'react';
 import { styled } from '../stitches.config';
 
-/* ------------------------------------------------------------------ */
-/*  Styled primitives                                                  */
-/* ------------------------------------------------------------------ */
-
 const Container = styled('div', {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: '6px',
+  gap: '5px',
 });
 
 const Label = styled('span', {
@@ -26,24 +22,16 @@ const Track = styled('span', {
   cursor: 'pointer',
   transition: 'background-color 0.2s ease',
   outline: 'none',
-
   '&:focus-visible': {
-    boxShadow: '0 0 0 2px $colors$blue7',
+    boxShadow: '0 0 0 2px $colors$violet7',
   },
-
   variants: {
     active: {
-      true: {
-        backgroundColor: '$blue9',
-      },
-      false: {
-        backgroundColor: '$slate6',
-      },
+      true: { backgroundColor: '$violet9' },
+      false: { backgroundColor: '$slate6' },
     },
   },
-  defaultVariants: {
-    active: false,
-  },
+  defaultVariants: { active: false },
 });
 
 const Dot = styled('span', {
@@ -54,46 +42,31 @@ const Dot = styled('span', {
   borderRadius: '$pill',
   transition: 'left 0.2s ease, background-color 0.2s ease',
   pointerEvents: 'none',
-
   variants: {
     active: {
-      true: {
-        left: '18px',
-        backgroundColor: 'white',
-      },
-      false: {
-        left: '2px',
-        backgroundColor: '$slate9',
-      },
+      true: { left: '18px', backgroundColor: 'white' },
+      false: { left: '2px', backgroundColor: '$slate9' },
     },
   },
-  defaultVariants: {
-    active: false,
-  },
+  defaultVariants: { active: false },
 });
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
-
-interface EditToggleProps {
+interface AgentToggleProps {
   enabled: boolean;
   onToggle: () => void;
 }
 
-export function EditToggle({ enabled, onToggle }: EditToggleProps) {
+export function AgentToggle({ enabled, onToggle }: AgentToggleProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === ' ' || e.key === 'Enter') {
-      e.preventDefault();
-      onToggle();
-    }
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onToggle(); }
   };
 
   return (
-    <Container title="AI Edit">
+    <Container title="Agent Mode">
       <Track
         role="switch"
         aria-checked={enabled}
+        aria-label="Agent Mode"
         tabIndex={0}
         active={enabled}
         onClick={onToggle}
@@ -101,7 +74,7 @@ export function EditToggle({ enabled, onToggle }: EditToggleProps) {
       >
         <Dot active={enabled} />
       </Track>
-      <Label>✏️</Label>
+      <Label>🤖</Label>
     </Container>
   );
 }
