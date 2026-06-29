@@ -10,6 +10,8 @@ export interface AgentStep {
   output?: string;
   error?: string;
   tokensUsed?: number;
+  correctionAttempts?: number;
+  correctionReason?: string;
 }
 
 export interface AgentPlan {
@@ -40,7 +42,10 @@ export type ProgressEventType =
   | 'escalate'
   | 'budget_warning'
   | 'complete'
-  | 'aborted';
+  | 'aborted'
+  | 'self_correcting'
+  | 'replan_proposed'
+  | 'replan_approved';
 
 export interface AgentProgressEvent {
   type: ProgressEventType;
@@ -51,6 +56,7 @@ export interface AgentProgressEvent {
   completedSteps: number;
   plan?: AgentPlan;
   question?: string;
+  replanSteps?: AgentStep[];
 }
 
 export type AutonomyLevel = 'plan-first' | 'autopilot';

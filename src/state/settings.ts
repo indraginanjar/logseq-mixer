@@ -20,6 +20,7 @@ interface IPluginSettings {
   agentAutonomy?: string;
   agentTokenBudget?: number;
   agentMaxRetries?: number;
+  agentVerboseMode?: boolean;
 }
 
 const settingsChangedEffect: AtomEffect<IPluginSettings> = ({ setSelf }) => {

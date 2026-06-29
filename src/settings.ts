@@ -165,6 +165,13 @@ const settings: SettingSchemaDesc[] = [
     title: 'Agent Max Retries Per Step',
     description: 'How many times to retry a failed step before asking for help.',
     default: 2,
+  },
+  {
+    key: 'agentVerboseMode',
+    type: 'boolean',
+    title: 'Agent Verbose Mode',
+    description: 'Show self-correction reasoning and replan details in the progress UI.',
+    default: false,
   }
 ];
 

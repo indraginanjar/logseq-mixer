@@ -123,6 +123,18 @@ const EscalationInput = styled('textarea', {
   '&:focus': { borderColor: '$blue9' },
 });
 
+const ReplanBox = styled('div', {
+  marginTop: '10px',
+  padding: '10px',
+  backgroundColor: '$blue3',
+  borderRadius: '6px',
+  border: '1px solid $blue6',
+});
+
+const ReplanTitle = styled('div', { fontSize: '12px', fontWeight: 600, color: '$blue11', marginBottom: '6px' });
+const ReplanDetail = styled('div', { fontSize: '11px', color: '$slate11', marginBottom: '8px' });
+const CorrectionBadge = styled('span', { fontSize: '10px', color: '$amber11', marginLeft: '6px' });
+
 function statusIcon(status: string): string {
   switch (status) {
     case 'pending': return '⏳';
@@ -144,9 +156,13 @@ interface AgentProgressProps {
   tokenBudget: number;
   escalationQuestion: string | null;
   isRunning: boolean;
+  onReplanResponse?: (approved: boolean) => void;
+  replanReason?: string | null;
+  replanSteps?: AgentStep[];
+  verbose?: boolean;
 }
 
-export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEscalationResponse, tokensUsed, tokenBudget, escalationQuestion, isRunning }: AgentProgressProps) {
+export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEscalationResponse, tokensUsed, tokenBudget, escalationQuestion, isRunning, onReplanResponse, replanReason, replanSteps, verbose }: AgentProgressProps) {
   const [escAnswer, setEscAnswer] = useState('');
   if (!plan) return null;
 
@@ -165,8 +181,10 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
             <StepItem done={step.status === 'done'} failed={step.status === 'failed'} running={step.status === 'running'}>
               <StepIcon>{statusIcon(step.status)}</StepIcon>
               <span>{step.id}. {step.description}</span>
+              {verbose && (step.correctionAttempts ?? 0) > 0 && <CorrectionBadge>↩️ corrected ({step.correctionAttempts}x)</CorrectionBadge>}
             </StepItem>
             {step.status === 'done' && step.output && <StepOutput>{step.output.slice(0, 120)}</StepOutput>}
+            {verbose && step.correctionReason && <StepOutput css={{ color: '$amber11' }}>↩️ {step.correctionReason}</StepOutput>}
           </div>
         ))}
       </StepList>
@@ -177,6 +195,18 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
           <BarContainer><BarFill color={budgetColor} css={{ width: `${Math.min(budgetPct, 100)}%` }} /></BarContainer>
           <BudgetText>{tokensUsed.toLocaleString()} / {tokenBudget.toLocaleString()} tokens</BudgetText>
         </>
+      )}
+
+      {replanReason && replanSteps && replanSteps.length > 0 && (
+        <ReplanBox>
+          <ReplanTitle>📋 Plan update proposed</ReplanTitle>
+          <ReplanDetail>{replanReason}</ReplanDetail>
+          {replanSteps.map(s => <div key={s.id} style={{ fontSize: '11px', color: '#64748b' }}>+ {s.id}. [{s.type}] {s.description}</div>)}
+          <ButtonRow>
+            <Btn variant="approve" onClick={() => onReplanResponse?.(true)}>✓ Accept</Btn>
+            <Btn variant="cancel" onClick={() => onReplanResponse?.(false)}>✕ Keep Original</Btn>
+          </ButtonRow>
+        </ReplanBox>
       )}
 
       {escalationQuestion && (

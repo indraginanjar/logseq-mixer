@@ -10,7 +10,7 @@ import { writeMemoryPage } from './memory/logseqMemoryWriter';
 import { AgentLoop } from './agent/AgentLoop';
 import AgentProgress from './components/AgentProgress';
 import { pendingAgentGoal, clearPendingAgentGoal } from './manager';
-import type { AgentPlan, AgentProgressEvent } from './agent/types';
+import type { AgentPlan, AgentProgressEvent, AgentStep } from './agent/types';
 import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
@@ -573,6 +573,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [escalationQuestion, setEscalationQuestion] = useState<string | null>(null);
   const agentLoopRef = useRef<AgentLoop | null>(null);
   const escalationResolverRef = useRef<((answer: string) => void) | null>(null);
+  const [replanReason, setReplanReason] = useState<string | null>(null);
+  const [replanSteps, setReplanSteps] = useState<AgentStep[]>([]);
+  const replanResolverRef = useRef<((approved: boolean) => void) | null>(null);
 
   // Cancel cooldown timer on unmount
   useEffect(() => {
@@ -813,10 +816,23 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 memoryStoreInstance.addMemory('task_outcome', `Goal: ${goal}\nResult: ${event.message}`, 'auto');
               }
             }
+            if (event.type === 'replan_approved') {
+              setReplanReason(null);
+              setReplanSteps([]);
+            }
           },
           onEscalate: (question: string) => new Promise<string>(resolve => {
             setEscalationQuestion(question);
             escalationResolverRef.current = resolve;
+          }),
+          onReplanProposed: (reason: string, newSteps: AgentStep[]) => new Promise<boolean>(resolve => {
+            if (settings.agentAutonomy === 'autopilot') {
+              resolve(true);
+            } else {
+              setReplanReason(reason);
+              setReplanSteps(newSteps);
+              replanResolverRef.current = resolve;
+            }
           }),
         });
         agentLoopRef.current = loop;
@@ -1190,6 +1206,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               tokenBudget={settings?.agentTokenBudget || 100000}
               escalationQuestion={escalationQuestion}
               isRunning={agentRunning}
+              onReplanResponse={(approved) => { replanResolverRef.current?.(approved); setReplanReason(null); setReplanSteps([]); }}
+              replanReason={replanReason}
+              replanSteps={replanSteps}
+              verbose={(settings?.agentVerboseMode as boolean) ?? false}
             />
           )}
           {loading && (
