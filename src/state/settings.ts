@@ -21,6 +21,7 @@ interface IPluginSettings {
   agentAutonomy?: string;
   agentTokenBudget?: number;
   agentMaxRetries?: number;
+  agentMaxIterations?: number;
   agentVerboseMode?: boolean;
 }
 

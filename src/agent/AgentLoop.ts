@@ -2,6 +2,7 @@ import { queryLiteLLM, type ChatMessage } from 'LLMManager';
 import { countTokens } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import { executeOne } from 'blockExecutor';
+import { runReActLoop } from './ReActLoop';
 import type { AgentPlan, AgentStep, AgentProgressEvent, StepResult, StepContext } from './types';
 
 const PLAN_SYSTEM_PROMPT = `You are a planning agent for a Logseq knowledge management system. Break down the user's goal into atomic steps.
@@ -173,6 +174,24 @@ export class AgentLoop {
 
   private async executeStep(step: AgentStep, context: StepContext): Promise<StepResult> {
     const contextSummary = context.previousOutputs.slice(-3).map(o => `Step ${o.stepId}: ${o.output.slice(0, 200)}`).join('\n');
+
+    // For tool and search steps, use the full ReAct loop for iterative chaining
+    if (step.type === 'tool' || step.type === 'search') {
+      const messages: ChatMessage[] = [
+        { role: 'system', content: STEP_SYSTEM_PROMPT },
+        { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}\n\nCurrent step: ${step.description}\n\nUse the available tools to accomplish this step. Call as many tools as needed.` },
+      ];
+      const reactResult = await runReActLoop(messages, {
+        settings: this.settings,
+        signal: this.signal,
+        maxIterations: 10,
+        tokenBudget: this.tokenBudget > 0 ? Math.max(0, this.tokenBudget - this.tokensUsed) : 0,
+        includeLogseqTools: true,
+      });
+      return { success: true, output: reactResult.answer, tokensUsed: reactResult.tokensUsed };
+    }
+
+    // For read, write, think steps: single LLM call + action
     const messages: ChatMessage[] = [
       { role: 'system', content: STEP_SYSTEM_PROMPT },
       { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}\n\nCurrent step (type=${step.type}): ${step.description}\n\nProvide the action or analysis.` },

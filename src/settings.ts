@@ -176,6 +176,13 @@ const settings: SettingSchemaDesc[] = [
     default: 2,
   },
   {
+    key: 'agentMaxIterations',
+    type: 'number',
+    title: 'Agent Max Tool Iterations',
+    description: 'Maximum number of iterative tool calls per query or step (ReAct loop limit).',
+    default: 25,
+  },
+  {
     key: 'agentVerboseMode',
     type: 'boolean',
     title: 'Agent Verbose Mode',
