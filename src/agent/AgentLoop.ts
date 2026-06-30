@@ -173,7 +173,7 @@ export class AgentLoop {
   }
 
   private async executeStep(step: AgentStep, context: StepContext): Promise<StepResult> {
-    const contextSummary = context.previousOutputs.slice(-3).map(o => `Step ${o.stepId}: ${o.output.slice(0, 200)}`).join('\n');
+    const contextSummary = context.previousOutputs.slice(-5).map(o => `Step ${o.stepId}: ${o.output.slice(0, 1000)}`).join('\n\n');
 
     // For tool and search steps, use the full ReAct loop for iterative chaining
     if (step.type === 'tool' || step.type === 'search') {
@@ -188,7 +188,14 @@ export class AgentLoop {
         tokenBudget: this.tokenBudget > 0 ? Math.max(0, this.tokenBudget - this.tokensUsed) : 0,
         includeLogseqTools: true,
       });
-      return { success: true, output: reactResult.answer, tokensUsed: reactResult.tokensUsed };
+      // Include key tool results in the output so subsequent steps can use the data
+      const toolResultsSummary = reactResult.toolCalls
+        .map(tc => `[${tc.tool}] ${tc.result.slice(0, 800)}`)
+        .join('\n');
+      const fullOutput = toolResultsSummary
+        ? `${reactResult.answer}\n\n--- Tool Results ---\n${toolResultsSummary}`
+        : reactResult.answer;
+      return { success: true, output: fullOutput, tokensUsed: reactResult.tokensUsed };
     }
 
     // For read, write, think steps: single LLM call + action
