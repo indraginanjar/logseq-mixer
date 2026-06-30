@@ -707,7 +707,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, agentPlan, agentTokensUsed]);
 
   const handleFile = (file: File) => {
     if (file.type.startsWith('image/')) {
