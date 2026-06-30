@@ -44,6 +44,121 @@ By combining semantic vector embeddings with keyword search and the Logseq Edito
 
 ---
 
+## Agentic AI — Your Notes, Autonomously Organized
+
+> *"What if your AI assistant didn't just answer questions — but actually did the work?"*
+
+Logseq Mixer isn't just a chatbot sitting on top of your notes. It's an **autonomous agent** that can reason through complex tasks, take action across your entire graph, learn from every interaction, and get better over time. This is what separates Mixer from every other Logseq AI plugin.
+
+### It Remembers Everything
+
+Your AI has **persistent memory** that spans across sessions. Tell it your preferences once — it remembers forever.
+
+```
+You: "Remember that I prefer concise bullet points for summaries"
+AI: [responds normally]
+💾 Remembered
+
+--- next day, new session ---
+
+You: "Summarize my meeting notes from this week"
+AI: [responds in concise bullet points — without being asked]
+```
+
+Memory is stored in two places: a fast SQLite table for immediate recall, and as Logseq pages (`Mixer/Memory/*`) that participate in the full RAG pipeline. Your AI literally gets smarter the more you use it.
+
+- **Automatic session summaries** — Every conversation is distilled into key facts when you start a new session
+- **Explicit memories** — Say "remember this" and the AI stores it permanently
+- **Memory categories** — Preferences, facts, tasks, and session summaries — each retrieved contextually
+- **Full management UI** — View, edit, and delete memories from the 🧠 panel
+
+### It Pursues Goals Autonomously
+
+Give it a complex, multi-step objective and watch it work:
+
+```
+You: "Find all my pages about machine learning, extract the key
+      concepts from each one, and create a structured overview page
+      that links back to the sources"
+
+AI: 🤖 Goal detected. Generating plan...
+
+    ✅ 1. Search for machine learning pages
+    ✅ 2. Read content from 7 matched pages
+    🔄 3. Extract and categorize key concepts
+    ⏳ 4. Create "ML Overview" page
+    ⏳ 5. Write structured content with source links
+    
+    ████████████░░░░░░ 3/5 steps | 42K/100K tokens
+```
+
+The agent **plans** multi-step tasks, **executes** them using your graph's full capabilities, **self-corrects** when output quality is lacking, and **dynamically replans** when it discovers new information mid-execution.
+
+**Two autonomy modes:**
+- **Plan-first** (default) — The AI shows you the plan and waits for approval before acting
+- **Autopilot** — It executes immediately. You keep a Stop button.
+
+### It Self-Corrects
+
+After each step, the agent doesn't just check "did the API call succeed?" — it evaluates whether the **output actually achieved the intent**:
+
+```
+Step: "Extract key concepts from ML pages"
+Output: [list of page names only]
+Self-evaluation: ❌ Inadequate — listed pages but didn't extract concepts
+↩️ Re-executing with corrective guidance...
+Output: [structured concept list with explanations]
+Self-evaluation: ✅ Adequate
+```
+
+Every 2 steps, it also reviews the remaining plan: *"Given what I've learned so far, should I adjust my approach?"* — and proposes plan modifications if the original steps no longer make sense.
+
+### It Chains Tools Iteratively (ReAct)
+
+Most AI plugins call a tool once and return the result. Mixer uses the **ReAct pattern** — the AI *reasons* about what it needs, calls tools, *observes* the result, then decides whether to call more tools or answer:
+
+```
+Think: "I need to find the user's project pages first"
+Act:   logseq_search_pages("project")  →  Found: Project Alpha, Project Beta, Project X
+Think: "Let me read Project Alpha to understand the structure"
+Act:   logseq_get_blocks("Project Alpha")  →  [block tree with TODOs]
+Think: "I see open TODOs. Let me check the other projects too"
+Act:   logseq_get_blocks("Project Beta")  →  [block tree]
+Think: "Now I have enough context to create the summary"
+Answer: [comprehensive response with cross-project insights]
+```
+
+This works in **every conversation** — not just agent mode. Ask a question that requires multiple lookups, and the AI will iteratively dig through your graph until it finds the complete answer.
+
+**6 Logseq tools built-in** (search pages, read blocks, insert, update, create pages) + unlimited MCP external tools — all chainable in a single query.
+
+### You Stay In Control
+
+| Safeguard | How it works |
+|---|---|
+| **Budget limits** | Set max tokens per goal (default 100K) — the agent stops when the budget runs out |
+| **Plan approval** | See the full plan before anything executes |
+| **Stop button** | Halt execution instantly at any point |
+| **Escalation** | When stuck, the agent asks YOU for guidance instead of guessing |
+| **Replan approval** | If the agent wants to change the plan, it asks first |
+| **Confidence threshold** | Control how aggressively goals are detected (0.0–1.0) |
+
+### Configuration
+
+| Setting | Default | Description |
+|---|---|---|
+| `agentMode` | `on` | Master toggle for autonomous agent |
+| `agentAutonomy` | `plan-first` | `plan-first` or `autopilot` |
+| `agentConfidenceThreshold` | `0.6` | Goal detection sensitivity (lower = more triggers) |
+| `agentTokenBudget` | `100000` | Max tokens per autonomous run |
+| `agentMaxIterations` | `25` | Max ReAct tool-call iterations per query |
+| `agentMaxRetries` | `2` | Retries before escalating to user |
+| `agentVerboseMode` | `false` | Show self-correction reasoning in UI |
+
+> 📖 For the full technical deep-dive, see [Agentic AI Documentation](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/agentic-ai.md).
+
+---
+
 ## Installation & Setup
 
 ### 1. Prerequisites (Run LiteLLM Proxy)
@@ -129,7 +244,7 @@ Logseq Mixer supports the **[Model Context Protocol (MCP)](https://modelcontextp
 ### Browser Sandbox & Transport Mode
 Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP transport is not directly supported** (the browser environment cannot spawn local shell processes). Instead, Mixer connects to MCP servers using **Server-Sent Events (SSE)**.
 - **For SSE Servers:** Connect directly using their HTTP/SSE URL (e.g. `http://localhost:3001/sse`).
-- **For Stdio-only Servers:** Use a local bridge proxy (such as `supergateway` or `mcp-proxy`) to expose the stdio server as an SSE endpoint. For detailed instructions on setting up and troubleshooting Browser MCP over a bridge, see the [Browser MCP Guide](file:///C:/Users/indra/s/ig/work/indra/logseq-plugin/logseq-composer/docs/browsermcp-guide.md).
+- **For Stdio-only Servers:** Use a local bridge proxy (such as `supergateway` or `mcp-proxy`) to expose the stdio server as an SSE endpoint. For detailed instructions on setting up and troubleshooting Browser MCP over a bridge, see the [Browser MCP Guide](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/browsermcp-guide.md).
 
 #### SSE Bridge Examples (e.g., Playwright MCP Server)
 If you want to run the Playwright MCP server (`@playwright/mcp@latest`), which only supports stdio natively, you can expose it as an SSE server using one of the following bridge proxies:
@@ -229,6 +344,7 @@ For details on the internals and design choices behind the plugin, check the tec
 - [Embedding Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/embedding-strategy.md) — Chunking mechanisms, vector generation, and performance optimization.
 - [Chunking Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
 - [Retrieval Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
+- [Agentic AI](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/agentic-ai.md) — Memory system, goal detection, ReAct tool chaining, autonomous agent loop, self-correction, and replanning.
 - [MCP Server Integration](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/mcp-integration.md) — EventSource/SSE transport layer, MCPManager lifecycle sync, and agentic tool-calling loop execution.
 - [Browser MCP Guide](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/browsermcp-guide.md) — Step-by-step setup, Windows port 9009 bug workaround, and multiple browser connection conflict resolutions.
 
