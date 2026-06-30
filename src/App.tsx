@@ -806,6 +806,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           signal: controller.signal,
           tokenBudget: settings.agentTokenBudget || 100000,
           maxRetries: settings.agentMaxRetries || 2,
+          canWrite: aiEditMode,
           onProgress: (event: AgentProgressEvent) => {
             setAgentTokensUsed(event.tokensUsed);
             if (event.step) {

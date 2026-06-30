@@ -38,6 +38,7 @@ export class AgentLoop {
   private tokensUsed = 0;
   private tokenBudget: number;
   private maxRetries: number;
+  private canWrite: boolean;
   private onProgress: (event: AgentProgressEvent) => void;
   private onEscalate: (question: string) => Promise<string>;
   private onReplanProposed: (reason: string, newSteps: AgentStep[]) => Promise<boolean>;
@@ -48,6 +49,7 @@ export class AgentLoop {
     signal?: AbortSignal;
     tokenBudget: number;
     maxRetries: number;
+    canWrite: boolean;
     onProgress: (event: AgentProgressEvent) => void;
     onEscalate: (question: string) => Promise<string>;
     onReplanProposed: (reason: string, newSteps: AgentStep[]) => Promise<boolean>;
@@ -56,6 +58,7 @@ export class AgentLoop {
     this.signal = opts.signal;
     this.tokenBudget = opts.tokenBudget;
     this.maxRetries = opts.maxRetries;
+    this.canWrite = opts.canWrite;
     this.onProgress = opts.onProgress;
     this.onEscalate = opts.onEscalate;
     this.onReplanProposed = opts.onReplanProposed;
@@ -66,9 +69,12 @@ export class AgentLoop {
     const toolList = tools.length > 0
       ? `\nAvailable MCP tools: ${tools.map((t: any) => t.function.name).join(', ')}`
       : '';
+    const writeConstraint = !this.canWrite
+      ? '\n\nIMPORTANT: AI Edit mode is OFF. Do NOT create pages or write/insert/update blocks in Logseq. Only gather information and present the results as text output. All output should be delivered in the chat response, not written to the graph.'
+      : '';
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: PLAN_SYSTEM_PROMPT + toolList },
+      { role: 'system', content: PLAN_SYSTEM_PROMPT + toolList + writeConstraint },
       { role: 'user', content: `Goal: ${goal}\n\nCurrent context:\n${context}` },
     ];
 
@@ -240,6 +246,9 @@ export class AgentLoop {
         return blocks?.map((b: any) => b.content).join('\n') || '(empty page)';
       }
       case 'write': {
+        if (!this.canWrite) {
+          return `[AI Edit OFF] Would ${action.action}: ${action.content || action.pageName || 'block operation'}`;
+        }
         const cmd = { action: action.action, blockUUID: action.blockUUID, parentBlockUUID: action.parentBlockUUID, content: action.content };
         if (action.action === 'createPage') {
           const page = await logseq.Editor.createPage(action.pageName, {}, { journal: false, redirect: false });
