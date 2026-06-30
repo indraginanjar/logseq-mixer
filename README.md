@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/indraginanjar/logseq-mixer/dev/logseq.png" alt="Logseq Mixer Logo" width="128" height="128">
+  <img src="https://raw.githubusercontent.com/indraginanjar/logseq-mixer/main/logseq.png" alt="Logseq Mixer Logo" width="128" height="128">
 </p>
 
 <h1 align="center">Logseq Mixer</h1>
@@ -155,7 +155,7 @@ This works in **every conversation** — not just agent mode. Ask a question tha
 | `agentMaxRetries` | `2` | Retries before escalating to user |
 | `agentVerboseMode` | `false` | Show self-correction reasoning in UI |
 
-> 📖 For the full technical deep-dive, see [Agentic AI Documentation](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/agentic-ai.md).
+> 📖 For the full technical deep-dive, see [Agentic AI Documentation](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/agentic-ai.md).
 
 ---
 
@@ -244,7 +244,7 @@ Logseq Mixer supports the **[Model Context Protocol (MCP)](https://modelcontextp
 ### Browser Sandbox & Transport Mode
 Because Logseq plugins run inside sandboxed browser iframes, **stdio-based MCP transport is not directly supported** (the browser environment cannot spawn local shell processes). Instead, Mixer connects to MCP servers using **Server-Sent Events (SSE)**.
 - **For SSE Servers:** Connect directly using their HTTP/SSE URL (e.g. `http://localhost:3001/sse`).
-- **For Stdio-only Servers:** Use a local bridge proxy (such as `supergateway` or `mcp-proxy`) to expose the stdio server as an SSE endpoint. For detailed instructions on setting up and troubleshooting Browser MCP over a bridge, see the [Browser MCP Guide](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/browsermcp-guide.md).
+- **For Stdio-only Servers:** Use a local bridge proxy (such as `supergateway` or `mcp-proxy`) to expose the stdio server as an SSE endpoint. For detailed instructions on setting up and troubleshooting Browser MCP over a bridge, see the [Browser MCP Guide](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/browsermcp-guide.md).
 
 #### SSE Bridge Examples (e.g., Playwright MCP Server)
 If you want to run the Playwright MCP server (`@playwright/mcp@latest`), which only supports stdio natively, you can expose it as an SSE server using one of the following bridge proxies:
@@ -341,12 +341,12 @@ When using AI Edit mode with an attached image, the plugin provides copy-paste i
 
 For details on the internals and design choices behind the plugin, check the technical specification files:
 
-- [Embedding Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/embedding-strategy.md) — Chunking mechanisms, vector generation, and performance optimization.
-- [Chunking Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
-- [Retrieval Strategy](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
-- [Agentic AI](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/agentic-ai.md) — Memory system, goal detection, ReAct tool chaining, autonomous agent loop, self-correction, and replanning.
-- [MCP Server Integration](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/mcp-integration.md) — EventSource/SSE transport layer, MCPManager lifecycle sync, and agentic tool-calling loop execution.
-- [Browser MCP Guide](https://github.com/indraginanjar/logseq-mixer/blob/dev/docs/browsermcp-guide.md) — Step-by-step setup, Windows port 9009 bug workaround, and multiple browser connection conflict resolutions.
+- [Embedding Strategy](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/embedding-strategy.md) — Chunking mechanisms, vector generation, and performance optimization.
+- [Chunking Strategy](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/chunking-strategy.md) — Block boundaries, parent-child block structures, and context preservation.
+- [Retrieval Strategy](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/retrieval-strategy.md) — Hybrid search (SQLite + BM25), reranking logic, and LiteLLM prompting.
+- [Agentic AI](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/agentic-ai.md) — Memory system, goal detection, ReAct tool chaining, autonomous agent loop, self-correction, and replanning.
+- [MCP Server Integration](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/mcp-integration.md) — EventSource/SSE transport layer, MCPManager lifecycle sync, and agentic tool-calling loop execution.
+- [Browser MCP Guide](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/browsermcp-guide.md) — Step-by-step setup, Windows port 9009 bug workaround, and multiple browser connection conflict resolutions.
 
 ---
 
