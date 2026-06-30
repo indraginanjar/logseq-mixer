@@ -205,11 +205,21 @@ export class AgentLoop {
       return { success: true, output: raw, tokensUsed: tokens };
     }
 
+    // Try to parse as JSON action; if LLM returned natural language instead, treat as analysis
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { success: true, output: raw, tokensUsed: tokens };
+    }
+
     try {
-      const action = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || raw);
+      const action = JSON.parse(jsonMatch[0]);
       const output = await this.executeAction(step.type, action, context);
       return { success: true, output, tokensUsed: tokens };
     } catch (err: any) {
+      // If JSON parse fails or action execution fails, return the raw text as context
+      if (err instanceof SyntaxError) {
+        return { success: true, output: raw, tokensUsed: tokens };
+      }
       return { success: false, output: raw, tokensUsed: tokens, error: err.message || String(err) };
     }
   }
