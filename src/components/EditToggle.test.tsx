@@ -43,7 +43,8 @@ describe('EditToggle component', () => {
     const { container } = render(
       <EditToggle enabled={false} onToggle={() => {}} />
     );
-    expect(container.textContent).toContain('AI Edit');
+    expect(container.textContent).toContain('✏️');
+    expect(container.querySelector('[title="AI Edit"]')).not.toBeNull();
   });
 
   /**

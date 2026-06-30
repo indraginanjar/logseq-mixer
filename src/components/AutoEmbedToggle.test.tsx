@@ -43,7 +43,8 @@ describe('AutoEmbedToggle component', () => {
     const { container } = render(
       <AutoEmbedToggle enabled={true} onToggle={() => {}} />
     );
-    expect(container.textContent).toContain('Auto-Embed: On');
+    expect(container.textContent).toContain('📇');
+    expect(container.querySelector('[title="Auto-Embed"]')).not.toBeNull();
   });
 
   /**
@@ -53,7 +54,8 @@ describe('AutoEmbedToggle component', () => {
     const { container } = render(
       <AutoEmbedToggle enabled={false} onToggle={() => {}} />
     );
-    expect(container.textContent).toContain('Auto-Embed: Off');
+    expect(container.textContent).toContain('📇');
+    expect(container.querySelector('[title="Auto-Embed"]')).not.toBeNull();
   });
 
   /**
