@@ -814,6 +814,21 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             if (event.type === 'complete' || event.type === 'aborted') {
               setAgentRunning(false);
               setLoading(false);
+              // Convert completed agent plan to a chat message so it scrolls with history
+              setAgentPlan(currentPlan => {
+                if (currentPlan) {
+                  const stepsSummary = currentPlan.steps.map(s => {
+                    const icon = s.status === 'done' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'skipped' ? '⏭️' : '⏳';
+                    return `${icon} ${s.id}. ${s.description}`;
+                  }).join('\n');
+                  setMessages(prev => [...prev, {
+                    id: `agent_${Date.now()}`,
+                    content: `🤖 **Goal:** ${currentPlan.goal}\n\n${stepsSummary}\n\n${event.message}`,
+                    sender: 'assistant',
+                  }]);
+                }
+                return null; // Clear the agent card
+              });
               if (event.type === 'complete' && memoryStoreInstance) {
                 memoryStoreInstance.addMemory('task_outcome', `Goal: ${goal}\nResult: ${event.message}`, 'auto');
               }
@@ -1013,6 +1028,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setError(null);
     setAiEditMode(false);
     setEditResults(new Map());
+    setAgentPlan(null);
+    setAgentRunning(false);
+    setAgentTokensUsed(0);
+    setEscalationQuestion(null);
+    setReplanReason(null);
+    setReplanSteps([]);
+    agentLoopRef.current = null;
     clearConversationHistory();
 
     if (settings?.memoryEnabled && settings?.autoSummarize && capturedMessages.length >= 4 && memoryStoreInstance) {
