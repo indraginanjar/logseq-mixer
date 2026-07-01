@@ -8,12 +8,15 @@ const Wrapper = styled('div', {
 
 const SVGContainer = styled('div', {
   padding: '12px',
-  backgroundColor: 'white',
+  backgroundColor: '#f8f9fa',
   borderRadius: '8px',
   border: '1px solid $slate5',
   overflow: 'auto',
   display: 'flex',
   justifyContent: 'center',
+  backgroundImage: 'linear-gradient(45deg, #e9ecef 25%, transparent 25%), linear-gradient(-45deg, #e9ecef 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e9ecef 75%), linear-gradient(-45deg, transparent 75%, #e9ecef 75%)',
+  backgroundSize: '20px 20px',
+  backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
   '& svg': {
     maxWidth: '100%',
     height: 'auto',
