@@ -1430,6 +1430,23 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <DbPanelButton variant="secondary" onClick={() => setShowDbPanel(false)}>
                 Close
               </DbPanelButton>
+              <DbPanelButton variant="secondary" title="Clear all indexed data" onClick={async () => {
+                const confirmed = window.confirm(
+                  "⚠️ WARNING: This will permanently delete all indexed embeddings, block metadata, and cached data.\n\nYou will need to re-index your entire graph after clearing.\n\nAre you sure you want to clear the database?"
+                );
+                if (!confirmed) return;
+                try {
+                  await storageProvider.clear();
+                  setDocCount(0);
+                  setPageCount(0);
+                  if (storageProvider.getDatabaseSize) setDbSize(await storageProvider.getDatabaseSize());
+                  window.logseq.UI.showMsg('Database cleared successfully. Please re-index.', 'success');
+                } catch (err: any) {
+                  window.logseq.UI.showMsg(`Failed to clear database: ${err.message}`, 'error');
+                }
+              }} css={{ borderColor: '$red7', color: '$red11', '&:hover': { backgroundColor: '$red3', borderColor: '$red8', color: '$red11' } }}>
+                🗑️ Clear Database
+              </DbPanelButton>
             </DbPanelActions>
           </DbPanel>
         )}

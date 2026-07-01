@@ -124,25 +124,14 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
       }
     }
 
-    // Per-document path: clear the store first when in full mode
-    if (settings.indexingMode === 'full') {
-      console.info('[indexEntireLogSeq] Full mode: clearing documents table before re-index.');
-      await storageProvider.clear();
-      resetBM25Index();
-      accelerator?.dispose();
-    }
+    // Per-document path: always incremental indexing
     const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined);
     // Invalidate BM25 index so it rebuilds lazily from the updated store on next query
     resetBM25Index();
-    // Re-initialize accelerator after full re-index (it was disposed above)
-    if (settings.indexingMode === 'full' && accelerator) {
-      await accelerator.initialize();
-    }
     return result;
   } else {
-    // Legacy Orama-based path: forceNew=true when full mode
-    const forceNew = settings.indexingMode === 'full';
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, forceNew, settings.embeddingModel, storageProvider);
+    // Legacy Orama-based path
+    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
     const result = await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider);
     return result;
   }
