@@ -607,6 +607,24 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       setMemoryStore(store);
       setMemoryCount(store.getMemoryCount());
     }
+    // Re-initialize MemoryStore when graph changes
+    const unlisten = logseq.App.onCurrentGraphChanged(async () => {
+      // Wait for storage provider to reinitialize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const p = storageProvider as any;
+      if (p?.db) {
+        const newStore = new MemoryStore(p.db);
+        setMemoryStoreInstance(newStore);
+        setMemoryStore(newStore);
+        setMemoryCount(newStore.getMemoryCount());
+      }
+      // Reset UI state for the new graph
+      setMessages([]);
+      setAgentPlan(null);
+      setAgentRunning(false);
+      clearConversationHistory();
+    });
+    return () => { unlisten(); };
   }, [storageProvider]);
 
   // Track active page name

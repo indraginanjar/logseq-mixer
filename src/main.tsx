@@ -33,6 +33,13 @@ function createLazyStorageProvider(backend: 'sqlite' | 'settings'): StorageProvi
     return initPromise;
   }
 
+  /** Reinitialize storage for a new graph (called on graph switch). */
+  async function reinitialize(): Promise<void> {
+    realProvider = null;
+    initPromise = null;
+    await getProvider();
+  }
+
   // Start initialization when the browser is idle, with a fallback timeout.
   // requestIdleCallback ensures we only parse the heavy 1.25 MB indexManager
   // chunk when the main thread has nothing else to do.
@@ -97,6 +104,12 @@ function createLazyStorageProvider(backend: 'sqlite' | 'settings'): StorageProvi
     if (!realProvider) return [];
     return (realProvider as any).getAllDocumentContent?.() ?? [];
   };
+  // Expose reinitialize for graph switching
+  (proxy as any).reinitialize = reinitialize;
+  // Expose db getter for MemoryStore
+  Object.defineProperty(proxy, 'db', {
+    get() { return (realProvider as any)?.db ?? null; },
+  });
 
   return proxy;
 }
@@ -108,6 +121,12 @@ async function main() {
   // Create a lazy storage provider that defers heavy SQLite initialization
   const storageBackend = (logseq.settings?.storageBackend as 'sqlite' | 'settings') ?? 'sqlite';
   const storageProvider = createLazyStorageProvider(storageBackend);
+
+  // Reinitialize storage when user switches graphs
+  logseq.App.onCurrentGraphChanged(async () => {
+    console.info('[main] Graph changed, reinitializing storage provider...');
+    await (storageProvider as any).reinitialize();
+  });
 
   const { preferredThemeMode } = await logseq.App.getUserConfigs();
 
