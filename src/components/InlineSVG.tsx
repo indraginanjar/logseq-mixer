@@ -20,10 +20,15 @@ const SVGContainer = styled('div', {
   },
 });
 
-const CopyButton = styled('button', {
+const ButtonRow = styled('div', {
   position: 'absolute',
   top: '8px',
   right: '8px',
+  display: 'flex',
+  gap: '4px',
+});
+
+const CopyButton = styled('button', {
   fontSize: '11px',
   padding: '4px 8px',
   borderRadius: '4px',
@@ -62,30 +67,35 @@ interface InlineSVGProps {
 export default function InlineSVG({ content }: InlineSVGProps) {
   const sanitized = useMemo(() => sanitizeSVG(content), [content]);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'png' | 'svg' | null>(null);
 
   if (!sanitized) return null;
 
-  const handleCopy = async () => {
+  const handleCopySVG = async () => {
+    try {
+      await navigator.clipboard.writeText(sanitized);
+      setCopied('svg');
+      setTimeout(() => setCopied(null), 2000);
+    } catch { /* ignore */ }
+  };
+
+  const handleCopyPNG = async () => {
     try {
       const svgEl = containerRef.current?.querySelector('svg');
       if (!svgEl) return;
 
-      // Get SVG dimensions
       const bbox = svgEl.getBoundingClientRect();
       const width = bbox.width || svgEl.clientWidth || 300;
       const height = bbox.height || svgEl.clientHeight || 150;
 
-      // Serialize SVG to a data URL
       const svgData = new XMLSerializer().serializeToString(svgEl);
       const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(svgBlob);
 
-      // Draw to canvas and export as PNG
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        const scale = 2; // 2x for retina
+        const scale = 2;
         canvas.width = width * scale;
         canvas.height = height * scale;
         const ctx = canvas.getContext('2d')!;
@@ -101,31 +111,26 @@ export default function InlineSVG({ content }: InlineSVGProps) {
             await navigator.clipboard.write([
               new ClipboardItem({ 'image/png': blob }),
             ]);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          } catch {
-            // Fallback: copy SVG source as text
-            await navigator.clipboard.writeText(sanitized);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          }
+            setCopied('png');
+            setTimeout(() => setCopied(null), 2000);
+          } catch { /* ignore */ }
         }, 'image/png');
       };
       img.src = url;
-    } catch {
-      // Fallback: copy SVG source
-      await navigator.clipboard.writeText(sanitized);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    } catch { /* ignore */ }
   };
 
   return (
     <Wrapper>
       <SVGContainer ref={containerRef} dangerouslySetInnerHTML={{ __html: sanitized }} />
-      <CopyButton onClick={handleCopy} title="Copy image to clipboard">
-        {copied ? '✓ Copied' : '📋 Copy Image'}
-      </CopyButton>
+      <ButtonRow>
+        <CopyButton onClick={handleCopySVG} title="Copy SVG source code">
+          {copied === 'svg' ? '✓ Copied' : '📄 SVG'}
+        </CopyButton>
+        <CopyButton onClick={handleCopyPNG} title="Copy as PNG image">
+          {copied === 'png' ? '✓ Copied' : '🖼️ PNG'}
+        </CopyButton>
+      </ButtonRow>
     </Wrapper>
   );
 }
