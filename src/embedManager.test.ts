@@ -1427,7 +1427,7 @@ describe('Settings schema for Ollama embedding support', () => {
     expect(setting).toBeDefined();
     expect(setting!.type).toBe('enum');
     expect(setting!.default).toBe('openai');
-    expect(setting!.enumChoices).toEqual(['openai', 'ollama']);
+    expect(setting!.enumChoices).toEqual(['openai', 'ollama', 'litellm']);
   });
 
   it('embeddingEndpoint setting exists with correct default', () => {
