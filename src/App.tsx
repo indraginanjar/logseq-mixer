@@ -564,6 +564,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [showDbPanel, setShowDbPanel] = useState(false);
   const [showMcpPanel, setShowMcpPanel] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [confirmClearDb, setConfirmClearDb] = useState(false);
   const [memoryCount, setMemoryCount] = useState(0);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [memoryStoreInstance, setMemoryStoreInstance] = useState<MemoryStore | null>(null);
@@ -1101,16 +1102,6 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const confirmed = window.confirm(
-      "WARNING: Importing a new database will completely overwrite your current database. This action cannot be undone.\n\nAre you sure you want to proceed?"
-    );
-
-    if (!confirmed) {
-      e.target.value = '';
-      setTimeout(() => textareaRef.current?.focus(), 100);
-      return;
-    }
-
     const reader = new FileReader();
     reader.onload = async (event) => {
       const buffer = event.target?.result as ArrayBuffer;
@@ -1431,27 +1422,32 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <DbPanelButton variant="secondary" onClick={() => setShowDbPanel(false)}>
                 Close
               </DbPanelButton>
-              <DbPanelButton variant="secondary" title="Clear all indexed data" onClick={async () => {
-                const confirmed = window.confirm(
-                  "⚠️ WARNING: This will permanently delete all indexed embeddings, block metadata, and cached data.\n\nYou will need to re-index your entire graph after clearing.\n\nAre you sure you want to clear the database?"
-                );
-                if (!confirmed) {
-                  setTimeout(() => textareaRef.current?.focus(), 100);
-                  return;
-                }
-                try {
-                  await storageProvider.clear();
-                  setDocCount(0);
-                  setPageCount(0);
-                  if (storageProvider.getDatabaseSize) setDbSize(await storageProvider.getDatabaseSize());
-                  window.logseq.UI.showMsg('Database cleared successfully. Please re-index.', 'success');
-                } catch (err: any) {
-                  window.logseq.UI.showMsg(`Failed to clear database: ${err.message}`, 'error');
-                }
-                setTimeout(() => textareaRef.current?.focus(), 100);
-              }} css={{ borderColor: '$red7', color: '$red11', '&:hover': { backgroundColor: '$red3', borderColor: '$red8', color: '$red11' } }}>
-                🗑️ Clear Database
-              </DbPanelButton>
+              {!confirmClearDb ? (
+                <DbPanelButton variant="secondary" title="Clear all indexed data" onClick={() => setConfirmClearDb(true)} css={{ borderColor: '$red7', color: '$red11', '&:hover': { backgroundColor: '$red3', borderColor: '$red8', color: '$red11' } }}>
+                  🗑️ Clear Database
+                </DbPanelButton>
+              ) : (
+                <div style={{ display: 'flex', flex: 1, gap: '6px', alignItems: 'center', backgroundColor: '#fee2e2', padding: '8px 12px', borderRadius: '8px', border: '1px solid #fca5a5' }}>
+                  <span style={{ fontSize: '12px', color: '#991b1b', flex: 1 }}>Delete all indexed data?</span>
+                  <DbPanelButton variant="secondary" onClick={async () => {
+                    try {
+                      await storageProvider.clear();
+                      setDocCount(0);
+                      setPageCount(0);
+                      if (storageProvider.getDatabaseSize) setDbSize(await storageProvider.getDatabaseSize());
+                      window.logseq.UI.showMsg('Database cleared successfully. Please re-index.', 'success');
+                    } catch (err: any) {
+                      window.logseq.UI.showMsg(`Failed to clear database: ${err.message}`, 'error');
+                    }
+                    setConfirmClearDb(false);
+                  }} css={{ borderColor: '$red7', color: 'white', backgroundColor: '$red9', '&:hover': { backgroundColor: '$red10' }, flex: 'none' }}>
+                    Yes, clear
+                  </DbPanelButton>
+                  <DbPanelButton variant="secondary" onClick={() => setConfirmClearDb(false)} css={{ flex: 'none' }}>
+                    Cancel
+                  </DbPanelButton>
+                </div>
+              )}
             </DbPanelActions>
           </DbPanel>
         )}
