@@ -1107,6 +1107,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
     if (!confirmed) {
       e.target.value = '';
+      setTimeout(() => textareaRef.current?.focus(), 100);
       return;
     }
 
@@ -1434,7 +1435,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 const confirmed = window.confirm(
                   "⚠️ WARNING: This will permanently delete all indexed embeddings, block metadata, and cached data.\n\nYou will need to re-index your entire graph after clearing.\n\nAre you sure you want to clear the database?"
                 );
-                if (!confirmed) return;
+                if (!confirmed) {
+                  setTimeout(() => textareaRef.current?.focus(), 100);
+                  return;
+                }
                 try {
                   await storageProvider.clear();
                   setDocCount(0);
@@ -1444,6 +1448,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 } catch (err: any) {
                   window.logseq.UI.showMsg(`Failed to clear database: ${err.message}`, 'error');
                 }
+                setTimeout(() => textareaRef.current?.focus(), 100);
               }} css={{ borderColor: '$red7', color: '$red11', '&:hover': { backgroundColor: '$red3', borderColor: '$red8', color: '$red11' } }}>
                 🗑️ Clear Database
               </DbPanelButton>
