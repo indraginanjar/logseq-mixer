@@ -624,12 +624,17 @@ const getMarkdownComponents = (
 
     const match = /language-(\w+)/.exec(className || '');
     const language = match ? match[1] : '';
+    const codeContent = String(children).replace(/\n$/, '');
     const isMarkdown = language === 'markdown' || language === 'md';
     const isMermaid = language === 'mermaid';
-    const codeContent = String(children).replace(/\n$/, '');
+    const isSVG = language === 'svg' || (language === 'html' && codeContent.trim().startsWith('<svg'));
 
     if (isMermaid) {
       return <MermaidChart code={codeContent} />;
+    }
+
+    if (isSVG || (!language && codeContent.trim().startsWith('<svg'))) {
+      return <InlineSVG content={codeContent} />;
     }
 
     if (shouldTransform && isMarkdown) {

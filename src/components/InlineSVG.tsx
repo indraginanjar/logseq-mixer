@@ -22,8 +22,7 @@ function sanitizeSVG(svgString: string): string {
   let clean = svgString
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/javascript:/gi, '')
-    .replace(/data:/gi, 'data-blocked:');
+    .replace(/javascript:/gi, '');
 
   // Ensure it starts with <svg
   const svgStart = clean.indexOf('<svg');
