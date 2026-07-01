@@ -7,6 +7,8 @@ import { BlockLink } from './BlockLink';
 import { CtrlLink } from './CtrlLink';
 import { PageLink } from './PageLink';
 import { ChangeSummary } from './ChangeSummary';
+import MermaidChart from './MermaidChart';
+import InlineSVG from './InlineSVG';
 import type { ExecutionResult } from '../types/editTypes';
 
 export type ChatMessage = {
@@ -623,7 +625,12 @@ const getMarkdownComponents = (
     const match = /language-(\w+)/.exec(className || '');
     const language = match ? match[1] : '';
     const isMarkdown = language === 'markdown' || language === 'md';
+    const isMermaid = language === 'mermaid';
     const codeContent = String(children).replace(/\n$/, '');
+
+    if (isMermaid) {
+      return <MermaidChart code={codeContent} />;
+    }
 
     if (shouldTransform && isMarkdown) {
       return (
@@ -758,6 +765,29 @@ const renderMarkdownWithProperties = (
                 ))}
               </tbody>
             </StyledTable>
+          );
+        }
+
+        // Detect inline SVG in content and render separately
+        if (part.content.includes('<svg')) {
+          const svgRegex = /(<svg[\s\S]*?<\/svg>)/gi;
+          const segments = part.content.split(svgRegex);
+          return (
+            <React.Fragment key={index}>
+              {segments.map((seg, i) =>
+                seg.trim().toLowerCase().startsWith('<svg')
+                  ? <InlineSVG key={i} content={seg} />
+                  : seg.trim() ? (
+                    <ReactMarkdown
+                      key={i}
+                      transformLinkUri={(uri: string) => uri}
+                      components={components as any}
+                    >
+                      {seg}
+                    </ReactMarkdown>
+                  ) : null
+              )}
+            </React.Fragment>
           );
         }
 
