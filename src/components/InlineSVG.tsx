@@ -47,7 +47,7 @@ const CopyButton = styled('button', {
   },
 });
 
-// Remove dangerous elements and attributes from SVG
+// Remove dangerous elements and attributes from SVG, ensure content is visible
 function sanitizeSVG(svgString: string): string {
   let clean = svgString
     .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -59,6 +59,19 @@ function sanitizeSVG(svgString: string): string {
   const svgEnd = clean.lastIndexOf('</svg>');
   if (svgEnd === -1) return '';
   clean = clean.slice(svgStart, svgEnd + 6);
+
+  // Replace dark/black background rects with white to ensure visibility
+  // Matches fill="black", fill="#000", fill="#000000", fill="rgb(0,0,0)" on full-size rects
+  clean = clean.replace(
+    /(<rect[^>]*)(fill\s*=\s*["'](#000000|#000|black|rgb\(0,\s*0,\s*0\))["'])/gi,
+    '$1fill="white"'
+  );
+
+  // Also handle style="fill:black" or style="fill:#000" on rects
+  clean = clean.replace(
+    /(<rect[^>]*style\s*=\s*["'][^"']*)(fill\s*:\s*(#000000|#000|black|rgb\(0,\s*0,\s*0\)))/gi,
+    '$1fill:white'
+  );
 
   return clean;
 }
