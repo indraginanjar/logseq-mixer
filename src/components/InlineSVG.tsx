@@ -4,7 +4,7 @@ import { styled } from '../stitches.config';
 const SVGContainer = styled('div', {
   margin: '8px 0',
   padding: '8px',
-  backgroundColor: '$slate1',
+  backgroundColor: 'white',
   borderRadius: '8px',
   border: '1px solid $slate5',
   overflow: 'auto',
