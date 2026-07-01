@@ -16,7 +16,7 @@ export interface EmbeddingModelConfig {
   maxTokens: number;
 }
 
-export type EmbeddingProvider = 'openai' | 'ollama';
+export type EmbeddingProvider = 'openai' | 'ollama' | 'litellm';
 
 export const OPENAI_EMBEDDINGS_ENDPOINT = 'https://api.openai.com/v1/embeddings';
 
@@ -550,7 +550,8 @@ export async function useGenerateEmbedding(
   if (provider === 'ollama') {
     body = JSON.stringify({ model, prompt: text });
   } else {
-    headers['Authorization'] = `Bearer ${apiKey}`;
+    // OpenAI and LiteLLM both use the OpenAI-compatible format
+    if (apiKey?.trim()) headers['Authorization'] = `Bearer ${apiKey}`;
     body = JSON.stringify({ model, input: text });
   }
 
