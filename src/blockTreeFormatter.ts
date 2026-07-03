@@ -66,13 +66,31 @@ export async function getActivePageContext(): Promise<{
   selectedBlockUUID: string | null;
   selectedBlockContent: string | null;
   isSelectedBlockEmpty: boolean;
+  isBlockView: boolean;
 } | null> {
   try {
     let page = await logseq.Editor.getCurrentPage();
     const currentBlock = await logseq.Editor.getCurrentBlock();
-    if (page === null && currentBlock && currentBlock.page) {
+
+    // Check if we're in a zoomed-in block view (block as virtual page)
+    // In Logseq, when a user zooms into a block, getCurrentPage() returns
+    // an object with `page` property but the view is scoped to that block.
+    // We detect this by checking if the "page" has a `uuid` that matches a block.
+    let isBlockView = false;
+    let rootBlock: any = null;
+
+    if (page && (page as any)['block/uuid']) {
+      // This is a block being viewed as a page (zoomed-in view)
+      isBlockView = true;
+      rootBlock = await logseq.Editor.getBlock((page as any).uuid || (page as any)['block/uuid'], { includeChildren: true });
+      // Get the actual parent page
+      if (rootBlock?.page) {
+        page = await logseq.Editor.getPage(rootBlock.page.id);
+      }
+    } else if (page === null && currentBlock && currentBlock.page) {
       page = await logseq.Editor.getPage(currentBlock.page.id);
     }
+
     if (page === null) {
       return null;
     }
@@ -83,12 +101,19 @@ export async function getActivePageContext(): Promise<{
     const selectedBlockContent = currentBlock ? String(currentBlock.content ?? '') : null;
     const isSelectedBlockEmpty = currentBlock ? !currentBlock.content?.trim() : false;
 
-    const rawBlocks = await logseq.Editor.getPageBlocksTree(pageName);
-    const blockNodes = mapToBlockNodes(rawBlocks ?? []);
+    let rawBlocks: any[];
+    if (isBlockView && rootBlock) {
+      // Use the zoomed-in block and its children as the tree
+      rawBlocks = [rootBlock];
+    } else {
+      rawBlocks = await logseq.Editor.getPageBlocksTree(pageName) ?? [];
+    }
+
+    const blockNodes = mapToBlockNodes(rawBlocks);
     const formattedTree = formatBlockTree(blockNodes);
     const blockCount = countBlocks(blockNodes);
 
-    return { pageName, pageUUID, formattedTree, blockCount, selectedBlockUUID, selectedBlockContent, isSelectedBlockEmpty };
+    return { pageName, pageUUID, formattedTree, blockCount, selectedBlockUUID, selectedBlockContent, isSelectedBlockEmpty, isBlockView };
   } catch (err) {
     console.error('Failed to get active page context:', err);
     return null;
