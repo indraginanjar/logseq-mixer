@@ -176,6 +176,17 @@ vi.mock('./state/settings', () => ({
   hideMainUI: vi.fn(),
   settings: {},
   onSettingsChanged: vi.fn(() => vi.fn()),
+  App: {
+    onCurrentGraphChanged: vi.fn(() => vi.fn()),
+    getCurrentGraph: vi.fn(() => Promise.resolve({ path: '/test' })),
+  },
+  Editor: {
+    getCurrentPage: vi.fn(() => Promise.resolve(null)),
+    getCurrentBlock: vi.fn(() => Promise.resolve(null)),
+    getPage: vi.fn(() => Promise.resolve(null)),
+    getPageBlocksTree: vi.fn(() => Promise.resolve([])),
+    getAllPages: vi.fn(() => Promise.resolve([])),
+  },
 };
 // Attach logseq to the existing window object instead of replacing it
 if (typeof window !== 'undefined') {
