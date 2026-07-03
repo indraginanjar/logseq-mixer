@@ -89,6 +89,14 @@ export async function getActivePageContext(): Promise<{
       }
     } else if (page === null && currentBlock && currentBlock.page) {
       page = await logseq.Editor.getPage(currentBlock.page.id);
+      // On journal home view, scope context to the focused block's tree
+      // rather than the full journal page (which may have many unrelated entries)
+      if (page && !rootBlock) {
+        rootBlock = await logseq.Editor.getBlock(currentBlock.uuid, { includeChildren: true });
+        if (rootBlock) {
+          isBlockView = true;
+        }
+      }
     }
 
     if (page === null) {
