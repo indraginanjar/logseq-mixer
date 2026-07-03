@@ -550,6 +550,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [imageDataUrls, setImageDataUrls] = useState<{ name: string; content: string }[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; content: string }[]>([]);
   const [activePageName, setActivePageName] = useState<string | null>(null);
+  const [activeBlockContent, setActiveBlockContent] = useState<string | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
@@ -632,12 +633,16 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     const updatePage = async () => {
       try {
         let page = await logseq.Editor.getCurrentPage();
+        const block = await logseq.Editor.getCurrentBlock();
         if (!page) {
-          const block = await logseq.Editor.getCurrentBlock();
           if (block?.page) page = await logseq.Editor.getPage(block.page.id);
         }
         setActivePageName(page?.name as string ?? null);
-      } catch { setActivePageName(null); }
+        setActiveBlockContent(block?.content?.trim()?.slice(0, 50) || null);
+      } catch {
+        setActivePageName(null);
+        setActiveBlockContent(null);
+      }
     };
     updatePage();
     const id = setInterval(updatePage, 3000);
@@ -1359,6 +1364,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           </div>
           <div style={{ fontSize: 11, color: activePageName ? '#6b7280' : '#f59e0b', marginTop: 4, paddingLeft: 2 }}>
             {activePageName ? `📄 ${activePageName}` : '⚠ No active page'}
+            {activeBlockContent && <span style={{ color: '#9ca3af', marginLeft: '8px' }}>▸ {activeBlockContent}{activeBlockContent.length >= 50 ? '…' : ''}</span>}
           </div>
         </InputArea>
 
