@@ -4,7 +4,7 @@ import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
 import { MCPManager } from 'mcp/MCPManager';
 import { MemoryStore } from './memory/MemoryStore';
-import { setMemoryStore, getLastMemorySaved } from './manager';
+import { setMemoryStore, getLastMemorySaved, setOnThoughtCallback } from './manager';
 import { summarizeSession } from './memory/sessionSummarizer';
 import { writeMemoryPage } from './memory/logseqMemoryWriter';
 import { AgentLoop } from './agent/AgentLoop';
@@ -569,6 +569,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [memoryCount, setMemoryCount] = useState(0);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [memoryStoreInstance, setMemoryStoreInstance] = useState<MemoryStore | null>(null);
+  const [thinkingText, setThinkingText] = useState<string | null>(null);
 
   // Agent state
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
@@ -597,6 +598,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     return () => {
       manager.shutdown();
     };
+  }, []);
+
+  // Wire up thought callback for live thinking display
+  useEffect(() => {
+    setOnThoughtCallback((thought) => setThinkingText(thought));
+    return () => setOnThoughtCallback(null);
   }, []);
 
   // Initialize MemoryStore from SQLite db
@@ -967,6 +974,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setThinkingText(null);
     }
   };
 
@@ -1066,7 +1074,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       setIsSummarizing(true);
       summarizeSession(capturedMessages, settings).then(summary => {
         if (summary && memoryStoreInstance) {
-          memoryStoreInstance.addMemory('session_summary', summary, 'auto');
+          memoryStoreInstance.addMemoryIfUnique('session_summary', summary, 'auto');
           writeMemoryPage(summary, 'session_summary');
           setMemoryCount(memoryStoreInstance.getMemoryCount());
         }
@@ -1260,9 +1268,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             />
           )}
           {loading && (
-            <TypingIndicator>
-              <Dot delay={0} /><Dot delay={1} /><Dot delay={2} />
-            </TypingIndicator>
+            <>
+              <TypingIndicator>
+                <Dot delay={0} /><Dot delay={1} /><Dot delay={2} />
+              </TypingIndicator>
+              {thinkingText && <div style={{ fontSize: 11, color: '#6b7280', padding: '4px 16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>💭 {thinkingText.slice(0, 100)}</div>}
+            </>
           )}
           <div ref={messagesEndRef} />
         </MessagesContainer>

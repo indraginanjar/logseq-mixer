@@ -1,28 +1,70 @@
-const GOAL_PATTERNS = [
-  /\b(organize|restructure|consolidate|compile|create .+ from|research .+ and|find all .+ and|generate .+ based on|move all|rename all|merge .+ into|set up|transform|convert all|build .+ from|collect .+ and|summarize all|extract .+ from)\b/i,
-  /\b(then|after that|next|finally|and also|followed by|and then|once done)\b/i,
+import { queryLiteLLM, type ChatMessage } from 'LLMManager';
+
+const CLASSIFICATION_PROMPT = `Classify this user message as either "goal" or "query".
+- "goal": A multi-step task requiring autonomous actions (creating pages, organizing notes, researching + writing, bulk operations)
+- "query": A question, simple request, single-step action, or conversational message
+
+Respond with ONLY one word: goal or query`;
+
+const OBVIOUS_QUERY_PATTERNS = [
+  /^(what|who|where|when|why|how|is|are|can|could|would|does|do|did|tell me|explain|show me|define)\b/i,
+  /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|sure)\b/i,
 ];
 
-const QUESTION_PATTERNS = [
-  /^(what|who|where|when|why|how|is|are|can|could|would|does|do|did|tell me|explain)\b/i,
-  /\?$/,
-];
+function isObviouslyNotGoal(message: string): boolean {
+  const trimmed = message.trim();
+  if (trimmed.length < 15) return true;
+  if (trimmed.endsWith('?') && trimmed.length < 80) return true;
+  return OBVIOUS_QUERY_PATTERNS.some(p => p.test(trimmed));
+}
 
-export function detectGoal(message: string, threshold = 0.6): { isGoal: boolean; confidence: number } {
+export async function detectGoal(
+  message: string,
+  threshold: number = 0.6,
+  settings?: any
+): Promise<{ isGoal: boolean; confidence: number }> {
+  if (isObviouslyNotGoal(message)) {
+    return { isGoal: false, confidence: 0 };
+  }
+
+  if (!settings?.selectedModel || !settings?.LiteLLMLink) {
+    return detectGoalRegex(message, threshold);
+  }
+
+  try {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: CLASSIFICATION_PROMPT },
+      { role: 'user', content: message },
+    ];
+    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink);
+    const response = result.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
+    if (response.startsWith('goal')) {
+      return { isGoal: threshold <= 0.8, confidence: 0.85 };
+    }
+    return { isGoal: false, confidence: 0.15 };
+  } catch {
+    return detectGoalRegex(message, threshold);
+  }
+}
+
+function detectGoalRegex(message: string, threshold: number): { isGoal: boolean; confidence: number } {
   const trimmed = message.trim();
   if (trimmed.length < 20) return { isGoal: false, confidence: 0 };
 
-  const isQuestion = QUESTION_PATTERNS.some(p => p.test(trimmed));
-  if (isQuestion && trimmed.length < 100) return { isGoal: false, confidence: 0.1 };
+  const GOAL_PATTERNS = [
+    /\b(organize|restructure|consolidate|compile|create .+ from|research .+ and|find all .+ and|generate .+ based on|move all|rename all|merge .+ into|transform|convert all|build .+ from|collect .+ and|summarize all|extract .+ from)\b/i,
+  ];
+  const MULTI_STEP_PATTERNS = [
+    /\b(then|after that|next step|followed by|and then|once done)\b/i,
+  ];
 
   let confidence = 0;
   for (const pattern of GOAL_PATTERNS) {
-    if (pattern.test(trimmed)) confidence += 0.4;
+    if (pattern.test(trimmed)) confidence += 0.5;
   }
-
-  const verbCount = (trimmed.match(/\b(and|then|,)\b/g) || []).length;
-  if (verbCount >= 2) confidence += 0.3;
-
+  for (const pattern of MULTI_STEP_PATTERNS) {
+    if (pattern.test(trimmed)) confidence += 0.3;
+  }
   if (trimmed.length > 150) confidence += 0.1;
 
   confidence = Math.min(confidence, 1);

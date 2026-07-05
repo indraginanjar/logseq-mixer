@@ -75,6 +75,11 @@ export function getAccelerator(): VectorSearchAccelerator | null {
 let memoryStore: MemoryStore | null = null;
 let lastMemorySaved = false;
 
+let onThoughtCallback: ((thought: string, iteration: number) => void) | null = null;
+export function setOnThoughtCallback(cb: ((thought: string, iteration: number) => void) | null): void {
+  onThoughtCallback = cb;
+}
+
 export function setMemoryStore(store: MemoryStore): void {
   memoryStore = store;
 }
@@ -160,7 +165,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   pendingAgentGoal = null;
 
   // Detect multi-step goals and route to agent loop
-  if (settings.agentMode === 'on' && !editMode && detectGoal(query, settings.agentConfidenceThreshold || 0.6).isGoal) {
+  if (settings.agentMode === 'on' && !editMode && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
     pendingAgentGoal = query;
     return '__AGENT_GOAL_DETECTED__';
   }
@@ -363,6 +368,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     tokenBudget: 0, // no budget limit for normal chat queries
     tools,
     includeLogseqTools: true,
+    onThought: onThoughtCallback || undefined,
   });
 
   const assistantResponse = reactResult.answer;
@@ -383,7 +389,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   if (settings.memoryEnabled && memoryStore) {
     const detected = detectExplicitMemory(query);
     if (detected) {
-      memoryStore.addMemory(detected.category, detected.content);
+      memoryStore.addMemoryIfUnique(detected.category, detected.content, 'explicit');
       lastMemorySaved = true;
     }
   }

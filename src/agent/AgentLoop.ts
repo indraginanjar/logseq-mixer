@@ -43,6 +43,7 @@ export class AgentLoop {
   private onEscalate: (question: string) => Promise<string>;
   private onReplanProposed: (reason: string, newSteps: AgentStep[]) => Promise<boolean>;
   private escalationResolver: ((answer: string) => void) | null = null;
+  private currentContext: StepContext | null = null;
 
   constructor(opts: {
     settings: any;
@@ -100,6 +101,7 @@ export class AgentLoop {
 
   async run(plan: AgentPlan): Promise<void> {
     const context: StepContext = { previousOutputs: [], createdBlockUUIDs: [], createdPages: [], goal: plan.goal };
+    this.currentContext = context;
     let completedSteps = 0;
 
     for (const step of plan.steps) {
@@ -143,18 +145,20 @@ export class AgentLoop {
       }
 
       if (result?.success) {
-        // Self-correction: evaluate output quality
-        const evaluation = await this.evaluateStep(step, result, context);
-        if (!evaluation.adequate && (step.correctionAttempts || 0) < this.maxRetries) {
-          step.correctionAttempts = (step.correctionAttempts || 0) + 1;
-          step.correctionReason = evaluation.reason;
-          this.emit('self_correcting', step, `Self-correcting: ${evaluation.reason}`, completedSteps, plan.steps.length);
-          context.previousOutputs.push({ stepId: step.id, output: `Previous attempt inadequate: ${evaluation.reason}. Suggestion: ${evaluation.suggestion}` });
-          step.status = 'running';
-          try {
-            result = await this.executeStep(step, context);
-          } catch (err: any) {
-            result = { success: false, output: '', tokensUsed: 0, error: err.message };
+        // Self-correction: only evaluate write and tool steps (read/think don't need quality checks)
+        if (step.type === 'write' || step.type === 'tool') {
+          const evaluation = await this.evaluateStep(step, result, context);
+          if (!evaluation.adequate && (step.correctionAttempts || 0) < this.maxRetries) {
+            step.correctionAttempts = (step.correctionAttempts || 0) + 1;
+            step.correctionReason = evaluation.reason;
+            this.emit('self_correcting', step, `Self-correcting: ${evaluation.reason}`, completedSteps, plan.steps.length);
+            context.previousOutputs.push({ stepId: step.id, output: `Previous attempt inadequate: ${evaluation.reason}. Suggestion: ${evaluation.suggestion}` });
+            step.status = 'running';
+            try {
+              result = await this.executeStep(step, context);
+            } catch (err: any) {
+              result = { success: false, output: '', tokensUsed: 0, error: err.message };
+            }
           }
         }
 
@@ -167,8 +171,13 @@ export class AgentLoop {
           completedSteps++;
           this.emit('step_complete', step, result.output, completedSteps, plan.steps.length);
 
-          // Replan check every 2 completed steps
-          if (completedSteps % 2 === 0 && completedSteps < plan.steps.length) {
+          // Replan only when something unexpected happened
+          const lastOutput = context.previousOutputs[context.previousOutputs.length - 1]?.output || '';
+          const wasUnexpected = (step.correctionAttempts && step.correctionAttempts > 0)
+            || lastOutput.includes('Error:')
+            || lastOutput.includes('not found')
+            || lastOutput.includes('(skipped)');
+          if (wasUnexpected && completedSteps < plan.steps.length) {
             await this.replanIfNeeded(plan, context, completedSteps);
           }
         }
@@ -283,6 +292,30 @@ export class AgentLoop {
     if ((step.type === 'read' || step.type === 'search') && /not found|empty|null/i.test(error)) return 'skip';
     if (attempt < this.maxRetries) return 'retry';
     return 'escalate';
+  }
+
+  private async rollback(context: StepContext): Promise<void> {
+    for (const pageName of context.createdPages) {
+      try {
+        await logseq.Editor.deletePage(pageName);
+      } catch { /* ignore */ }
+    }
+    for (const uuid of context.createdBlockUUIDs) {
+      try {
+        await logseq.Editor.removeBlock(uuid);
+      } catch { /* ignore */ }
+    }
+  }
+
+  async rollbackLastRun(): Promise<string> {
+    if (!this.currentContext) return 'Nothing to rollback';
+    const pages = this.currentContext.createdPages.length;
+    const blocks = this.currentContext.createdBlockUUIDs.length;
+    if (pages === 0 && blocks === 0) return 'Nothing to rollback';
+    await this.rollback(this.currentContext);
+    const msg = `Rolled back: ${pages} page(s) and ${blocks} block(s) removed`;
+    this.currentContext = null;
+    return msg;
   }
 
   resolveEscalation(answer: string): void {

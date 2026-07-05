@@ -38,6 +38,11 @@ vi.mock('./manager', () => ({
   handleQuery: vi.fn(),
   indexEntireLogSeq: vi.fn(() => Promise.resolve({ outcome: 'completed', pagesProcessed: 0 })),
   verifyResponse: vi.fn(() => Promise.resolve(null)),
+  setMemoryStore: vi.fn(),
+  getLastMemorySaved: vi.fn(() => false),
+  setOnThoughtCallback: vi.fn(),
+  pendingAgentGoal: null,
+  clearPendingAgentGoal: vi.fn(),
 }));
 
 // Mock useAppVisible to always return true so the component renders

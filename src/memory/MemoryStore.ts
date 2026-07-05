@@ -26,6 +26,19 @@ export class MemoryStore {
     return id;
   }
 
+  addMemoryIfUnique(category: string, content: string, source?: string, metadata?: string): string | null {
+    const existing = this.searchMemories(content.slice(0, 30));
+    const isDuplicate = existing.some(m => {
+      if (m.category !== category) return false;
+      const newWords = new Set(content.toLowerCase().split(/\s+/));
+      const existWords = m.content.toLowerCase().split(/\s+/);
+      const overlap = existWords.filter(w => newWords.has(w)).length;
+      return overlap / Math.max(newWords.size, existWords.length) > 0.7;
+    });
+    if (isDuplicate) return null;
+    return this.addMemory(category, content, source, metadata);
+  }
+
   getMemories(filter?: { category?: string }): MemoryEntry[] {
     let sql = 'SELECT id, category, content, created_at, last_accessed, source, metadata FROM agent_memory';
     const params: any[] = [];

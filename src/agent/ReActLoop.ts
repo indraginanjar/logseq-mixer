@@ -58,7 +58,7 @@ export async function runReActLoop(
   // Initial LLM call
   let llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal, allTools.length > 0 ? allTools : undefined);
   let assistantMessage = llmOutput.choices?.[0]?.message;
-  tokensUsed += estimateTokens(messages, assistantMessage?.content || '');
+  tokensUsed += estimateTokens(messages, assistantMessage?.content || '', allTools);
 
   if (!assistantMessage) {
     throw new Error('No response message received from LiteLLM.');
@@ -119,6 +119,21 @@ export async function runReActLoop(
       });
     }
 
+    // Compress older messages if approaching context limit
+    if (iterations > 3) {
+      const totalTokens = estimateTokens(messages, '', allTools);
+      const contextLimit = 100000;
+      if (totalTokens > contextLimit * 0.7) {
+        const keepFromIdx = messages.length - 6;
+        for (let i = 2; i < Math.max(2, keepFromIdx); i++) {
+          const msg = messages[i];
+          if (msg.role === 'tool' && msg.content && msg.content.length > 200) {
+            messages[i] = { ...msg, content: msg.content.slice(0, 200) + '\n... (truncated)' };
+          }
+        }
+      }
+    }
+
     // Query LLM again with updated context
     llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal, allTools);
     assistantMessage = llmOutput.choices?.[0]?.message;
@@ -133,7 +148,17 @@ export async function runReActLoop(
   return { answer, thoughts, toolCalls, tokensUsed, iterations };
 }
 
-function estimateTokens(messages: ChatMessage[], response: string): number {
-  const msgText = messages.map(m => typeof m.content === 'string' ? m.content : '').join('');
-  return countTokens(msgText + response);
+function estimateTokens(messages: ChatMessage[], response: string, tools?: any[]): number {
+  let total = 0;
+  for (const m of messages) {
+    if (typeof m.content === 'string') total += countTokens(m.content);
+    if ((m as any).tool_calls) {
+      for (const tc of (m as any).tool_calls) {
+        total += countTokens(tc.function?.arguments || '');
+      }
+    }
+  }
+  total += countTokens(response);
+  if (tools?.length) total += tools.length * 100;
+  return total;
 }
