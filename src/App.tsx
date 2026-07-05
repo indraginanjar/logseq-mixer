@@ -15,6 +15,7 @@ import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
 import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
+import { isHelpCommand, answerHelpQuestion } from './helpSystem';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { executeAll, verifyAndCorrect } from './blockExecutor';
@@ -798,6 +799,20 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setError(null);
     setInputMessage('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+    // Handle /help commands directly without going through RAG
+    if (isHelpCommand(messageToSend)) {
+      try {
+        const helpResponse = await answerHelpQuestion(messageToSend, settings);
+        setMessages(prev => [...prev, { id: Date.now() + '_help', content: helpResponse, sender: 'assistant' }]);
+      } catch (err: any) {
+        setError(err.message || 'Help system error');
+      } finally {
+        setLoading(false);
+        setThinkingText(null);
+      }
+      return;
+    }
 
     try {
       const controller = new AbortController();
