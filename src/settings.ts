@@ -4,21 +4,10 @@ import { SettingSchemaDesc } from '@logseq/libs/dist/LSPlugin';
 const settings: SettingSchemaDesc[] = [
   {
     key: 'selectedModel',
-    type: 'enum',
+    type: 'string',
     title: 'Selected Model',
-    description: 'Choose the model to use for the plugin (powered by LITELLM)',
-    default: 'gpt-3.5-turbo',
-    enumChoices: [
-      'gpt-3.5-turbo',
-      'gpt-4',
-      'gpt-4o',
-      'claude-2',
-      'claude-3-opus',
-      'gemini-pro',
-      'codestral/codestral-latest',
-      'deepseek-chat'
-    ],    
-    enumPicker: 'select'
+    description: 'The model name to use (passed directly to LiteLLM). Examples: gpt-4o, claude-3-5-sonnet, deepseek-chat, gemini-pro.',
+    default: 'gpt-4o',
   },
   {
     key: 'prompt',
