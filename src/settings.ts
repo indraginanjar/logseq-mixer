@@ -76,15 +76,7 @@ const settings: SettingSchemaDesc[] = [
     description: 'Enter your API key for the service',
     default: 'sk-proj-1234',
   },
-  {
-    key: 'storageBackend',
-    type: 'enum',
-    title: 'Storage Backend',
-    description: 'Where to store the vector database. "sqlite" (recommended) stores data in a local SQLite file for better performance and external access. "settings" is the legacy option that stores data in Logseq plugin settings.',
-    default: 'sqlite',
-    enumChoices: ['sqlite', 'settings'],
-    enumPicker: 'select',
-  },
+
   {
     key: 'autoEmbedEnabled',
     type: 'boolean',

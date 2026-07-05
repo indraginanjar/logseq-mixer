@@ -11,7 +11,7 @@ interface IPluginSettings {
   VectorDBLogseqCopilot: string;
   autoEmbedEnabled: boolean;
   autoIndexDebounceSeconds: number;
-  storageBackend?: string;
+
   embeddingProvider?: string;
   memoryEnabled?: boolean;
   autoSummarize?: boolean;

@@ -13,12 +13,6 @@ vi.mock('./embedManager', () => ({
   clearRefCache: vi.fn(),
 }));
 
-vi.mock('./VectorDBManager', () => ({
-  getOrLoadVectorDatabase: vi.fn(),
-  loadVectorDatabase: vi.fn(),
-  vectorSearchOramaDB: vi.fn(),
-}));
-
 vi.mock('./indexManager', () => ({
   checkAndIndexUpdatedPages: vi.fn(),
   startPageIndexingOnChange: vi.fn(),
@@ -30,14 +24,12 @@ vi.mock('./storage/SQLiteVectorStore', () => ({
 
 // Import mocked modules via relative paths
 import { queryLiteLLM } from './LLMManager';
-import { getOrLoadVectorDatabase, vectorSearchOramaDB } from './VectorDBManager';
 import { useGenerateEmbedding } from './embedManager';
-import { clearConversationHistory, handleQuery } from './manager';
+import { clearConversationHistory, handleQuery, type EditQueryResult } from './manager';
+import type { StorageProvider } from './storage/StorageProvider';
 
 const mockedQueryLiteLLM = vi.mocked(queryLiteLLM);
 const mockedUseGenerateEmbedding = vi.mocked(useGenerateEmbedding);
-const mockedGetOrLoadVectorDatabase = vi.mocked(getOrLoadVectorDatabase);
-const mockedVectorSearchOramaDB = vi.mocked(vectorSearchOramaDB);
 
 /** Minimal mock settings object */
 function makeSettings(overrides: Record<string, any> = {}) {
@@ -54,12 +46,10 @@ function makeSettings(overrides: Record<string, any> = {}) {
   };
 }
 
-/** Minimal mock storage provider (legacy path — no searchByVector) */
+/** Minimal mock storage provider — no searchByVector so vector context is skipped */
 function makeLegacyStorageProvider(): StorageProvider {
   return {
     clear: vi.fn().mockResolvedValue(undefined),
-    save: vi.fn().mockResolvedValue(undefined),
-    load: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -84,10 +74,6 @@ describe('handleQuery – edit mode', () => {
 
     // Mock embedding to return a dummy vector
     mockedUseGenerateEmbedding.mockResolvedValue([0.1, 0.2, 0.3] as any);
-
-    // Legacy path: mock Orama vector search to return empty results
-    mockedGetOrLoadVectorDatabase.mockResolvedValue({} as any);
-    mockedVectorSearchOramaDB.mockResolvedValue({ hits: [], count: 0 } as any);
 
     // Suppress console noise
     vi.spyOn(console, 'info').mockImplementation(() => {});

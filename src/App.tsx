@@ -1407,12 +1407,6 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             </DbPanelHeader>
 
             <DbStatsList>
-              <DbStatRow>
-                <DbStatLabel>Storage Backend</DbStatLabel>
-                <DbStatValue style={{ textTransform: 'capitalize' }}>
-                  {settings?.storageBackend || 'SQLite'}
-                </DbStatValue>
-              </DbStatRow>
               {dbSize !== null && (
                 <DbStatRow>
                   <DbStatLabel>Database Size</DbStatLabel>

@@ -6,9 +6,7 @@ import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
 import { queryLiteLLM, type ChatMessage, type MessageContentPart, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
-import { rerankWithRRF, type SearchHit } from 'reranker';
 import { countTokens, encode, decode } from 'tokenizer';
-import { getOrLoadVectorDatabase, loadVectorDatabase, vectorSearchOramaDB } from 'VectorDBManager';
 import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
 import type { PerDocumentStorageProvider, StorageProvider } from './storage/StorageProvider';
 import { MCPManager } from 'mcp/MCPManager';
@@ -34,15 +32,6 @@ export interface EditQueryResult {
 /** Clear the conversation history for a fresh session. */
 export function clearConversationHistory(): void {
   conversationHistory.length = 0;
-}
-
-/**
- * Duck-typing check: returns true when the storage provider supports
- * per-document vector search (SQLiteVectorStore), false for the legacy
- * Orama-based path (SettingsStorageProvider).
- */
-function hasSearchByVector(provider: any): provider is PerDocumentStorageProvider {
-  return typeof provider?.searchByVector === 'function';
 }
 
 /** Module-level BM25 index, lazily initialized on first hybrid search. */
@@ -117,40 +106,23 @@ function ensureBM25Index(storageProvider: PerDocumentStorageProvider): BM25Index
 export async function indexEntireLogSeq(settings: any, storageProvider: StorageProvider): Promise<IndexingResult> {
   clearRefCache();
 
-  if (hasSearchByVector(storageProvider)) {
-    // Check chunking version for migration
-    if (storageProvider instanceof SQLiteVectorStore) {
-      const storedVersion = storageProvider.getChunkingVersion();
-      if (storedVersion !== CURRENT_CHUNKING_VERSION) {
-        console.info('[indexEntireLogSeq] Chunking version mismatch, forcing full re-index.');
-        await storageProvider.clear();
-        resetBM25Index();
-        storageProvider.setChunkingVersion(CURRENT_CHUNKING_VERSION);
-      }
+  if (storageProvider instanceof SQLiteVectorStore) {
+    const storedVersion = storageProvider.getChunkingVersion();
+    if (storedVersion !== CURRENT_CHUNKING_VERSION) {
+      console.info('[indexEntireLogSeq] Chunking version mismatch, forcing full re-index.');
+      await storageProvider.clear();
+      resetBM25Index();
+      storageProvider.setChunkingVersion(CURRENT_CHUNKING_VERSION);
     }
-
-    // Per-document path: always incremental indexing
-    const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined);
-    // Invalidate BM25 index so it rebuilds lazily from the updated store on next query
-    resetBM25Index();
-    return result;
-  } else {
-    // Legacy Orama-based path
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
-    const result = await checkAndIndexUpdatedPages(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider);
-    return result;
   }
+
+  const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined);
+  resetBM25Index();
+  return result;
 }
 
 export async function enableAutoIndexer(settings: any, storageProvider: StorageProvider) {
-  if (hasSearchByVector(storageProvider)) {
-    // Per-document path: no Orama instance needed
-    startPageIndexingOnChange(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined);
-  } else {
-    // Legacy Orama-based path
-    const oramaDatabaseInstance = await loadVectorDatabase(settings, false, settings.embeddingModel, storageProvider);
-    startPageIndexingOnChange(settings.apiKey, oramaDatabaseInstance, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider);
-  }
+  startPageIndexingOnChange(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined);
 }
 
 function truncateToTokens(text: string, maxTokens: number): string {
@@ -160,24 +132,14 @@ function truncateToTokens(text: string, maxTokens: number): string {
   return decode(tokens.slice(0, maxTokens)) + "\n... (truncated to fit model context limit)";
 }
 
-/** Retrieve relevant vector context for a query. */
 async function retrieveVectorContext(query: string, settings: any, storageProvider: StorageProvider): Promise<string> {
   try {
     const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider);
-    if (hasSearchByVector(storageProvider)) {
-      const index = ensureBM25Index(storageProvider);
-      const reranked = await hybridSearch(query, queryEmbedding, storageProvider, index, { accelerator: accelerator ?? undefined });
-      return reranked.map(hit => hit.content).join('\n\n');
-    } else {
-      const oramaDatabaseInstance = await getOrLoadVectorDatabase(settings, settings.embeddingModel, storageProvider);
-      const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
-      const searchHits: SearchHit[] = (vectorResult.hits ?? []).map(hit => ({
-        id: hit.document.id as string, content: hit.document.content as string, score: hit.score,
-      }));
-      if (searchHits.length > 0) {
-        return rerankWithRRF(searchHits, query).map(hit => hit.content).join('\n\n');
-      }
-    }
+    const provider = storageProvider as PerDocumentStorageProvider;
+    if (typeof provider.searchByVector !== 'function') return '';
+    const index = ensureBM25Index(provider);
+    const reranked = await hybridSearch(query, queryEmbedding, provider, index, { accelerator: accelerator ?? undefined });
+    return reranked.map(hit => hit.content).join('\n\n');
   } catch (err) {
     console.error("Vector search failed:", err);
   }

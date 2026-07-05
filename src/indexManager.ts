@@ -8,9 +8,7 @@ export interface IndexingResult {
   errorMessage?: string;
 }
 
-import { getByID, remove } from "@orama/orama";
 import { DEFAULT_EMBEDDING_MODEL, EmbeddingProvider, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
-import { batchInsertEmbeddings, OramaInstance } from "VectorDBManager";
 import { shouldSuppressAutoIndex } from "./cooldownManager";
 import { ChunkMigrationManager } from "./chunkMigrationManager";
 import type { BM25Index } from "./bm25Index";
@@ -26,7 +24,7 @@ let currentEmbeddingKey = '';
 let currentModel = '';
 let currentEmbeddingEndpoint = '';
 let currentEmbeddingProvider: EmbeddingProvider = 'openai';
-let currentOramaInstance: OramaInstance | undefined;
+let currentOramaInstance: any;
 let currentStorageProvider: StorageProvider;
 let currentAccelerator: VectorSearchAccelerator | undefined;
 let indexingInProgress = false;
@@ -180,7 +178,7 @@ const isInternalPage = (name: string) => {
 
 export async function checkAndIndexUpdatedPages(
   apiKey: string,
-  oramaInstance: OramaInstance | undefined,
+  oramaInstance: any,
   embeddingApiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
   storageProvider: StorageProvider,
@@ -311,53 +309,6 @@ export async function checkAndIndexUpdatedPages(
         } catch (error) {
           console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
         }
-      } else {
-        // --- Legacy Orama-based path ---
-        if (!oramaInstance) {
-          console.error('[indexManager] Legacy path requires oramaInstance but none was provided.');
-          continue;
-        }
-
-        const dbRecord = getByID(oramaInstance, pageIdStr);
-        if (dbRecord && dbRecord.lastUpdated >= lastUpdated) continue;
-
-        try {
-          const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
-
-          const blockContentLines = collectBlockContent(blocks);
-          const outgoingLinks = extractOutgoingLinks(blockContentLines);
-          const backlinks = await fetchBacklinks(page.name);
-          const linkData: PageLinkData = { outgoingLinks, backlinks };
-
-          const { embeddings: newEmbeddings } = await getEmbeddingsForPage(
-            pageIdStr,
-            blocks,
-            page.name,
-            lastUpdated,
-            embeddingApiKey,
-            model,
-            page.properties,
-            linkData,
-            embeddingEndpoint,
-            embeddingProvider
-          );
-
-          // Remove old record and any existing chunks for this page
-          if (dbRecord?.id) {
-            await remove(oramaInstance, dbRecord.id);
-          }
-          for (let c = 0; c < 100; c++) {
-            const chunkId = `${page.id}_chunk_${c}`;
-            const chunkRecord = getByID(oramaInstance, chunkId);
-            if (!chunkRecord) break;
-            await remove(oramaInstance, chunkId);
-          }
-
-          await batchInsertEmbeddings(oramaInstance, newEmbeddings, storageProvider);
-          _pagesProcessed++;
-        } catch (error) {
-          console.error(`Error indexing page ${page.name} (ID: ${page.uuid}):`, error);
-        }
       }
     }
 
@@ -417,7 +368,7 @@ export function cancelAutoIndexDebounce(): void {
 
 export function startPageIndexingOnChange(
   apiKey: string,
-  oramaInstance: OramaInstance | undefined,
+  oramaInstance: any,
   embeddingApiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
   storageProvider: StorageProvider,

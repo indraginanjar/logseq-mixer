@@ -42,13 +42,6 @@ export interface StorageProvider {
   /** Get the size of the database in bytes (optional) */
   getDatabaseSize?(): Promise<number>;
 
-  // --- Legacy methods used by SettingsStorageProvider + Orama backend ---
-
-  /** Save serialized data (legacy Orama JSON blob) */
-  save?(data: string): Promise<void>;
-
-  /** Load serialized data (legacy Orama JSON blob) */
-  load?(): Promise<string | null>;
 }
 
 /**

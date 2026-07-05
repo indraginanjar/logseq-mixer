@@ -15,16 +15,6 @@ vi.mock('./embedManager', () => ({
   PageLinkData: {},
 }));
 
-vi.mock('./VectorDBManager', () => ({
-  batchInsertEmbeddings: vi.fn().mockResolvedValue(undefined),
-  OramaInstance: {},
-}));
-
-vi.mock('@orama/orama', () => ({
-  getByID: vi.fn(),
-  remove: vi.fn(),
-}));
-
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 import initSqlJs from 'sql.js';
 import { _resetIndexingState, checkAndIndexUpdatedPages, getIndexingProgress, requestPauseIndexing } from './indexManager';

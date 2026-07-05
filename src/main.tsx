@@ -2,7 +2,6 @@ import '@logseq/libs';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { RecoilRoot } from 'recoil';
-import 'VectorDBManager';
 import App from './App';
 import settings from './settings';
 import { createStorageProvider } from './storage/createStorageProvider';
@@ -15,7 +14,7 @@ import { ensureInitialized as ensureTokenizerReady } from './tokenizer';
  * or the auto-indexer fires). This prevents blocking Logseq's main thread
  * during startup, which causes "Not Responding" on Windows.
  */
-function createLazyStorageProvider(backend: 'sqlite' | 'settings'): StorageProvider {
+function createLazyStorageProvider(): StorageProvider {
   let realProvider: StorageProvider | null = null;
   let initPromise: Promise<StorageProvider> | null = null;
 
@@ -25,7 +24,7 @@ function createLazyStorageProvider(backend: 'sqlite' | 'settings'): StorageProvi
       initPromise = (async () => {
         // Initialize the tokenizer (loads ~1.5 MB cl100k_base encoding table)
         await ensureTokenizerReady();
-        const p = await createStorageProvider(backend);
+        const p = await createStorageProvider();
         realProvider = p;
         return p;
       })();
@@ -58,7 +57,7 @@ function createLazyStorageProvider(backend: 'sqlite' | 'settings'): StorageProvi
   // Proxy all optional methods so they resolve lazily
   const optionalAsyncMethods = [
     'upsertDocuments', 'deleteDocuments', 'searchByVector',
-    'getDocumentMeta', 'save', 'load', 'importFromFile', 'getDatabaseSize',
+    'getDocumentMeta', 'importFromFile', 'getDatabaseSize',
   ] as const;
 
   for (const method of optionalAsyncMethods) {
@@ -119,8 +118,7 @@ async function main() {
   console.info(`${key}: MAIN`);
 
   // Create a lazy storage provider that defers heavy SQLite initialization
-  const storageBackend = (logseq.settings?.storageBackend as 'sqlite' | 'settings') ?? 'sqlite';
-  const storageProvider = createLazyStorageProvider(storageBackend);
+  const storageProvider = createLazyStorageProvider();
 
   // Reinitialize storage when user switches graphs
   logseq.App.onCurrentGraphChanged(async () => {
