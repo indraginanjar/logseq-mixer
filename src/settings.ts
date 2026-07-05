@@ -52,18 +52,27 @@ const settings: SettingSchemaDesc[] = [
     default: 'https://api.openai.com/v1/embeddings',
   },
   {
-    key: 'LiteLLMLink',
+    key: 'chatProvider',
+    type: 'enum',
+    title: 'Chat Provider',
+    description: 'Choose LiteLLM to route through a local proxy, OpenAI for direct API access, or Ollama for local models.',
+    default: 'litellm',
+    enumChoices: ['litellm', 'openai', 'ollama'],
+    enumPicker: 'select',
+  },
+  {
+    key: 'chatEndpoint',
     type: 'string',
-    title: 'LiteLLM api link',
-    description: 'LiteLLM\'s api endpoint, replace with your own if you want custom models',
+    title: 'Chat API Endpoint',
+    description: 'The chat completions endpoint. LiteLLM: http://127.0.0.1:4000/chat/completions. OpenAI: https://api.openai.com/v1/chat/completions. Ollama: http://localhost:11434/api/chat.',
     default: 'http://127.0.0.1:4000/chat/completions',
   },
   {
     key: 'apiKey',
     type: 'string',
     title: 'API Key',
-    description: 'Enter your API key for the service',
-    default: 'sk-proj-1234',
+    description: 'API key for your chat provider. Not required for Ollama.',
+    default: '',
   },
 
   {

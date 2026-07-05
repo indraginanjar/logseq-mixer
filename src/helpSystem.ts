@@ -102,7 +102,7 @@ export async function answerHelpQuestion(message: string, settings: any): Promis
   }
 
   // Use LLM to answer based on the embedded guide
-  if (!settings?.selectedModel || !settings?.LiteLLMLink) {
+  if (!settings?.selectedModel || !(settings?.chatEndpoint || settings?.LiteLLMLink)) {
     // No LLM available, return raw guide section
     return searchGuideManually(topic);
   }
@@ -115,7 +115,7 @@ export async function answerHelpQuestion(message: string, settings: any): Promis
       },
       { role: 'user', content: topic },
     ];
-    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink);
+    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, undefined, undefined, settings.chatProvider);
     return result.choices?.[0]?.message?.content?.trim() || searchGuideManually(topic);
   } catch {
     return searchGuideManually(topic);

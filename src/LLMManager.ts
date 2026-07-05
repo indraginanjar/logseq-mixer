@@ -79,46 +79,76 @@ export async function queryLiteLLM(
   apiKey: string,
   endpoint: string,
   signal?: AbortSignal,
-  tools?: any[]
+  tools?: any[],
+  provider?: string
 ): Promise<any> {
-  const useMaxCompletionTokens = 
-    model.toLowerCase().includes('o1-') || 
+  const chatProvider = provider || 'litellm';
+
+  const useMaxCompletionTokens =
+    model.toLowerCase().includes('o1-') ||
     model.toLowerCase().startsWith('o1') ||
-    model.toLowerCase().includes('o3-') || 
+    model.toLowerCase().includes('o3-') ||
     model.toLowerCase().startsWith('o3') ||
     model.toLowerCase().includes('gpt-5');
 
-  const requestBody: Record<string, any> = {
-    model: model,
-    messages: messages,
-    "api_key": apiKey
-  };
+  let requestBody: Record<string, any>;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  if (tools && tools.length > 0) {
-    requestBody.tools = tools;
-  }
-
-  if (useMaxCompletionTokens) {
-    requestBody.max_completion_tokens = getMaxTokensForModel(model);
+  if (chatProvider === 'ollama') {
+    requestBody = {
+      model: model,
+      messages: messages,
+      stream: false,
+      options: {
+        num_predict: getMaxTokensForModel(model),
+      },
+    };
+    if (tools && tools.length > 0) {
+      requestBody.tools = tools;
+    }
   } else {
-    requestBody.max_tokens = getMaxTokensForModel(model);
+    requestBody = {
+      model: model,
+      messages: messages,
+    };
+    if (chatProvider === 'litellm') {
+      requestBody.api_key = apiKey;
+    }
+    if (tools && tools.length > 0) {
+      requestBody.tools = tools;
+    }
+    if (useMaxCompletionTokens) {
+      requestBody.max_completion_tokens = getMaxTokensForModel(model);
+    } else {
+      requestBody.max_tokens = getMaxTokensForModel(model);
+    }
+    if (apiKey?.trim()) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
   }
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify(requestBody),
     signal,
   });
 
   if (!response.ok) {
-    throw new Error(`LiteLLM request failed: ${response.status} ${response.statusText}`);
+    throw new Error(`LLM request failed: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
+
+  // Normalize Ollama response to OpenAI format
+  if (chatProvider === 'ollama' && data.message && !data.choices) {
+    return {
+      choices: [{
+        message: data.message,
+      }],
+    };
+  }
+
   return data;
 }
 

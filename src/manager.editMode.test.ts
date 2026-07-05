@@ -38,6 +38,8 @@ function makeSettings(overrides: Record<string, any> = {}) {
     selectedModel: 'gpt-4',
     apiKey: 'test-key',
     LiteLLMLink: 'https://example.com/v1/chat/completions',
+    chatProvider: 'litellm',
+    chatEndpoint: 'https://example.com/v1/chat/completions',
     EmbeddingApiKey: 'embed-key',
     embeddingModel: 'text-embedding-ada-002',
     embeddingEndpoint: 'https://example.com/v1/embeddings',

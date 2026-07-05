@@ -79,7 +79,7 @@ export class AgentLoop {
       { role: 'user', content: `Goal: ${goal}\n\nCurrent context:\n${context}` },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.LiteLLMLink, this.signal);
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
 
@@ -219,7 +219,7 @@ export class AgentLoop {
       { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}\n\nCurrent step (type=${step.type}): ${step.description}\n\nProvide the action or analysis.` },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.LiteLLMLink, this.signal);
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     const tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
 
@@ -327,7 +327,7 @@ export class AgentLoop {
       { role: 'system', content: EVAL_SYSTEM_PROMPT },
       { role: 'user', content: `Step intent: ${step.description}\nStep type: ${step.type}\nOutput received:\n${result.output.slice(0, 500)}\n\nWas the intent achieved?` },
     ];
-    const llmResult = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.LiteLLMLink, this.signal);
+    const llmResult = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
     const raw = llmResult.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
     try {
@@ -350,7 +350,7 @@ export class AgentLoop {
       { role: 'user', content: `Goal: ${context.goal}\n\nProgress so far:\n${progressSummary}\n\nRemaining steps:\n${remainingDesc}\n\nShould the remaining plan change?` },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.LiteLLMLink, this.signal);
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
 

@@ -72,6 +72,8 @@ vi.mock('recoil', () => ({
     prompt: '',
     EmbeddingApiKey: '',
     LiteLLMLink: '',
+    chatProvider: 'litellm',
+    chatEndpoint: '',
     apiKey: '',
     embeddingModel: '',
     VectorDBLogseqCopilot: '',

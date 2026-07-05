@@ -13,6 +13,8 @@ interface IPluginSettings {
   autoIndexDebounceSeconds: number;
 
   embeddingProvider?: string;
+  chatProvider?: string;
+  chatEndpoint?: string;
   memoryEnabled?: boolean;
   autoSummarize?: boolean;
   memoryBudgetPercent?: number;

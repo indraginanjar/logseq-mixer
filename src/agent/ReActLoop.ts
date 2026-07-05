@@ -56,7 +56,7 @@ export async function runReActLoop(
   }
 
   // Initial LLM call
-  let llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal, allTools.length > 0 ? allTools : undefined);
+  let llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider);
   let assistantMessage = llmOutput.choices?.[0]?.message;
   tokensUsed += estimateTokens(messages, assistantMessage?.content || '', allTools);
 
@@ -135,7 +135,7 @@ export async function runReActLoop(
     }
 
     // Query LLM again with updated context
-    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.LiteLLMLink, signal, allTools);
+    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, signal, allTools, settings.chatProvider);
     assistantMessage = llmOutput.choices?.[0]?.message;
     tokensUsed += estimateTokens([], assistantMessage?.content || '');
 

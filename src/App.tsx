@@ -1126,9 +1126,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   useEffect(() => {
     const loadModels = async () => {
-      if (settings?.LiteLLMLink) {
+      if (settings?.chatEndpoint || settings?.LiteLLMLink) {
         try {
-          const models = await fetchLiteLLMModels(settings.LiteLLMLink, settings.apiKey || '');
+          const models = await fetchLiteLLMModels(settings.chatEndpoint || settings.LiteLLMLink, settings.apiKey || '');
           if (models && models.length > 0) {
             setFetchedModels(models);
           }
@@ -1138,7 +1138,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       }
     };
     loadModels();
-  }, [settings?.LiteLLMLink, settings?.apiKey]);
+  }, [settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey]);
 
   const modelChoices = fetchedModels.includes(currentModel)
     ? fetchedModels
