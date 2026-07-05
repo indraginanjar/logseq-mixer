@@ -25,6 +25,7 @@ import { AutoEmbedToggle } from './components/AutoEmbedToggle';
 import { ChangeSummary } from './components/ChangeSummary';
 import { AgentToggle } from './components/AgentToggle';
 import { EditToggle } from './components/EditToggle';
+import { VerboseToggle } from './components/VerboseToggle';
 import { cancelCooldown, startCooldown } from './cooldownManager';
 import { useAppVisible } from './hooks/useAppVisible';
 import { useCtrlKey } from './hooks/useCtrlKey';
@@ -563,6 +564,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [progressCount, setProgressCount] = useState(getIndexingProgress);
   const [autoEmbedEnabled, setAutoEmbedEnabled] = useState(() => (logseq.settings?.autoEmbedEnabled as boolean) ?? true);
   const [agentModeOn, setAgentModeOn] = useState(() => (logseq.settings?.agentMode as string) !== 'off');
+  const [verboseMode, setVerboseMode] = useState(() => (logseq.settings?.agentVerboseMode as boolean) ?? true);
   const [cooldownActive, setCooldownActive] = useState(false);
   const [showDbPanel, setShowDbPanel] = useState(false);
   const [showMcpPanel, setShowMcpPanel] = useState(false);
@@ -1121,6 +1123,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     logseq.updateSettings({ agentMode: newMode });
   };
 
+  const handleVerboseToggle = () => {
+    const newValue = !verboseMode;
+    setVerboseMode(newValue);
+    logseq.updateSettings({ agentVerboseMode: newValue });
+  };
+
   const currentModel = settings?.selectedModel || 'gpt-3.5-turbo';
   const [fetchedModels, setFetchedModels] = useState<string[]>(MODEL_CHOICES);
 
@@ -1284,7 +1292,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               onReplanResponse={(approved) => { replanResolverRef.current?.(approved); setReplanReason(null); setReplanSteps([]); }}
               replanReason={replanReason}
               replanSteps={replanSteps}
-              verbose={(settings?.agentVerboseMode as boolean) ?? false}
+              verbose={verboseMode}
               onRetryStep={(stepId) => {
                 setAgentPlan(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, status: 'pending' as const, error: undefined } : s) } : prev);
               }}
@@ -1370,6 +1378,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
               <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
               <AgentToggle enabled={agentModeOn} onToggle={handleAgentModeToggle} />
+              <VerboseToggle enabled={verboseMode} onToggle={handleVerboseToggle} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <ToolbarButton onClick={handleOpenDbPanel} title="Database">🗄️</ToolbarButton>

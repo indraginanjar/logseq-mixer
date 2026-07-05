@@ -3,6 +3,7 @@ import { styled, keyframes } from '../stitches.config';
 import type { AgentPlan, AgentStep } from '../agent/types';
 
 const fadeIn = keyframes({ '0%': { opacity: 0 }, '100%': { opacity: 1 } });
+const pulse = keyframes({ '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } });
 
 const AgentCard = styled('div', {
   border: '1px solid $slate5',
@@ -18,9 +19,12 @@ const GoalHeader = styled('div', {
   fontWeight: 600,
   color: '$highContrast',
   marginBottom: '10px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
 });
 
-const StepList = styled('div', { display: 'flex', flexDirection: 'column', gap: '4px' });
+const StepList = styled('div', { display: 'flex', flexDirection: 'column', gap: '2px' });
 
 const StepItem = styled('div', {
   display: 'flex',
@@ -38,12 +42,80 @@ const StepItem = styled('div', {
 
 const StepIcon = styled('span', { fontSize: '12px', flexShrink: 0, width: '16px' });
 
+const StepDescription = styled('span', { flex: 1 });
+
+const StepMeta = styled('span', {
+  fontSize: '10px',
+  color: '$slate9',
+  marginLeft: '4px',
+  fontWeight: 400,
+});
+
 const StepOutput = styled('div', {
   fontSize: '11px',
   color: '$slate10',
   marginLeft: '24px',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
+  lineHeight: 1.5,
+  padding: '4px 8px',
+  borderLeft: '2px solid $slate4',
+  marginTop: '2px',
+  marginBottom: '4px',
+});
+
+const VerboseDetail = styled('div', {
+  fontSize: '11px',
+  marginLeft: '24px',
+  padding: '4px 8px',
+  borderLeft: '2px solid',
+  marginTop: '2px',
+  marginBottom: '4px',
+  lineHeight: 1.4,
+  variants: {
+    variant: {
+      correction: { borderColor: '$amber7', color: '$amber11', backgroundColor: '$amber2' },
+      info: { borderColor: '$blue7', color: '$blue11', backgroundColor: '$blue2' },
+      error: { borderColor: '$red7', color: '$red11', backgroundColor: '$red2' },
+      success: { borderColor: '$green7', color: '$green11', backgroundColor: '$green2' },
+    },
+  },
+});
+
+const VerboseLabel = styled('span', {
+  fontSize: '10px',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.03em',
+  marginRight: '6px',
+});
+
+const TypeBadge = styled('span', {
+  fontSize: '9px',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  padding: '1px 5px',
+  borderRadius: '3px',
+  variants: {
+    type: {
+      read: { backgroundColor: '$blue3', color: '$blue11' },
+      write: { backgroundColor: '$green3', color: '$green11' },
+      search: { backgroundColor: '$violet3', color: '$violet11' },
+      tool: { backgroundColor: '$orange3', color: '$orange11' },
+      think: { backgroundColor: '$slate4', color: '$slate11' },
+    },
+  },
+});
+
+const CorrectionBadge = styled('span', {
+  fontSize: '10px',
+  fontWeight: 500,
+  color: '$amber11',
+  backgroundColor: '$amber3',
+  padding: '1px 6px',
+  borderRadius: '3px',
+  marginLeft: '6px',
 });
 
 const BarContainer = styled('div', {
@@ -67,11 +139,13 @@ const BarFill = styled('div', {
   },
 });
 
-const BudgetText = styled('div', {
+const ProgressSummary = styled('div', {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginTop: '6px',
   fontSize: '10px',
   color: '$slate10',
-  marginTop: '4px',
-  textAlign: 'right',
 });
 
 const ButtonRow = styled('div', {
@@ -132,7 +206,10 @@ const ReplanBox = styled('div', {
 
 const ReplanTitle = styled('div', { fontSize: '12px', fontWeight: 600, color: '$blue11', marginBottom: '6px' });
 const ReplanDetail = styled('div', { fontSize: '11px', color: '$slate11', marginBottom: '8px' });
-const CorrectionBadge = styled('span', { fontSize: '10px', color: '$amber11', marginLeft: '6px' });
+
+const RunningIndicator = styled('span', {
+  animation: `${pulse} 1.5s ease-in-out infinite`,
+});
 
 function statusIcon(status: string): string {
   switch (status) {
@@ -143,6 +220,11 @@ function statusIcon(status: string): string {
     case 'skipped': return '⏭️';
     default: return '·';
   }
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
 }
 
 interface AgentProgressProps {
@@ -176,6 +258,7 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
   if (!plan) return null;
 
   const completed = plan.steps.filter(s => s.status === 'done').length;
+  const failed = plan.steps.filter(s => s.status === 'failed').length;
   const progress = plan.steps.length > 0 ? (completed / plan.steps.length) * 100 : 0;
   const budgetPct = tokenBudget > 0 ? (tokensUsed / tokenBudget) * 100 : 0;
   const budgetColor = budgetPct >= 100 ? 'red' : budgetPct >= 80 ? 'amber' : 'blue';
@@ -183,25 +266,54 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
 
   return (
     <AgentCard>
-      <GoalHeader>🤖 Goal: {plan.goal}</GoalHeader>
+      <GoalHeader>
+        {isRunning ? <RunningIndicator>🤖</RunningIndicator> : '🤖'}
+        <span>Goal: {plan.goal}</span>
+      </GoalHeader>
+
       <StepList>
         {plan.steps.map(step => (
           <div key={step.id}>
             <StepItem done={step.status === 'done'} failed={step.status === 'failed'} running={step.status === 'running'}>
               <StepIcon>{statusIcon(step.status)}</StepIcon>
-              <span>{step.id}. {step.description}</span>
-              {verbose && (step.correctionAttempts ?? 0) > 0 && <CorrectionBadge>↩️ corrected ({step.correctionAttempts}x)</CorrectionBadge>}
+              <StepDescription>
+                {step.id}. {step.description}
+                {verbose && <TypeBadge type={step.type as any}>{step.type}</TypeBadge>}
+                {verbose && step.tokensUsed ? <StepMeta>({formatTokens(step.tokensUsed)} tok)</StepMeta> : null}
+              </StepDescription>
+              {verbose && (step.correctionAttempts ?? 0) > 0 && (
+                <CorrectionBadge>↩ corrected ×{step.correctionAttempts}</CorrectionBadge>
+              )}
             </StepItem>
+
+            {/* Verbose: show correction reasoning */}
+            {verbose && step.correctionReason && (
+              <VerboseDetail variant="correction">
+                <VerboseLabel>Correction:</VerboseLabel>
+                {step.correctionReason}
+              </VerboseDetail>
+            )}
+
+            {/* Step output (expandable) */}
             {step.status === 'done' && step.output && (
               <StepOutput
                 onClick={() => toggleExpand(step.id)}
-                css={{ cursor: 'pointer', '&:hover': { color: '$highContrast' } }}
+                css={{ cursor: 'pointer', '&:hover': { color: '$highContrast', borderColor: '$slate6' } }}
               >
-                {expandedSteps.has(step.id) ? step.output : step.output.slice(0, 120) + (step.output.length > 120 ? '\u2026' : '')}
-                {step.output.length > 120 && <span style={{ fontSize: '10px', marginLeft: '4px' }}>{expandedSteps.has(step.id) ? '\u25be' : '\u25b8'}</span>}
+                {expandedSteps.has(step.id) ? step.output : step.output.slice(0, 120) + (step.output.length > 120 ? '…' : '')}
+                {step.output.length > 120 && <span style={{ fontSize: '10px', marginLeft: '4px', opacity: 0.7 }}>{expandedSteps.has(step.id) ? '▾ collapse' : '▸ expand'}</span>}
               </StepOutput>
             )}
-            {verbose && step.correctionReason && <StepOutput css={{ color: '$amber11' }}>↩️ {step.correctionReason}</StepOutput>}
+
+            {/* Verbose: show error details for failed steps */}
+            {verbose && step.status === 'failed' && step.error && (
+              <VerboseDetail variant="error">
+                <VerboseLabel>Error:</VerboseLabel>
+                {step.error}
+              </VerboseDetail>
+            )}
+
+            {/* Retry/Skip buttons for failed steps */}
             {step.status === 'failed' && (
               <ButtonRow css={{ marginLeft: '24px', marginTop: '4px' }}>
                 {onRetryStep && <Btn variant="approve" onClick={() => onRetryStep(step.id)} css={{ fontSize: '10px', padding: '2px 8px' }}>↻ Retry</Btn>}
@@ -212,19 +324,37 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
         ))}
       </StepList>
 
+      {/* Progress bar */}
       <BarContainer><BarFill color="blue" css={{ width: `${progress}%` }} /></BarContainer>
+
+      {/* Token budget bar + summary */}
       {tokenBudget > 0 && (
-        <>
-          <BarContainer><BarFill color={budgetColor} css={{ width: `${Math.min(budgetPct, 100)}%` }} /></BarContainer>
-          <BudgetText>{tokensUsed.toLocaleString()} / {tokenBudget.toLocaleString()} tokens</BudgetText>
-        </>
+        <BarContainer css={{ marginTop: '4px' }}><BarFill color={budgetColor} css={{ width: `${Math.min(budgetPct, 100)}%` }} /></BarContainer>
       )}
 
+      <ProgressSummary>
+        <span>
+          {completed}/{plan.steps.length} steps
+          {failed > 0 && <span style={{ color: 'var(--colors-red11)', marginLeft: '6px' }}>{failed} failed</span>}
+        </span>
+        {verbose && tokenBudget > 0 && (
+          <span>{formatTokens(tokensUsed)} / {formatTokens(tokenBudget)} tokens</span>
+        )}
+        {verbose && tokenBudget === 0 && tokensUsed > 0 && (
+          <span>{formatTokens(tokensUsed)} tokens used</span>
+        )}
+      </ProgressSummary>
+
+      {/* Replan proposal */}
       {replanReason && replanSteps && replanSteps.length > 0 && (
         <ReplanBox>
           <ReplanTitle>📋 Plan update proposed</ReplanTitle>
           <ReplanDetail>{replanReason}</ReplanDetail>
-          {replanSteps.map(s => <div key={s.id} style={{ fontSize: '11px', color: '#64748b' }}>+ {s.id}. [{s.type}] {s.description}</div>)}
+          {replanSteps.map(s => (
+            <div key={s.id} style={{ fontSize: '11px', color: '#64748b', padding: '1px 0' }}>
+              + {s.id}. <TypeBadge type={s.type as any}>{s.type}</TypeBadge> {s.description}
+            </div>
+          ))}
           <ButtonRow>
             <Btn variant="approve" onClick={() => onReplanResponse?.(true)}>✓ Accept</Btn>
             <Btn variant="cancel" onClick={() => onReplanResponse?.(false)}>✕ Keep Original</Btn>
@@ -232,6 +362,7 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
         </ReplanBox>
       )}
 
+      {/* Escalation dialog */}
       {escalationQuestion && (
         <EscalationBox>
           <EscalationQuestion>{escalationQuestion}</EscalationQuestion>
@@ -242,6 +373,7 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
         </EscalationBox>
       )}
 
+      {/* Action buttons */}
       <ButtonRow>
         {showApproval && <><Btn variant="approve" onClick={onApprove}>▶️ Approve</Btn><Btn variant="cancel" onClick={onCancel}>✕ Cancel</Btn></>}
         {isRunning && <Btn variant="stop" onClick={onStop}>⏹ Stop</Btn>}

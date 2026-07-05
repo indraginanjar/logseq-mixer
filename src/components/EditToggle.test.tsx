@@ -37,14 +37,14 @@ import { EditToggle } from './EditToggle';
 
 describe('EditToggle component', () => {
   /**
-   * Requirement 1.6: label reading "AI Edit" adjacent to the switch
+   * Requirement 1.6: label reading "Direct Page Edit" adjacent to the switch
    */
-  it('renders with correct label text "AI Edit"', () => {
+  it('renders with correct label text "Direct Page Edit"', () => {
     const { container } = render(
       <EditToggle enabled={false} onToggle={() => {}} />
     );
     expect(container.textContent).toContain('✏️');
-    expect(container.querySelector('[title="AI Edit"]')).not.toBeNull();
+    expect(container.querySelector('[title="Direct Page Edit"]')).not.toBeNull();
   });
 
   /**

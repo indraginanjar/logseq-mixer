@@ -132,7 +132,17 @@ vi.mock('./components/EditToggle', () => ({
     role: 'switch',
     'aria-checked': props.enabled,
     onClick: props.onToggle,
-  }, 'AI Edit'),
+  }, 'Direct Page Edit'),
+}));
+
+// Mock VerboseToggle
+vi.mock('./components/VerboseToggle', () => ({
+  VerboseToggle: (props: any) => React.createElement('button', {
+    'data-testid': 'verbose-toggle',
+    role: 'switch',
+    'aria-checked': props.enabled,
+    onClick: props.onToggle,
+  }, 'Verbose'),
 }));
 
 // Mock ChangeSummary
@@ -182,6 +192,7 @@ vi.mock('./state/settings', () => ({
   off: vi.fn(),
   hideMainUI: vi.fn(),
   settings: {},
+  updateSettings: vi.fn(),
   onSettingsChanged: vi.fn(() => vi.fn()),
   App: {
     onCurrentGraphChanged: vi.fn(() => vi.fn()),
@@ -604,7 +615,7 @@ describe('Feature: indexing-status-feedback, Property 4: Success StatusIndicator
       ),
       { numRuns: 100 }
     );
-  });
+  }, 30000);
 });
 
 

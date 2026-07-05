@@ -1,8 +1,8 @@
 {
   "name": "logseq-mixer",
-  "version": "0.0.6",
+  "version": "0.0.9",
   "author": "Indra Ginanjar",
-  "description": "Plugin that connects all of your notes with any LLM",
+  "description": "Autonomous AI agent for Logseq — hybrid RAG search, persistent memory, direct graph editing, and MCP tool integration powered by 100+ LLM providers",
   "main": "index.html",
   "effect": "true",
 

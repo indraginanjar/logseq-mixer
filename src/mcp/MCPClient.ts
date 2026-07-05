@@ -83,8 +83,9 @@ export class MCPClient {
           this.postEndpoint = resolvedUrl;
           console.info(`[MCPClient ${this.name}] POST message endpoint resolved to: ${this.postEndpoint}`);
           this.setStatus('connected');
-          this.fetchTools().catch((err) => {
-            console.error(`[MCPClient ${this.name}] Failed to fetch tools:`, err);
+          this.performInitialization().catch((err) => {
+            console.error(`[MCPClient ${this.name}] Initialization failed:`, err);
+            this.setStatus('error', `Initialization failed: ${err.message}`);
           });
         } catch (err: any) {
           console.error(`[MCPClient ${this.name}] Failed resolving message endpoint:`, err);
@@ -205,6 +206,47 @@ export class MCPClient {
         }
       }
     });
+  }
+
+  private async performInitialization(): Promise<void> {
+    // Step 1: Send 'initialize' request per the MCP protocol
+    const initResult = await this.sendRequest('initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: {
+        name: 'logseq-mixer',
+        version: '1.0.0',
+      },
+    });
+    console.info(`[MCPClient ${this.name}] Server initialized:`, initResult?.serverInfo?.name ?? 'unknown');
+
+    // Step 2: Send 'initialized' notification (no id, no response expected)
+    await this.sendNotification('notifications/initialized');
+
+    // Step 3: Now we can fetch tools
+    await this.fetchTools();
+  }
+
+  private async sendNotification(method: string, params: any = {}): Promise<void> {
+    if (!this.postEndpoint) {
+      throw new Error(`MCP Client ${this.name} is not connected.`);
+    }
+
+    const jsonRpcNotification = {
+      jsonrpc: '2.0',
+      method,
+      params,
+    };
+
+    const response = await fetch(this.postEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(jsonRpcNotification),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+    }
   }
 
   public async fetchTools(): Promise<MCPTool[]> {

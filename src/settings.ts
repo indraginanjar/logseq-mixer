@@ -167,8 +167,8 @@ const settings: SettingSchemaDesc[] = [
     key: 'agentVerboseMode',
     type: 'boolean',
     title: 'Agent Verbose Mode',
-    description: 'Show self-correction reasoning and replan details in the progress UI.',
-    default: false,
+    description: 'Show detailed step outputs, self-correction reasoning, and replan details in the progress UI.',
+    default: true,
   }
 ];
 

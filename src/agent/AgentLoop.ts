@@ -71,7 +71,7 @@ export class AgentLoop {
       ? `\nAvailable MCP tools: ${tools.map((t: any) => t.function.name).join(', ')}`
       : '';
     const writeConstraint = !this.canWrite
-      ? '\n\nIMPORTANT: AI Edit mode is OFF. Do NOT create pages or write/insert/update blocks in Logseq. Only gather information and present the results as text output. All output should be delivered in the chat response, not written to the graph.'
+      ? '\n\nIMPORTANT: Direct Page Edit mode is OFF. Do NOT create pages or write/insert/update blocks in Logseq. Only gather information and present the results as text output. All output should be delivered in the chat response, not written to the graph.'
       : '';
 
     const messages: ChatMessage[] = [
@@ -256,7 +256,7 @@ export class AgentLoop {
       }
       case 'write': {
         if (!this.canWrite) {
-          return `[AI Edit OFF] Would ${action.action}: ${action.content || action.pageName || 'block operation'}`;
+          return `[Direct Page Edit OFF] Would ${action.action}: ${action.content || action.pageName || 'block operation'}`;
         }
         const cmd = { action: action.action, blockUUID: action.blockUUID, parentBlockUUID: action.parentBlockUUID, content: action.content };
         if (action.action === 'createPage') {
