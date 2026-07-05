@@ -419,7 +419,7 @@ export class SQLiteVectorStore implements StorageProvider {
   exportToFile(): void {
     if (!this._db) throw new Error('SQLite database not initialized');
     const data = this._db.export();
-    const blob = new Blob([data], { type: 'application/x-sqlite3' });
+    const blob = new Blob([data.buffer as ArrayBuffer], { type: 'application/x-sqlite3' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -532,7 +532,7 @@ export class SQLiteVectorStore implements StorageProvider {
   private async flush(): Promise<void> {
     if (!this._db) return;
     const data = this._db.export();
-    await this.idbSave(data.buffer);
+    await this.idbSave(data.buffer as ArrayBuffer);
   }
 
   /** Resolve the WASM binary URL for sql.js */
