@@ -527,7 +527,7 @@ export function parseContentWithTables(input: string): ContentPart[] {
   };
 
   const flushTable = () => {
-    if (currentTableLines.length > 0) {
+    if (currentTableLines.length >= 2) {
       const headerLine = currentTableLines[0];
       const rowsLines = currentTableLines.slice(2);
       const rawContent = currentTableLines.join('\n');
@@ -549,10 +549,15 @@ export function parseContentWithTables(input: string): ContentPart[] {
         rawContent,
       });
       currentTableLines = [];
+    } else if (currentTableLines.length > 0) {
+      // Not enough lines for a table, treat as regular markdown
+      currentMarkdownLines.push(...currentTableLines);
+      currentTableLines = [];
     }
   };
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     
     // Toggle code block state if we see a fence
@@ -561,11 +566,29 @@ export function parseContentWithTables(input: string): ContentPart[] {
       inCodeBlock = !inCodeBlock;
     }
 
-    const isTableLine = !inCodeBlock && trimmed.startsWith('|') && trimmed.endsWith('|');
+    // Detect table lines: either has leading/trailing pipes, or has interior pipes
+    // and is part of a table context (separator row confirms table)
+    const hasPipes = !inCodeBlock && trimmed.includes('|');
+    const isClassicTableLine = hasPipes && trimmed.startsWith('|') && trimmed.endsWith('|');
+    const isSeparatorRow = hasPipes && /^[\s|:-]+$/.test(trimmed) && /---/.test(trimmed);
 
-    if (isTableLine) {
+    if (isClassicTableLine) {
       flushMarkdown();
       currentTableLines.push(line);
+    } else if (hasPipes && currentTableLines.length > 0) {
+      // Already collecting table lines — continue collecting
+      currentTableLines.push(line);
+    } else if (hasPipes && currentTableLines.length === 0) {
+      // Potential table header without leading/trailing pipes — look ahead for separator
+      const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+      const nextIsSeparator = nextLine.includes('|') && /^[\s|:-]+$/.test(nextLine) && /---/.test(nextLine);
+      if (nextIsSeparator) {
+        flushMarkdown();
+        currentTableLines.push(line);
+      } else {
+        flushTable();
+        currentMarkdownLines.push(line);
+      }
     } else {
       flushTable();
       currentMarkdownLines.push(line);

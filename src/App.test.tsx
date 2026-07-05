@@ -34,6 +34,7 @@ vi.mock('./indexManager', () => ({
 // Mock manager
 vi.mock('./manager', () => ({
   clearConversationHistory: vi.fn(),
+  addToConversationHistory: vi.fn(),
   enableAutoIndexer: vi.fn(),
   handleQuery: vi.fn(),
   indexEntireLogSeq: vi.fn(() => Promise.resolve({ outcome: 'completed', pagesProcessed: 0 })),
@@ -87,7 +88,7 @@ vi.mock('recoil', () => ({
 vi.mock('./stitches.config', () => {
   const styled = (tag: string, _styles?: any) => {
     const Component = React.forwardRef((props: any, ref: any) => {
-      const { css: _css, variant, delay, ...rest } = props;
+      const { css: _css, variant, delay, active, copied, color, done, failed, running, ...rest } = props;
       return React.createElement(tag, { ...rest, ref });
     });
     Component.displayName = `Styled(${tag})`;
@@ -245,21 +246,26 @@ describe('Bug Condition Exploration: Re-Index button state on mount', () => {
    *
    * **Validates: Requirements 1.1, 1.2, 1.3**
    */
-  it('property: button shows "⏹ Stop" when isIndexingActive() is true at mount', () => {
-    fc.assert(
-      fc.property(
+  it('property: button shows "⏹ Stop" when isIndexingActive() is true at mount', async () => {
+    vi.useFakeTimers();
+    await fc.assert(
+      fc.asyncProperty(
         // Generate a boolean that is always true (scoped to bug condition)
         fc.constant(true),
-        (indexingActive) => {
+        async (indexingActive) => {
           cleanup();
           mockIsIndexingActive.mockReturnValue(indexingActive);
 
-          const { container } = render(
-            <App themeMode="light" storageProvider={mockStorageProvider as any} />
-          );
+          let container: HTMLElement;
+          await act(async () => {
+            ({ container } = render(
+              <App themeMode="light" storageProvider={mockStorageProvider as any} />
+            ));
+            vi.advanceTimersByTime(1);
+          });
 
           // Find the Re-Index / Stop button by its text content
-          const buttons = container.querySelectorAll('button');
+          const buttons = container!.querySelectorAll('button');
           const reindexButton = Array.from(buttons).find(
             (btn) => btn.textContent?.includes('Stop') || btn.textContent?.includes('Re-Index')
           );
@@ -271,6 +277,7 @@ describe('Bug Condition Exploration: Re-Index button state on mount', () => {
       ),
       { numRuns: 10 }
     );
+    vi.useRealTimers();
   });
 
   /**
@@ -279,20 +286,25 @@ describe('Bug Condition Exploration: Re-Index button state on mount', () => {
    *
    * **Validates: Requirements 1.2, 1.3**
    */
-  it('property: clicking button calls requestPauseIndexing when isIndexingActive() is true at mount', () => {
-    fc.assert(
-      fc.property(
+  it('property: clicking button calls requestPauseIndexing when isIndexingActive() is true at mount', async () => {
+    vi.useFakeTimers();
+    await fc.assert(
+      fc.asyncProperty(
         fc.constant(true),
-        (indexingActive) => {
+        async (indexingActive) => {
           cleanup();
           vi.clearAllMocks();
           mockIsIndexingActive.mockReturnValue(indexingActive);
 
-          const { container } = render(
-            <App themeMode="light" storageProvider={mockStorageProvider as any} />
-          );
+          let container: HTMLElement;
+          await act(async () => {
+            ({ container } = render(
+              <App themeMode="light" storageProvider={mockStorageProvider as any} />
+            ));
+            vi.advanceTimersByTime(1);
+          });
 
-          const buttons = container.querySelectorAll('button');
+          const buttons = container!.querySelectorAll('button');
           const reindexButton = Array.from(buttons).find(
             (btn) => btn.textContent?.includes('Stop') || btn.textContent?.includes('Re-Index')
           );
@@ -307,6 +319,7 @@ describe('Bug Condition Exploration: Re-Index button state on mount', () => {
       ),
       { numRuns: 10 }
     );
+    vi.useRealTimers();
   });
 
   /**
@@ -315,19 +328,24 @@ describe('Bug Condition Exploration: Re-Index button state on mount', () => {
    *
    * **Validates: Requirements 1.1 (inverse case)**
    */
-  it('property: button shows "🔄 Re-Index" when isIndexingActive() is false at mount', () => {
-    fc.assert(
-      fc.property(
+  it('property: button shows "🔄 Re-Index" when isIndexingActive() is false at mount', async () => {
+    vi.useFakeTimers();
+    await fc.assert(
+      fc.asyncProperty(
         fc.constant(false),
-        (indexingActive) => {
+        async (indexingActive) => {
           cleanup();
           mockIsIndexingActive.mockReturnValue(indexingActive);
 
-          const { container } = render(
-            <App themeMode="light" storageProvider={mockStorageProvider as any} />
-          );
+          let container: HTMLElement;
+          await act(async () => {
+            ({ container } = render(
+              <App themeMode="light" storageProvider={mockStorageProvider as any} />
+            ));
+            vi.advanceTimersByTime(1);
+          });
 
-          const buttons = container.querySelectorAll('button');
+          const buttons = container!.querySelectorAll('button');
           const reindexButton = Array.from(buttons).find(
             (btn) => btn.textContent?.includes('Stop') || btn.textContent?.includes('Re-Index')
           );
@@ -338,6 +356,7 @@ describe('Bug Condition Exploration: Re-Index button state on mount', () => {
       ),
       { numRuns: 10 }
     );
+    vi.useRealTimers();
   });
 });
 
@@ -351,21 +370,26 @@ describe('Preservation: Visible-panel indexing lifecycle unchanged', () => {
    *
    * **Validates: Requirements 3.3**
    */
-  it('property: button shows "🔄 Re-Index" when mounting with isIndexingActive() = false', () => {
-    fc.assert(
-      fc.property(
+  it('property: button shows "🔄 Re-Index" when mounting with isIndexingActive() = false', async () => {
+    vi.useFakeTimers();
+    await fc.assert(
+      fc.asyncProperty(
         fc.constant(false),
-        (_indexingActive) => {
+        async (_indexingActive) => {
           cleanup();
           vi.clearAllMocks();
           mockIsIndexingActive.mockReturnValue(false);
           mockIndexEntireLogSeq.mockImplementation(() => Promise.resolve({ outcome: 'completed', pagesProcessed: 0 }));
 
-          const { container } = render(
-            <App themeMode="light" storageProvider={mockStorageProvider as any} />
-          );
+          let container: HTMLElement;
+          await act(async () => {
+            ({ container } = render(
+              <App themeMode="light" storageProvider={mockStorageProvider as any} />
+            ));
+            vi.advanceTimersByTime(1);
+          });
 
-          const buttons = container.querySelectorAll('button');
+          const buttons = container!.querySelectorAll('button');
           const reindexButton = Array.from(buttons).find(
             (btn) => btn.textContent?.includes('Stop') || btn.textContent?.includes('Re-Index')
           );
@@ -376,6 +400,7 @@ describe('Preservation: Visible-panel indexing lifecycle unchanged', () => {
       ),
       { numRuns: 10 }
     );
+    vi.useRealTimers();
   });
 
   /**

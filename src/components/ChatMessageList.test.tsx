@@ -14,7 +14,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('../stitches.config', () => {
   const styled = (tag: string, _styles?: any) => {
     const Component = React.forwardRef((props: any, ref: any) => {
-      const { css: _css, ...rest } = props;
+      const { css: _css, active: _active, variant: _variant, delay: _delay, copied: _copied, ...rest } = props;
       return React.createElement(tag, { ...rest, ref });
     });
     Component.displayName = `Styled(${tag})`;
@@ -388,8 +388,10 @@ describe('ChatMessageList integration', () => {
   /**
    * Tab support tests
    */
-  it('renders tabs and supports switching between Code and Preview views', () => {
+  it('renders tabs and supports switching between Code and Preview views', async () => {
+    vi.useFakeTimers();
     const { fireEvent } = require('@testing-library/react');
+    const { act } = require('@testing-library/react');
     const messages: ChatMessage[] = [
       {
         id: 1,
@@ -419,7 +421,9 @@ describe('ChatMessageList integration', () => {
     const copyButton = allButtons.find(b => b.textContent?.includes('Copy'));
     expect(copyButton).toBeTruthy();
     const writeTextSpy = vi.spyOn(navigator.clipboard, 'writeText');
-    fireEvent.click(copyButton!);
+    await act(async () => {
+      fireEvent.click(copyButton!);
+    });
     expect(writeTextSpy).toHaveBeenCalledWith('# Hello\nThis is **markdown** content');
     writeTextSpy.mockRestore();
 
@@ -434,7 +438,9 @@ describe('ChatMessageList integration', () => {
     const copyButtonOnPreview = allButtons.find(b => b.textContent?.includes('Copy'));
     expect(copyButtonOnPreview).toBeTruthy();
     const writeTextSpy2 = vi.spyOn(navigator.clipboard, 'writeText');
-    fireEvent.click(copyButtonOnPreview!);
+    await act(async () => {
+      fireEvent.click(copyButtonOnPreview!);
+    });
     expect(writeTextSpy2).toHaveBeenCalled();
     const copiedText = writeTextSpy2.mock.calls[0][0];
     expect(copiedText).toContain('Hello');
@@ -445,6 +451,7 @@ describe('ChatMessageList integration', () => {
     fireEvent.click(buttons[0]);
     expect(buttons[0].getAttribute('data-active')).toBe('true');
     expect(buttons[1].getAttribute('data-active')).toBe('false');
+    vi.useRealTimers();
   });
 
   /**
@@ -570,6 +577,39 @@ describe('ChatMessageList integration', () => {
     // Inside the Preview tab, there should be a table
     const table = container.querySelector('table');
     expect(table).toBeTruthy();
+  });
+
+  it('renders markdown tables without leading/trailing pipes', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 1,
+        content: 'Here is a table:\n\nPlugin | AI Features | Source\n--- | --- | ---\nLogseq AI | Chat with graph | github.com/example\nMixer | RAG search | github.com/mixer',
+        sender: 'assistant',
+      },
+    ];
+
+    const { container } = render(<ChatMessageList messages={messages} />);
+
+    // Assert table element is rendered
+    const table = container.querySelector('table');
+    expect(table).toBeTruthy();
+
+    // Assert headers are rendered
+    const headers = container.querySelectorAll('th');
+    expect(headers.length).toBe(3);
+    expect(headers[0].textContent).toBe('Plugin');
+    expect(headers[1].textContent).toBe('AI Features');
+    expect(headers[2].textContent).toBe('Source');
+
+    // Assert cells are rendered
+    const cells = container.querySelectorAll('td');
+    expect(cells.length).toBe(6);
+    expect(cells[0].textContent).toBe('Logseq AI');
+    expect(cells[1].textContent).toBe('Chat with graph');
+    expect(cells[2].textContent).toBe('github.com/example');
+    expect(cells[3].textContent).toBe('Mixer');
+    expect(cells[4].textContent).toBe('RAG search');
+    expect(cells[5].textContent).toBe('github.com/mixer');
   });
 });
 

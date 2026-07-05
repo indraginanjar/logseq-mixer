@@ -27,18 +27,19 @@ Logseq Mixer isn't a chatbot bolted onto your notes. It's an **autonomous agent*
 
 ## Use any model
 
-One plugin. **Every LLM provider.** Mixer connects through [LiteLLM](https://github.com/BerriAI/litellm) — a unified interface to 100+ providers. Switch models mid-conversation without changing a single setting.
+Three built-in providers — **no proxy required** for the simplest setups:
 
-| Provider | Models |
-|---|---|
-| **OpenAI** | GPT-4o, GPT-4, GPT-3.5 Turbo |
-| **Anthropic** | Claude 4 Sonnet, Claude 3.5 Haiku |
-| **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash |
-| **DeepSeek** | DeepSeek V3, DeepSeek R1 |
-| **Local** | Ollama (Llama, Mistral, Qwen, any GGUF) |
-| **+ 100 more** | Cohere, Together, Groq, Fireworks, Azure, AWS Bedrock... |
+| Provider | Setup | Models |
+|---|---|---|
+| **OpenAI** (direct) | Just add your API key | GPT-4o, GPT-4, GPT-3.5 Turbo |
+| **Ollama** (local) | Run Ollama locally — no API key needed | Llama, Mistral, Qwen, any GGUF |
+| **LiteLLM** (proxy) | Route through a local proxy to access 100+ providers | Anthropic, Google, DeepSeek, Cohere, Azure, Bedrock... |
 
-Your data, your model, your infrastructure. Run fully local with Ollama, or use the latest frontier models in the cloud. Mixer doesn't care — it speaks the same language to all of them.
+**Start in 30 seconds with OpenAI:** Paste your API key, select a model, done.
+
+**Want full privacy?** Use Ollama — everything runs on your machine, no data leaves, no API key required.
+
+**Need Anthropic, Google, or other providers?** Run a [LiteLLM](https://github.com/BerriAI/litellm) proxy to access 100+ providers through a single endpoint. Switch models mid-conversation without changing any plugin settings.
 
 ---
 
@@ -126,16 +127,7 @@ Web search, browser automation, file system access, database queries — anythin
 
 ## Quick Start
 
-### 1. Start a LiteLLM proxy
-
-```bash
-pip install litellm
-litellm --model gpt-4o --port 4000
-```
-
-This gives you an OpenAI-compatible endpoint at `http://127.0.0.1:4000/chat/completions` that Mixer connects to by default. Configure [any supported provider](https://docs.litellm.ai/docs/providers).
-
-### 2. Install the plugin
+### 1. Install the plugin
 
 **Marketplace:** Install "Logseq Mixer" from the Logseq Plugin Marketplace.
 
@@ -146,6 +138,31 @@ cd logseq-mixer
 pnpm install && pnpm build && pnpm postbuild
 ```
 Then load as an unpacked plugin in Logseq (Settings → Advanced → Developer Mode → Load unpacked plugin).
+
+### 2. Choose your AI provider
+
+Open plugin settings and select one:
+
+**Option A — OpenAI (fastest setup):**
+1. Set Chat Provider → `openai`
+2. Paste your API key
+3. Done — uses `https://api.openai.com/v1/chat/completions` by default
+
+**Option B — Ollama (fully local, free):**
+1. [Install Ollama](https://ollama.com) and pull a model: `ollama pull llama3.2`
+2. Set Chat Provider → `ollama`
+3. Endpoint is `http://localhost:11434/api/chat` — no API key needed
+
+**Option C — LiteLLM (100+ providers):**
+```bash
+pip install litellm
+litellm --model gpt-4o --port 4000
+```
+1. Set Chat Provider → `litellm`
+2. Endpoint: `http://127.0.0.1:4000/chat/completions`
+3. Configure [any supported provider](https://docs.litellm.ai/docs/providers) behind the proxy
+
+> **Tip:** Any OpenAI-compatible endpoint works with the `openai` provider — just change the endpoint URL. This includes vLLM, LocalAI, text-generation-webui, and many others.
 
 ### 3. Index your notes
 
@@ -161,7 +178,7 @@ Click the **Re-Index** button in the chat panel. Mixer will incrementally proces
 
 | Guide | Description |
 |---|---|
-| [Getting Started](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/getting-started.md) | Installation, LiteLLM setup, first-time indexing |
+| [Getting Started](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/getting-started.md) | Installation, provider setup, first-time indexing |
 | [User Guide](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/user-guide.md) | UI walkthrough, settings reference, troubleshooting |
 | [Agentic AI](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/agentic-ai.md) | Agent capabilities, memory, autonomy modes |
 | [MCP Tools](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/mcp-tools.md) | External tool setup and configuration |

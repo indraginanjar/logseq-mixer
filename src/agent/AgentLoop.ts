@@ -19,9 +19,14 @@ Respond with ONLY valid JSON in this format:
 
 Keep steps atomic and sequential. Estimate total tokens needed for all LLM calls.`;
 
-const STEP_SYSTEM_PROMPT = `You are an execution agent for Logseq. Execute the given step and return the result.
+const STEP_SYSTEM_PROMPT = `You are an execution agent for Logseq. Execute the given step and return the ACTUAL result — not a plan or description of what to do.
 Available Logseq APIs: getPage(name), getPageBlocksTree(nameOrUuid), getAllPages(), insertBlock(parentUUID, content, {sibling:false}), updateBlock(uuid, content), removeBlock(uuid), createPage(name, {}, {journal:false, redirect:false}).
-Respond with a JSON action to take, or plain text analysis for "think" steps.`;
+
+CRITICAL RULES:
+- For "think" steps: produce the ACTUAL output described (e.g., if the step says "construct a table", write the complete table with real data from previous context — do NOT write a plan for how to construct it).
+- For action steps: respond with a JSON action to execute.
+- NEVER respond with plans, outlines, or "next steps" — always produce the final deliverable directly.
+- Use the data from "Previous context" as your source material. That data IS the gathered information — use it to produce the output.`;
 
 const EVAL_SYSTEM_PROMPT = `Evaluate whether the step output achieved the intended goal. Respond with ONLY valid JSON:
 {"adequate":true,"reason":"...","suggestion":"alternative approach if inadequate"}
@@ -184,11 +189,68 @@ export class AgentLoop {
       }
     }
 
+    // Final synthesis: compose the complete answer using all step outputs
+    if (completedSteps > 0 && !this.signal?.aborted) {
+      const synthesisResult = await this.synthesizeFinalAnswer(plan, context);
+      if (synthesisResult) {
+        // Update the last completed step's output with the full synthesis
+        const lastDone = plan.steps.filter(s => s.status === 'done').pop();
+        if (lastDone) {
+          lastDone.output = synthesisResult;
+        }
+      }
+    }
+
     this.emit('complete', undefined, `Completed ${completedSteps}/${plan.steps.length} steps`, completedSteps, plan.steps.length);
   }
 
+  private async synthesizeFinalAnswer(plan: AgentPlan, context: StepContext): Promise<string | null> {
+    // Build a comprehensive context from ALL step outputs
+    const allOutputs = context.previousOutputs
+      .map(o => `--- Step ${o.stepId} ---\n${o.output.slice(0, 6000)}`)
+      .join('\n\n');
+
+    // Check if we have enough content worth synthesizing
+    const totalContent = context.previousOutputs.reduce((sum, o) => sum + o.output.length, 0);
+    if (totalContent < 100) return null; // Nothing substantial to synthesize
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `You are a synthesis agent that produces FINAL DELIVERABLES — not plans, not outlines, not skeletons.
+
+Given the user's original goal and all the data gathered by prior execution steps, compose a complete, well-formatted final answer.
+
+RULES:
+- Include ALL relevant data from the steps. The step outputs contain the actual gathered information — use it.
+- If the goal asks for a table, produce a COMPLETE markdown table filled with real data extracted from the steps. Use proper markdown syntax with leading and trailing pipes (e.g. "| Header 1 | Header 2 |").
+- NEVER produce: plans, outlines, "next steps", skeletons with "..." or "TBD", or descriptions of what you WOULD do.
+- If some data is missing or unclear from the steps, use what IS available and note gaps briefly in a Notes column.
+- Respond with ONLY the final deliverable content, ready to present to the user.`,
+      },
+      {
+        role: 'user',
+        content: `Goal: ${plan.goal}\n\nData gathered from all execution steps:\n\n${allOutputs}\n\nUsing ALL the data above, produce the complete final answer NOW. Extract every relevant piece of information from the step outputs and include it in your response.`,
+      },
+    ];
+
+    try {
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
+      const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
+      this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
+      return raw || null;
+    } catch {
+      // If synthesis fails, fall back to the original last step output
+      return null;
+    }
+  }
+
   private async executeStep(step: AgentStep, context: StepContext): Promise<StepResult> {
-    const contextSummary = context.previousOutputs.slice(-5).map(o => `Step ${o.stepId}: ${o.output.slice(0, 1000)}`).join('\n\n');
+    // For the last step (synthesis/presentation), provide much more context from prior steps
+    const isLastStep = context.previousOutputs.length >= 1 && step.type === 'think';
+    const maxOutputLen = isLastStep ? 4000 : 1000;
+    const maxPriorSteps = isLastStep ? context.previousOutputs.length : 5;
+    const contextSummary = context.previousOutputs.slice(-maxPriorSteps).map(o => `Step ${o.stepId}: ${o.output.slice(0, maxOutputLen)}`).join('\n\n');
 
     // For tool and search steps, use the full ReAct loop for iterative chaining
     if (step.type === 'tool' || step.type === 'search') {
@@ -216,7 +278,7 @@ export class AgentLoop {
     // For read, write, think steps: single LLM call + action
     const messages: ChatMessage[] = [
       { role: 'system', content: STEP_SYSTEM_PROMPT },
-      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}\n\nCurrent step (type=${step.type}): ${step.description}\n\nProvide the action or analysis.` },
+      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using the data from the previous context above, produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
     ];
 
     const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);

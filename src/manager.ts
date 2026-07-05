@@ -34,6 +34,14 @@ export function clearConversationHistory(): void {
   conversationHistory.length = 0;
 }
 
+/** Add a message to conversation history (used by agent to persist results for follow-up). */
+export function addToConversationHistory(role: 'user' | 'assistant', content: string): void {
+  conversationHistory.push({ role, content });
+  if (conversationHistory.length > MAX_HISTORY_LENGTH * 2) {
+    conversationHistory.splice(0, conversationHistory.length - MAX_HISTORY_LENGTH * 2);
+  }
+}
+
 /** Module-level BM25 index, lazily initialized on first hybrid search. */
 let bm25Index: BM25Index | null = null;
 

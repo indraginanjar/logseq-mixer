@@ -14,7 +14,7 @@ import type { AgentPlan, AgentProgressEvent, AgentStep } from './agent/types';
 import { useThemeMode } from 'hooks/useThemeMode';
 import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
-import { clearConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
+import { clearConversationHistory, addToConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import { isHelpCommand, answerHelpQuestion } from './helpSystem';
 import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
@@ -577,6 +577,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   // Agent state
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
+  const agentPlanRef = useRef<AgentPlan | null>(null);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentTokensUsed, setAgentTokensUsed] = useState(0);
   const [escalationQuestion, setEscalationQuestion] = useState<string | null>(null);
@@ -861,26 +862,38 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           onProgress: (event: AgentProgressEvent) => {
             setAgentTokensUsed(event.tokensUsed);
             if (event.step) {
-              setAgentPlan(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === event.step!.id ? event.step! : s) } : prev);
+              setAgentPlan(prev => {
+                const updated = prev ? { ...prev, steps: prev.steps.map(s => s.id === event.step!.id ? event.step! : s) } : prev;
+                agentPlanRef.current = updated;
+                return updated;
+              });
             }
             if (event.type === 'complete' || event.type === 'aborted') {
               setAgentRunning(false);
               setLoading(false);
               // Convert completed agent plan to a chat message so it scrolls with history
-              setAgentPlan(currentPlan => {
-                if (currentPlan) {
-                  const stepsSummary = currentPlan.steps.map(s => {
-                    const icon = s.status === 'done' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'skipped' ? '⏭️' : '⏳';
-                    return `${icon} ${s.id}. ${s.description}`;
-                  }).join('\n');
-                  setMessages(prev => [...prev, {
-                    id: `agent_${Date.now()}`,
-                    content: `🤖 **Goal:** ${currentPlan.goal}\n\n${stepsSummary}\n\n${event.message}`,
-                    sender: 'assistant',
-                  }]);
-                }
-                return null; // Clear the agent card
-              });
+              const currentPlan = agentPlanRef.current;
+              if (currentPlan) {
+                const stepsSummary = currentPlan.steps.map(s => {
+                  const icon = s.status === 'done' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'skipped' ? '⏭️' : '⏳';
+                  return `${icon} ${s.id}. ${s.description}`;
+                }).join('  \n');
+                // Include the last completed step's output as the final answer
+                const doneSteps = currentPlan.steps.filter(s => s.status === 'done' && s.output);
+                const lastOutput = doneSteps.length > 0 ? doneSteps[doneSteps.length - 1].output : '';
+                const finalAnswer = lastOutput ? `\n\n---\n\n${lastOutput}` : '';
+                const messageContent = `🤖 **Goal:** ${currentPlan.goal}\n\n${stepsSummary}\n\n${event.message}${finalAnswer}`;
+                setMessages(prev => [...prev, {
+                  id: `agent_${Date.now()}`,
+                  content: messageContent,
+                  sender: 'assistant',
+                }]);
+                // Add to conversation history so follow-up questions have context
+                addToConversationHistory('user', `[Agent goal]: ${currentPlan.goal}`);
+                addToConversationHistory('assistant', lastOutput || `Completed goal: ${currentPlan.goal}. ${event.message}`);
+              }
+              setAgentPlan(null);
+              agentPlanRef.current = null;
               if (event.type === 'complete' && memoryStoreInstance) {
                 memoryStoreInstance.addMemory('task_outcome', `Goal: ${goal}\nResult: ${event.message}`, 'auto');
               }
@@ -909,6 +922,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         const ctxStr = pageCtx ? `Page: ${pageCtx.pageName}\n${pageCtx.formattedTree?.slice(0, 500) || ''}` : '';
         const plan = await loop.generatePlan(goal, ctxStr);
         setAgentPlan(plan);
+        agentPlanRef.current = plan;
         setLoading(false);
         if (settings.agentAutonomy === 'autopilot') {
           setAgentRunning(true);
