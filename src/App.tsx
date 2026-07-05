@@ -553,6 +553,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [activeBlockContent, setActiveBlockContent] = useState<string | null>(null);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const agentAbortRef = useRef<AbortController | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [dbSize, setDbSize] = useState<number | null>(null);
@@ -832,9 +833,11 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         const goal = pendingAgentGoal;
         clearPendingAgentGoal();
         setLoading(true);
+        const agentController = new AbortController();
+        agentAbortRef.current = agentController;
         const loop = new AgentLoop({
           settings,
-          signal: controller.signal,
+          signal: agentController.signal,
           tokenBudget: settings.agentTokenBudget || 100000,
           maxRetries: settings.agentMaxRetries || 2,
           canWrite: aiEditMode,
@@ -1067,6 +1070,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setEscalationQuestion(null);
     setReplanReason(null);
     setReplanSteps([]);
+    agentAbortRef.current?.abort();
+    agentAbortRef.current = null;
     agentLoopRef.current = null;
     clearConversationHistory();
 
@@ -1255,7 +1260,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               plan={agentPlan}
               onApprove={() => { setAgentRunning(true); agentLoopRef.current?.run(agentPlan); }}
               onCancel={() => { setAgentPlan(null); setAgentRunning(false); }}
-              onStop={() => { abortControllerRef.current?.abort(); setAgentRunning(false); }}
+              onStop={() => { agentAbortRef.current?.abort(); agentAbortRef.current = null; setAgentRunning(false); }}
               onEscalationResponse={(answer) => { escalationResolverRef.current?.(answer); setEscalationQuestion(null); }}
               tokensUsed={agentTokensUsed}
               tokenBudget={settings?.agentTokenBudget || 100000}
@@ -1265,6 +1270,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               replanReason={replanReason}
               replanSteps={replanSteps}
               verbose={(settings?.agentVerboseMode as boolean) ?? false}
+              onRetryStep={(stepId) => {
+                setAgentPlan(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, status: 'pending' as const, error: undefined } : s) } : prev);
+              }}
+              onSkipStep={(stepId) => {
+                setAgentPlan(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, status: 'skipped' as const } : s) } : prev);
+              }}
             />
           )}
           {loading && (

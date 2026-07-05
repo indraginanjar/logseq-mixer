@@ -42,9 +42,8 @@ const StepOutput = styled('div', {
   fontSize: '11px',
   color: '$slate10',
   marginLeft: '24px',
-  maxHeight: '40px',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
 });
 
 const BarContainer = styled('div', {
@@ -160,10 +159,20 @@ interface AgentProgressProps {
   replanReason?: string | null;
   replanSteps?: AgentStep[];
   verbose?: boolean;
+  onRetryStep?: (stepId: number) => void;
+  onSkipStep?: (stepId: number) => void;
 }
 
-export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEscalationResponse, tokensUsed, tokenBudget, escalationQuestion, isRunning, onReplanResponse, replanReason, replanSteps, verbose }: AgentProgressProps) {
+export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEscalationResponse, tokensUsed, tokenBudget, escalationQuestion, isRunning, onReplanResponse, replanReason, replanSteps, verbose, onRetryStep, onSkipStep }: AgentProgressProps) {
   const [escAnswer, setEscAnswer] = useState('');
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
+  const toggleExpand = (stepId: number) => {
+    setExpandedSteps(prev => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId); else next.add(stepId);
+      return next;
+    });
+  };
   if (!plan) return null;
 
   const completed = plan.steps.filter(s => s.status === 'done').length;
@@ -183,8 +192,22 @@ export default function AgentProgress({ plan, onApprove, onCancel, onStop, onEsc
               <span>{step.id}. {step.description}</span>
               {verbose && (step.correctionAttempts ?? 0) > 0 && <CorrectionBadge>↩️ corrected ({step.correctionAttempts}x)</CorrectionBadge>}
             </StepItem>
-            {step.status === 'done' && step.output && <StepOutput>{step.output.slice(0, 120)}</StepOutput>}
+            {step.status === 'done' && step.output && (
+              <StepOutput
+                onClick={() => toggleExpand(step.id)}
+                css={{ cursor: 'pointer', '&:hover': { color: '$highContrast' } }}
+              >
+                {expandedSteps.has(step.id) ? step.output : step.output.slice(0, 120) + (step.output.length > 120 ? '\u2026' : '')}
+                {step.output.length > 120 && <span style={{ fontSize: '10px', marginLeft: '4px' }}>{expandedSteps.has(step.id) ? '\u25be' : '\u25b8'}</span>}
+              </StepOutput>
+            )}
             {verbose && step.correctionReason && <StepOutput css={{ color: '$amber11' }}>↩️ {step.correctionReason}</StepOutput>}
+            {step.status === 'failed' && (
+              <ButtonRow css={{ marginLeft: '24px', marginTop: '4px' }}>
+                {onRetryStep && <Btn variant="approve" onClick={() => onRetryStep(step.id)} css={{ fontSize: '10px', padding: '2px 8px' }}>↻ Retry</Btn>}
+                {onSkipStep && <Btn variant="cancel" onClick={() => onSkipStep(step.id)} css={{ fontSize: '10px', padding: '2px 8px' }}>⏭ Skip</Btn>}
+              </ButtonRow>
+            )}
           </div>
         ))}
       </StepList>

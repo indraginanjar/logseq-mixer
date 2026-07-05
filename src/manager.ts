@@ -160,6 +160,87 @@ function truncateToTokens(text: string, maxTokens: number): string {
   return decode(tokens.slice(0, maxTokens)) + "\n... (truncated to fit model context limit)";
 }
 
+/** Retrieve relevant vector context for a query. */
+async function retrieveVectorContext(query: string, settings: any, storageProvider: StorageProvider): Promise<string> {
+  try {
+    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider);
+    if (hasSearchByVector(storageProvider)) {
+      const index = ensureBM25Index(storageProvider);
+      const reranked = await hybridSearch(query, queryEmbedding, storageProvider, index, { accelerator: accelerator ?? undefined });
+      return reranked.map(hit => hit.content).join('\n\n');
+    } else {
+      const oramaDatabaseInstance = await getOrLoadVectorDatabase(settings, settings.embeddingModel, storageProvider);
+      const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
+      const searchHits: SearchHit[] = (vectorResult.hits ?? []).map(hit => ({
+        id: hit.document.id as string, content: hit.document.content as string, score: hit.score,
+      }));
+      if (searchHits.length > 0) {
+        return rerankWithRRF(searchHits, query).map(hit => hit.content).join('\n\n');
+      }
+    }
+  } catch (err) {
+    console.error("Vector search failed:", err);
+  }
+  return '';
+}
+
+/** Inject agent memory into system prompt. */
+function injectMemoryContext(query: string, settings: any, userBudget: number, vectorContext: string): { memoryText: string; accessedIds: string[] } {
+  if (!settings.memoryEnabled || !memoryStore) return { memoryText: '', accessedIds: [] };
+  const memBudget = Math.floor(userBudget * Math.min(25, Math.max(1, settings.memoryBudgetPercent || 10)) / 100);
+  const preferences = memoryStore.getMemories({ category: 'preference' });
+  const summaries = memoryStore.getMemories({ category: 'session_summary' }).slice(0, 3);
+  const keywordMatches = memoryStore.searchMemories(query);
+  const memoryPageHits = vectorContext
+    .split('\n\n')
+    .filter(chunk => chunk.includes('mixer-memory') || chunk.includes('Mixer/Memory'))
+    .map(chunk => ({ id: 'rag-' + chunk.slice(0, 20), category: 'fact' as string, content: chunk.slice(0, 200), createdAt: 0, lastAccessed: null, source: 'rag', metadata: null }));
+  const allMemories = [...preferences, ...summaries, ...keywordMatches, ...memoryPageHits];
+  const seen = new Set<string>();
+  const unique = allMemories.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+  if (unique.length === 0) return { memoryText: '', accessedIds: [] };
+  let memText = '\n\nYour memories from past interactions with this user:\n' + unique.map(m => `- [${m.category}] ${m.content}`).join('\n');
+  memText = truncateToTokens(memText, memBudget);
+  return { memoryText: memText, accessedIds: unique.filter(m => !m.id.startsWith('rag-')).map(m => m.id) };
+}
+
+/** Build conversation history messages within a token budget. */
+function buildHistoryMessages(historyBudget: number): { messages: ChatMessage[]; tokensUsed: number } {
+  const historyForMessages = conversationHistory.slice(0, -1).slice(-MAX_HISTORY_LENGTH);
+  const messages: ChatMessage[] = [];
+  let tokensUsed = 0;
+  for (let i = historyForMessages.length - 1; i >= 0; i--) {
+    const entry = historyForMessages[i];
+    const entryTokens = countTokens(entry.content);
+    if (tokensUsed + entryTokens > historyBudget && messages.length > 0) break;
+    messages.unshift({ role: entry.role, content: entry.content });
+    tokensUsed += entryTokens;
+  }
+  return { messages, tokensUsed };
+}
+
+/** Fetch current page context within a token budget. */
+async function fetchPageContext(budget: number): Promise<string> {
+  try {
+    let page = await logseq.Editor.getCurrentPage();
+    if (page === null) {
+      const currentBlock = await logseq.Editor.getCurrentBlock();
+      if (currentBlock && currentBlock.page) page = await logseq.Editor.getPage(currentBlock.page.id);
+    }
+    if (page !== null) {
+      const pageContent = await logseq.Editor.getPageBlocksTree(page.uuid);
+      let wholePageContent = "";
+      pageContent.forEach(element => { wholePageContent += "- " + element.content + "\n"; });
+      const rawPageContext = "Current Page Context:\n" +
+        `current_page_open_id: ${page.id}\ncurrent_page_open_name: ${page.name}\ncurrent_page_open_content: ${wholePageContent}\n\n`;
+      return truncateToTokens(rawPageContext, budget);
+    }
+  } catch (err) {
+    console.error("Failed to retrieve current page context:", err);
+  }
+  return '';
+}
+
 export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string): Promise<string | EditQueryResult> {
   lastMemorySaved = false;
   pendingAgentGoal = null;
@@ -173,180 +254,65 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
-  let vectorContext = "";
+  const vectorContext = await retrieveVectorContext(query, settings, storageProvider);
 
-  // Wrap vector search in try/catch to prevent indexing issues from blocking LLM query.
-  try {
-    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider);
-
-    console.info(`[handleQuery] Query embedding dimensions: ${queryEmbedding?.length}, model: ${settings.embeddingModel}`);
-    console.info(`[handleQuery] Embedding sample (first 5): ${queryEmbedding?.slice(0, 5)}`);
-
-    if (hasSearchByVector(storageProvider)) {
-      // Per-document path: hybrid search (BM25 + vector, merged via RRF)
-      const index = ensureBM25Index(storageProvider);
-      const reranked = await hybridSearch(query, queryEmbedding, storageProvider, index, { accelerator: accelerator ?? undefined });
-      console.info(`[handleQuery] Hybrid search returned ${reranked.length} results`);
-      reranked.forEach(hit => {
-        vectorContext += hit.content + "\n\n";
-      });
-    } else {
-      // Legacy Orama-based path
-      const oramaDatabaseInstance = await getOrLoadVectorDatabase(settings, settings.embeddingModel, storageProvider);
-      const vectorResult = await vectorSearchOramaDB(oramaDatabaseInstance, queryEmbedding);
-      console.info(`[handleQuery] Vector search returned ${vectorResult.hits?.length ?? 0} hits (count: ${vectorResult.count})`);
-      const searchHits: SearchHit[] = (vectorResult.hits ?? []).map(hit => ({
-        id: hit.document.id as string,
-        content: hit.document.content as string,
-        score: hit.score,
-      }));
-
-      // Rerank legacy Orama results using RRF before building context.
-      if (searchHits.length > 0) {
-        const reranked = rerankWithRRF(searchHits, query);
-        console.info(`[handleQuery] After reranking: ${reranked.length} results`);
-        reranked.forEach(hit => {
-          vectorContext += hit.content + "\n\n";
-        });
-      }
-    }
-  } catch (err) {
-    console.error("Vector search failed, proceeding without additional context:", err);
-    vectorContext = "";
-  }
-
-  console.info(`[handleQuery] vectorContext length: ${vectorContext.length} chars`);
-  if (vectorContext) {
-    console.info(`[handleQuery] vectorContext preview: ${vectorContext.slice(0, 200)}...`);
-  }
-
-  // Build the system message from the settings prompt.
+  // Build system message
   let systemMessage = settings.prompt;
-
-  // When edit mode is enabled, fetch page context and augment prompts.
   let editPageContext: Awaited<ReturnType<typeof getActivePageContext>> = null;
   if (editMode) {
-    try {
-      editPageContext = await getActivePageContext();
-    } catch (err) {
-      console.error('[handleQuery] Failed to get active page context for edit mode:', err);
-    }
+    try { editPageContext = await getActivePageContext(); } catch {}
     systemMessage += '\n\n' + buildEditSystemPrompt();
   }
 
-  // Estimate context token budget to avoid context window overflow errors.
+  // Calculate token budgets
   const systemTokens = countTokens(systemMessage);
   const contextLimit = getContextLimitForModel(settings.selectedModel);
   const maxOutput = getMaxTokensForModel(settings.selectedModel);
-  const safetyMargin = 500;
-  const totalInputBudget = Math.max(1024, contextLimit - maxOutput - safetyMargin);
+  const totalInputBudget = Math.max(1024, contextLimit - maxOutput - 500);
   let userBudget = Math.max(1024, totalInputBudget - systemTokens);
 
-  console.info(`[handleQuery] Model: ${settings.selectedModel}, Context Limit: ${contextLimit}, Max Output: ${maxOutput}, Input Budget: ${totalInputBudget}, User Budget: ${userBudget}`);
-
-  // Inject agent memory into system prompt
-  if (settings.memoryEnabled && memoryStore) {
-    const memBudget = Math.floor(userBudget * Math.min(25, Math.max(1, settings.memoryBudgetPercent || 10)) / 100);
-    const preferences = memoryStore.getMemories({ category: 'preference' });
-    const summaries = memoryStore.getMemories({ category: 'session_summary' }).slice(0, 3);
-    const relevant = memoryStore.searchMemories(query);
-    const allMemories = [...preferences, ...summaries, ...relevant];
-    const seen = new Set<string>();
-    const unique = allMemories.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
-    if (unique.length > 0) {
-      let memText = '\n\nYour memories from past interactions with this user:\n' + unique.map(m => `- [${m.category}] ${m.content}`).join('\n');
-      memText = truncateToTokens(memText, memBudget);
-      systemMessage += memText;
-      userBudget -= countTokens(memText);
-      memoryStore.updateLastAccessed(unique.map(m => m.id));
-    }
+  // Inject memory
+  const { memoryText, accessedIds } = injectMemoryContext(query, settings, userBudget, vectorContext);
+  if (memoryText) {
+    systemMessage += memoryText;
+    userBudget -= countTokens(memoryText);
+    memoryStore!.updateLastAccessed(accessedIds);
   }
 
-  // Build the user message parts budget-consciously.
+  // Build edit context
   let editContextText = "";
   if (editMode && editPageContext) {
-    const rawEditContext = buildPageContextMessage(
-      editPageContext.pageName,
-      editPageContext.pageUUID,
-      editPageContext.selectedBlockUUID,
-      editPageContext.selectedBlockContent,
-      editPageContext.isSelectedBlockEmpty,
-      editPageContext.formattedTree
-    );
-    // Allocate up to 35% of userBudget
+    const rawEditContext = buildPageContextMessage(editPageContext.pageName, editPageContext.pageUUID, editPageContext.selectedBlockUUID, editPageContext.selectedBlockContent, editPageContext.isSelectedBlockEmpty, editPageContext.formattedTree);
     const limit = Math.floor(userBudget * 0.35);
     editContextText = truncateToTokens(rawEditContext, limit);
     userBudget -= countTokens(editContextText);
   }
 
-  // Build multi-turn history messages (excluding the current query which is already the last entry)
-  const historyForMessages = conversationHistory.slice(0, -1).slice(-MAX_HISTORY_LENGTH);
-  let historyTokenBudget = Math.floor(userBudget * 0.20);
-  const historyMessages: ChatMessage[] = [];
-  let historyTokensUsed = 0;
-  for (let i = historyForMessages.length - 1; i >= 0; i--) {
-    const entry = historyForMessages[i];
-    const entryTokens = countTokens(entry.content);
-    if (historyTokensUsed + entryTokens > historyTokenBudget && historyMessages.length > 0) {
-      break;
-    }
-    historyMessages.unshift({ role: entry.role, content: entry.content });
-    historyTokensUsed += entryTokens;
-  }
+  // Build history
+  const historyBudget = Math.floor(userBudget * 0.20);
+  const { messages: historyMessages, tokensUsed: historyTokensUsed } = buildHistoryMessages(historyBudget);
   userBudget -= historyTokensUsed;
 
-  let pageContextText = "";
-  try {
-    let page = await logseq.Editor.getCurrentPage();
-    if (page === null) {
-      const currentBlock = await logseq.Editor.getCurrentBlock();
-      if (currentBlock && currentBlock.page) {
-        page = await logseq.Editor.getPage(currentBlock.page.id);
-      }
-    }
-    if (page !== null) {
-      const pageContent = await logseq.Editor.getPageBlocksTree(page.uuid);
-      let wholePageContent = "";
-      pageContent.forEach(element => {
-        wholePageContent += "- " + element.content + "\n";
-      });
-      const rawPageContext = "Current Page Context:\n" +
-        `current_page_open_id: ${page.id}\n` +
-        `current_page_open_name: ${page.name}\n` +
-        `current_page_open_content: ${wholePageContent}\n\n`;
-      // Allocate up to 25% of userBudget
-      const limit = Math.floor(userBudget * 0.25);
-      pageContextText = truncateToTokens(rawPageContext, limit);
-      userBudget -= countTokens(pageContextText);
-    }
-  } catch (err) {
-    console.error("Failed to retrieve current page context:", err);
-  }
+  // Build page context
+  const pageContextText = await fetchPageContext(Math.floor(userBudget * 0.25));
+  userBudget -= countTokens(pageContextText);
 
+  // Build vector context text
   let vectorContextText = "";
   if (vectorContext) {
-    const rawVectorContext = "Additional Context from Knowledge Base:\n" + vectorContext;
-    // Use the remaining userBudget
-    vectorContextText = truncateToTokens(rawVectorContext, userBudget);
+    vectorContextText = truncateToTokens("Additional Context from Knowledge Base:\n" + vectorContext, userBudget);
     userBudget -= countTokens(vectorContextText);
   }
 
-  // Combine context into the current user message
-  let userMessage = "";
-  if (pageContextText) userMessage += pageContextText;
-  if (vectorContextText) userMessage += vectorContextText;
-  if (editContextText) userMessage += editContextText;
+  // Assemble user message
+  let userMessage = pageContextText + vectorContextText + editContextText;
   if (editMode && imageDataUrl) {
-    userMessage += `\nNote: The user has attached an image to this message. You can see it in the image content. If inserting it into a block, use "![attached image]()" as placeholder — the system will handle the actual image embedding via Logseq's native paste mechanism.\n\n`;
+    userMessage += `\nNote: The user has attached an image. Use "![attached image]()" as placeholder.\n\n`;
   }
   userMessage += query;
 
-  // Build the messages array with proper multi-turn format
   const userContent: string | MessageContentPart[] = imageDataUrl
-    ? [
-        { type: 'text', text: userMessage },
-        { type: 'image_url', image_url: { url: imageDataUrl } },
-      ]
+    ? [{ type: 'text', text: userMessage }, { type: 'image_url', image_url: { url: imageDataUrl } }]
     : userMessage;
 
   const messages: ChatMessage[] = [
@@ -355,53 +321,32 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     { role: 'user', content: userContent },
   ];
 
-  console.info(`[handleQuery] System message length: ${systemMessage.length} chars`);
-  console.info(`[handleQuery] System message preview: ${systemMessage.slice(0, 300)}...`);
-  console.info(`[handleQuery] User message length: ${userMessage.length} chars`);
-
-  // Query the LLM with the complete messages via ReAct loop.
+  // Execute via ReAct loop
   const tools = MCPManager.getInstance().getEnabledTools();
   const reactResult = await runReActLoop(messages, {
-    settings,
-    signal,
+    settings, signal,
     maxIterations: settings.agentMaxIterations || 25,
-    tokenBudget: 0, // no budget limit for normal chat queries
+    tokenBudget: 0,
     tools,
     includeLogseqTools: true,
     onThought: onThoughtCallback || undefined,
   });
 
   const assistantResponse = reactResult.answer;
-
-  console.info(`[handleQuery] ReAct completed: ${reactResult.iterations} iterations, ${reactResult.toolCalls.length} tool calls, ${reactResult.tokensUsed} tokens`);
-  console.info(`[handleQuery] Raw LLM response preview: ${assistantResponse.slice(0, 500)}`);
-  console.info('[handleQuery] Contains [[: ' + assistantResponse.includes('[[') + ', Contains ((: ' + assistantResponse.includes('(('));
-
-  // Add the assistant's answer to the conversation history.
   conversationHistory.push({ role: "assistant", content: assistantResponse });
-
-  // Trim conversation history if it grows too large.
   if (conversationHistory.length > MAX_HISTORY_LENGTH * 2) {
     conversationHistory.splice(0, conversationHistory.length - MAX_HISTORY_LENGTH * 2);
   }
 
-  // Detect and store explicit memory requests
+  // Detect and store explicit memory
   if (settings.memoryEnabled && memoryStore) {
     const detected = detectExplicitMemory(query);
-    if (detected) {
-      memoryStore.addMemoryIfUnique(detected.category, detected.content, 'explicit');
-      lastMemorySaved = true;
-    }
+    if (detected) { memoryStore.addMemoryIfUnique(detected.category, detected.content, 'explicit'); lastMemorySaved = true; }
   }
 
-  // When edit mode is enabled, parse edit commands from the response.
   if (editMode) {
     const parseResult = parseEditCommands(assistantResponse);
-    return {
-      text: parseResult.textWithoutEditBlocks,
-      commands: parseResult.commands,
-    };
+    return { text: parseResult.textWithoutEditBlocks, commands: parseResult.commands };
   }
-
   return assistantResponse;
 }
