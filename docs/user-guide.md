@@ -288,6 +288,27 @@ Open Logseq Settings → Plugin Settings → Mixer.
 
 ---
 
+## In-Chat Help
+
+Type `/help` in the chat to get help about Logseq Mixer without leaving the conversation.
+
+| Command | What it does |
+|---|---|
+| `/help` | Shows available help topics |
+| `/help <topic>` | Answers a specific question about Mixer |
+| `/?` | Same as `/help` |
+
+**Examples:**
+- `/help ai edit` — how to use AI Edit mode
+- `/help agent` — how the autonomous agent works
+- `/help mcp tools` — how to set up external tools
+- `/help settings` — quick settings reference
+- `/help how do I attach files?` — ask in natural language
+
+Help responses use the built-in documentation — they don't consume your RAG context or search your notes.
+
+---
+
 ## Keyboard Shortcuts
 
 | Key | Action |
