@@ -62,6 +62,7 @@ describe('hybridSearch', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockedClassifyQuery.mockReturnValue({ category: 'mixed', bm25Weight: 1, vectorWeight: 1 });
     mockedMergeWithRRF.mockReturnValue(mergedResults);
   });

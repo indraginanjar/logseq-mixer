@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseEditCommands, serializeEditCommands, validateEditCommand } from './editCommandParser';
 import type { EditCommand } from './types/editTypes';
 
@@ -55,6 +55,10 @@ describe('EditCommandParser', () => {
 });
 
 describe('EditCommandParser – unit tests', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
   // --- Valid json-edit block extraction ---
   it('extracts valid commands from a json-edit block', () => {
     const input = [
