@@ -84,7 +84,6 @@ export default defineConfig({
         manualChunks: {
           'vendor-tiktoken': ['js-tiktoken'],
           'vendor-sqljs': ['sql.js'],
-          'vendor-orama': ['@orama/orama', '@orama/plugin-data-persistence'],
         },
       },
     },
