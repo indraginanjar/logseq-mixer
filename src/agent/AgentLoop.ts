@@ -32,7 +32,7 @@ CRITICAL RULES:
 - For "think" steps: produce the ACTUAL output described (e.g., if the step says "construct a table", write the complete table with real data from previous context — do NOT write a plan for how to construct it).
 - For action steps: respond with a JSON action to execute.
 - NEVER respond with plans, outlines, or "next steps" — always produce the final deliverable directly.
-- Use the data from "Previous context" as your source material. That data IS the gathered information — use it to produce the output.`;
+- Use the data from "Previous context" AND "Gathered Data (Working Memory)" as your source material. The Gathered Data section contains comprehensive extractions from multiple pages — this is your PRIMARY data source when available. Use it to produce the output.`;
 
 const EVAL_SYSTEM_PROMPT = `Evaluate whether the step output achieved the intended goal. Respond with ONLY valid JSON:
 {"adequate":true,"reason":"...","suggestion":"alternative approach if inadequate"}
@@ -330,7 +330,7 @@ RULES:
     // For read, write, think steps: single LLM call + action
     const messages: ChatMessage[] = [
       { role: 'system', content: STEP_SYSTEM_PROMPT },
-      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using the data from the previous context above, produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
+      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using ALL the data above — especially the "Gathered Data (Working Memory)" section if present — produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
     ];
 
     const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
@@ -500,8 +500,11 @@ RULES:
     const fullGatheredData = summaries.join('\n\n---\n\n');
     context.scratchPad.set(gatherKey, fullGatheredData);
 
-    // Return a brief summary as step output (the full data is in scratchPad)
-    const outputSummary = `Gathered and summarized ${pageNames.length} pages in ${Math.ceil(pageNames.length / BATCH_SIZE)} batches. Data stored in working memory (${fullGatheredData.length} chars). Pages processed: ${pageNames.join(', ')}`;
+    // Return gathered data as step output so it flows through previousOutputs too
+    // (scratchPad is primary, but this ensures data is available even if scratchPad access fails)
+    const outputSummary = fullGatheredData
+      ? `Gathered and summarized ${pageNames.length} pages in ${Math.ceil(pageNames.length / BATCH_SIZE)} batches. Pages: ${pageNames.join(', ')}\n\n${fullGatheredData}`
+      : `Gathered 0 results from ${pageNames.length} pages. Pages may not exist or may be empty.`;
     return { success: true, output: outputSummary, tokensUsed: totalTokens };
   }
 
