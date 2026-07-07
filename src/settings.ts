@@ -176,6 +176,13 @@ const settings: SettingSchemaDesc[] = [
     title: 'Persist Agent Steps to Chat',
     description: 'When Agent Verbose Mode is on, stream each completed step as a chat message and keep the full verbose output in the conversation context after the goal finishes.',
     default: false,
+  },
+  {
+    key: 'mcpToolTimeout',
+    type: 'number',
+    title: 'MCP Tool Call Timeout (seconds)',
+    description: 'Maximum time to wait for an MCP tool call to complete. Increase for slow tools like browser automation (Playwright). Default 180 seconds (3 minutes).',
+    default: 180,
   }
 ];
 

@@ -144,7 +144,7 @@ export class MCPClient {
     }
   }
 
-  private async sendRequest(method: string, params: any = {}): Promise<any> {
+  private async sendRequest(method: string, params: any = {}, timeoutMs?: number): Promise<any> {
     if (this.status !== 'connected' || !this.postEndpoint) {
       throw new Error(`MCP Client ${this.name} is not connected.`);
     }
@@ -157,13 +157,17 @@ export class MCPClient {
       id,
     };
 
+    // Tool calls get a much longer timeout (3 min) since external tools
+    // like browser automation can take significant time to complete.
+    const effectiveTimeout = timeoutMs ?? (method === 'tools/call' ? 180000 : 30000);
+
     return new Promise<any>(async (resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          reject(new Error(`Request timed out (${method})`));
+          reject(new Error(`Request timed out after ${effectiveTimeout / 1000}s (${method})`));
         }
-      }, 15000) as unknown as number;
+      }, effectiveTimeout) as unknown as number;
 
       this.pendingRequests.set(id, { resolve, reject, timeoutId });
 
@@ -265,12 +269,12 @@ export class MCPClient {
     }
   }
 
-  public async callTool(toolName: string, args: Record<string, any> = {}): Promise<any> {
+  public async callTool(toolName: string, args: Record<string, any> = {}, timeoutMs?: number): Promise<any> {
     try {
       const result = await this.sendRequest('tools/call', {
         name: toolName,
         arguments: args,
-      });
+      }, timeoutMs);
       return result;
     } catch (err) {
       console.error(`[MCPClient ${this.name}] Error calling tool ${toolName}:`, err);

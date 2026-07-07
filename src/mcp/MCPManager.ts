@@ -281,7 +281,9 @@ export class MCPManager {
       throw new Error(`MCP Client ${serverName} not found`);
     }
 
-    const result = await client.callTool(originalToolName, args);
+    // Read configurable timeout from settings (in seconds), convert to ms
+    const timeoutSec = (logseq.settings?.mcpToolTimeout as number) || 180;
+    const result = await client.callTool(originalToolName, args, timeoutSec * 1000);
     
     // Parse result text out of MCP format
     // MCP tool call returns: { content: Array<{ type: 'text'; text: string } | ...> }
