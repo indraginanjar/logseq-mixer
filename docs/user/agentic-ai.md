@@ -23,12 +23,11 @@ You: "Find all my pages about machine learning, extract the key
 Agent: 🤖 Goal detected. Generating plan...
 
        ✅ 1. Search for machine learning pages
-       ✅ 2. Read content from 7 matched pages
-       🔄 3. Extract and categorize key concepts
-       ⏳ 4. Create "ML Overview" page
-       ⏳ 5. Write structured content with source links
+       ✅ 2. Gather all ML pages and extract key concepts (12 pages, 4 batches)
+       🔄 3. Synthesize into structured overview with categories
+       ⏳ 4. Create "ML Overview" page with source links
 
-       ████████████░░░░░░ 3/5 steps | 42K/100K tokens
+       ████████████░░░░░░ 3/4 steps | 52K/100K tokens
 ```
 
 ---
@@ -186,6 +185,51 @@ If it discovers something unexpected (e.g., the data is structured differently t
 
 - **Plan-first mode:** Shows the proposed changes for your approval
 - **Autopilot mode:** Auto-approves and continues
+
+---
+
+## Large-Scale Data Gathering (Map-Reduce)
+
+When your goal involves processing many pages — say, "summarize all my notes on distributed systems" — the agent uses a **Map-Reduce pattern** to handle data that would otherwise exceed the LLM's context window.
+
+### How It Works
+
+Instead of trying to read 20 pages at once (which would be truncated and lose information), the agent:
+
+1. **Search** — Finds all relevant pages
+2. **Gather (Map)** — Reads pages in small batches (3 at a time), summarizing each batch with the LLM's full attention
+3. **Think (Reduce)** — Synthesizes all batch summaries into the final deliverable
+
+```
+You: "Find all my pages about project management and create
+      a consolidated best practices guide"
+
+Agent:
+  ✅ 1. [search] Find project management pages → 12 pages found
+  🔄 2. [gather] Read and extract best practices from all 12 pages
+       ├─ Batch 1/4: PM Basics, Sprint Planning, Retrospectives → summarized
+       ├─ Batch 2/4: Risk Management, Stakeholders, Agile → summarized
+       ├─ Batch 3/4: Kanban, Estimation, Velocity → summarized
+       └─ Batch 4/4: Team Dynamics, Communication, Prioritization → summarized
+  ⏳ 3. [think] Synthesize into structured best practices guide
+  ⏳ 4. [write] Create "PM Best Practices" page
+```
+
+### Why This Matters
+
+- **No data loss** — Each batch of 3 pages gets the LLM's full attention for extraction
+- **Unlimited scale** — Whether you have 5 pages or 50, the agent processes them all
+- **Quality over quantity** — Focused summarization per batch produces higher quality than cramming everything into one prompt
+- **Working memory** — Gathered data is stored in a scratch pad that isn't subject to the normal truncation limits between steps
+
+### When It Activates
+
+The planner automatically uses `gather` steps when it detects:
+- Goals involving "all pages about X"
+- Requests to "summarize", "consolidate", or "extract from" multiple sources
+- Any task where more than 3 pages need to be read and processed
+
+You don't need to do anything special — the agent chooses the right strategy automatically.
 
 ---
 

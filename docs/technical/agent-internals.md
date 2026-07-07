@@ -261,11 +261,12 @@ The LLM receives the goal + available capabilities and returns structured JSON:
 
 | Type | Execution Method | Description |
 |---|---|---|
-| `read` | Logseq Editor API | Read pages, block trees |
+| `read` | Logseq Editor API | Read a single page's block tree |
 | `write` | `blockExecutor.executeOne()` | Insert/update/delete blocks, create pages |
 | `search` | ReAct loop (iterative, max 10) | Hybrid search with multi-tool chaining |
 | `tool` | ReAct loop (iterative, max 10) | External MCP tool calls with chaining |
 | `think` | Single LLM call | Analysis, reasoning, synthesis |
+| `gather` | Map-Reduce pipeline | Batch-read multiple pages with per-batch summarization |
 
 ### Execution Flow
 
@@ -336,6 +337,113 @@ Escalate to user:
 
 ---
 
+## 5. Map-Reduce Gather Pipeline
+
+### Problem
+
+LLMs have a fixed context window, but knowledge graphs can contain hundreds of pages. A naive approach (read all pages → pass to LLM) fails when the combined content exceeds the model's limit. Even within limits, attention quality degrades as context grows.
+
+### Solution: Batched Map-Reduce
+
+The `gather` step type implements a Map-Reduce pattern that processes arbitrarily many pages without losing information:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        GATHER STEP EXECUTION                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Prior step outputs (e.g., search results: "page1, page2, ... pageN")│
+│         ↓                                                            │
+│  LLM extracts page names from context → ["page1", ..., "pageN"]     │
+│         ↓                                                            │
+│  ┌── MAP PHASE ──────────────────────────────────────────────────┐  │
+│  │                                                                │  │
+│  │  Batch 1: [page1, page2, page3]                               │  │
+│  │    → Read all blocks (recursive, with children)               │  │
+│  │    → Truncate to 50% of model context limit                   │  │
+│  │    → LLM summarizes: extract relevant info for the goal       │  │
+│  │    → Store summary                                            │  │
+│  │                                                                │  │
+│  │  Batch 2: [page4, page5, page6]                               │  │
+│  │    → (same)                                                    │  │
+│  │                                                                │  │
+│  │  ...                                                           │  │
+│  │                                                                │  │
+│  │  Batch N: [page(N-2), page(N-1), pageN]                       │  │
+│  │    → (same)                                                    │  │
+│  │                                                                │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│         ↓                                                            │
+│  All batch summaries → scratchPad["gather_step_{id}"]                │
+│         ↓                                                            │
+│  ┌── REDUCE PHASE (in subsequent think step or final synthesis) ──┐  │
+│  │                                                                 │  │
+│  │  scratchPad data injected into context (up to 50% budget)      │  │
+│  │  → LLM synthesizes all gathered information into deliverable   │  │
+│  │                                                                 │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Working Memory (ScratchPad)
+
+The `scratchPad` is a `Map<string, string>` on `StepContext` that persists across the entire agent run. Unlike `previousOutputs` (which are truncated when passed to subsequent steps), scratchPad data is preserved at full fidelity and injected with generous budget allocation.
+
+**Key properties:**
+- Not subject to per-step output truncation (1K–8K chars)
+- Available to ALL subsequent steps (think, write, tool, search)
+- Allocated up to 30% of context budget in step execution, 50% in final synthesis
+- Keyed by `gather_step_{id}` — multiple gather steps accumulate additively
+
+### Dynamic Context Scaling
+
+Context pass-through limits scale with the model's context window:
+
+| Model | Context Window | Step Output Limit | Prior Steps Visible | ScratchPad Budget (step) | ScratchPad Budget (synthesis) |
+|---|---|---|---|---|---|
+| GPT-3.5 Turbo | 16K | 1.6K / 4.8K | 5 | 4.8K | 8K |
+| GPT-4o | 128K | 8K* / 30K* | 12 | 38.4K | 64K |
+| Claude 3.5 | 200K | 8K* / 30K* | 20 | 60K | 100K |
+
+*Capped at 8K (normal) / 30K (last think step) to avoid diminishing returns.
+
+### Batch Size
+
+Fixed at 3 pages per batch. This balances:
+- **Quality**: Each batch gets the LLM's full attention on just 3 pages
+- **Coverage**: Even 30 pages complete in only 10 batches
+- **Budget**: Each batch uses one LLM call (~2K–5K tokens)
+
+### When the Planner Uses Gather
+
+The planning prompt instructs the LLM to use `gather` when:
+- Goal involves processing more than 3 pages
+- Goal uses phrases like "find all X and extract Y", "summarize notes on Z"
+- Pattern: `search` → `gather` → `think` (find pages, process them, produce output)
+
+### Example Plan
+
+```json
+{
+  "steps": [
+    { "id": 1, "description": "Search for all pages related to machine learning", "type": "search" },
+    { "id": 2, "description": "Gather all ML pages and extract key concepts, definitions, and relationships", "type": "gather" },
+    { "id": 3, "description": "Synthesize extracted data into a structured overview with categories", "type": "think" },
+    { "id": 4, "description": "Create the ML Overview page with the structured content", "type": "write" }
+  ],
+  "estimatedTokens": 60000
+}
+```
+
+### Abort Conditions
+
+The gather loop stops early if:
+- `signal.aborted` (user clicked Stop)
+- Token budget exhausted (`tokensUsed + totalTokens >= tokenBudget`)
+
+---
+
 ## 5. UI Components
 
 ### AgentProgress
@@ -402,10 +510,14 @@ User types message
 │  1. generatePlan() → structured steps                   │
 │  2. Show plan (plan-first) or start (autopilot)         │
 │  3. For each step:                                      │
-│     a. Execute (ReAct for tool/search, single for rest) │
+│     a. Execute:                                         │
+│        - gather → Map-Reduce → scratchPad               │
+│        - tool/search → ReAct loop                       │
+│        - read/write/think → single LLM + action         │
 │     b. Self-correct if output inadequate                │
 │     c. Replan every 2 steps if needed                   │
-│  4. Store task_outcome in memory                        │
+│  4. synthesizeFinalAnswer() using scratchPad + outputs  │
+│  5. Store task_outcome in memory                        │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -420,13 +532,17 @@ User types message
 | Agent: plan generation | 1 | 2K–5K |
 | Agent: per step (read/write/think) | 1 | 1K–3K |
 | Agent: per step (tool/search via ReAct) | 2–10 | 5K–30K |
+| Agent: gather step (per batch of 3 pages) | 1 | 2K–5K |
+| Agent: gather step (10 pages total) | 5 (1 extract + 4 batches) | 15K–30K |
 | Agent: self-correction evaluation | 1 per step | 500–1K |
 | Agent: replan check | 1 per 2 steps | 1K–3K |
+| Agent: final synthesis | 1 | 3K–10K |
 | Session summarization | 1 | 1K–3K |
 
 **Budget guidance:**
 - Simple 3-step goal: ~15K–30K tokens
 - Complex 7-step goal with corrections: ~50K–100K tokens
+- Multi-page gather (20 pages): ~40K–60K tokens
 - Default budget (100K) covers most real-world goals
 
 ---

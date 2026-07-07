@@ -1,5 +1,5 @@
-import { queryLiteLLM, type ChatMessage } from 'LLMManager';
-import { countTokens } from 'tokenizer';
+import { queryLiteLLM, getContextLimitForModel, type ChatMessage } from 'LLMManager';
+import { countTokens, encode, decode } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import { executeOne } from 'blockExecutor';
 import { runReActLoop } from './ReActLoop';
@@ -8,16 +8,22 @@ import type { AgentPlan, AgentStep, AgentProgressEvent, StepResult, StepContext 
 const PLAN_SYSTEM_PROMPT = `You are a planning agent for a Logseq knowledge management system. Break down the user's goal into atomic steps.
 
 Available capabilities:
-- read: Read Logseq pages, get block trees, get current page
+- read: Read a single Logseq page or get block trees
 - write: Insert, update, or delete blocks in Logseq pages; create new pages
 - search: Search the knowledge base using hybrid vector+keyword search
 - tool: Use external MCP tools (if available)
 - think: Analyze information and reason about next steps
+- gather: Read MULTIPLE pages in batches, extracting and summarizing key information from each. Use this when the goal requires processing more than 3 pages or collecting data across many sources. The gather step handles batching, per-page summarization, and accumulation automatically.
 
 Respond with ONLY valid JSON in this format:
-{"steps":[{"id":1,"description":"...","type":"read|write|search|tool|think"}],"estimatedTokens":NUMBER}
+{"steps":[{"id":1,"description":"...","type":"read|write|search|tool|think|gather"}],"estimatedTokens":NUMBER}
 
-Keep steps atomic and sequential. Estimate total tokens needed for all LLM calls.`;
+PLANNING RULES:
+- Use "gather" when the goal involves reading/processing multiple pages (e.g., "find all pages about X and extract Y", "summarize my notes on Z", "create an overview from multiple sources").
+- A gather step description should specify WHAT to look for and WHAT to extract. Example: "Gather all machine learning pages and extract key concepts, definitions, and relationships from each."
+- Use "search" first to find relevant pages, then "gather" to process them in bulk.
+- Use "read" only for reading a single specific page.
+- Keep steps atomic and sequential. Estimate total tokens needed for all LLM calls.`;
 
 const STEP_SYSTEM_PROMPT = `You are an execution agent for Logseq. Execute the given step and return the ACTUAL result — not a plan or description of what to do.
 Available Logseq APIs: getPage(name), getPageBlocksTree(nameOrUuid), getAllPages(), insertBlock(parentUUID, content, {sibling:false}), updateBlock(uuid, content), removeBlock(uuid), createPage(name, {}, {journal:false, redirect:false}).
@@ -36,6 +42,8 @@ const REPLAN_SYSTEM_PROMPT = `You are reviewing an in-progress execution plan. G
 Respond with ONLY valid JSON:
 {"replan":true/false,"reason":"...","newSteps":[{"id":1,"description":"...","type":"read|write|search|tool|think"}]}
 If replan is false, newSteps can be empty. Only include the REMAINING steps (not already completed ones).`;
+
+const GATHER_SUMMARIZE_PROMPT = `You are a data extraction agent. Given the content of a Logseq page, extract and summarize the key information relevant to the user's goal. Be thorough — include all facts, concepts, relationships, dates, and details that could be useful. Respond with a structured summary, not the raw block content.`;
 
 export class AgentLoop {
   private settings: any;
@@ -105,7 +113,7 @@ export class AgentLoop {
   }
 
   async run(plan: AgentPlan): Promise<void> {
-    const context: StepContext = { previousOutputs: [], createdBlockUUIDs: [], createdPages: [], goal: plan.goal };
+    const context: StepContext = { previousOutputs: [], createdBlockUUIDs: [], createdPages: [], goal: plan.goal, scratchPad: new Map() };
     this.currentContext = context;
     let completedSteps = 0;
 
@@ -205,13 +213,32 @@ export class AgentLoop {
   }
 
   private async synthesizeFinalAnswer(plan: AgentPlan, context: StepContext): Promise<string | null> {
+    const contextLimit = getContextLimitForModel(this.settings.selectedModel);
+    const maxStepOutputLen = Math.min(Math.floor(contextLimit * 0.1), 6000);
+
     // Build a comprehensive context from ALL step outputs
     const allOutputs = context.previousOutputs
-      .map(o => `--- Step ${o.stepId} ---\n${o.output.slice(0, 6000)}`)
+      .map(o => `--- Step ${o.stepId} ---\n${o.output.slice(0, maxStepOutputLen)}`)
       .join('\n\n');
 
+    // Include scratchPad gathered data (this is the key Map-Reduce integration)
+    let gatheredData = '';
+    if (context.scratchPad.size > 0) {
+      const scratchBudget = Math.floor(contextLimit * 0.5);
+      const entries = Array.from(context.scratchPad.entries())
+        .map(([key, value]) => `[${key}]:\n${value}`)
+        .join('\n\n');
+      if (countTokens(entries) > scratchBudget) {
+        const tokens = encode(entries);
+        gatheredData = '\n\n--- Gathered Data (from page reading) ---\n' + decode(tokens.slice(0, scratchBudget));
+      } else {
+        gatheredData = '\n\n--- Gathered Data (from page reading) ---\n' + entries;
+      }
+    }
+
     // Check if we have enough content worth synthesizing
-    const totalContent = context.previousOutputs.reduce((sum, o) => sum + o.output.length, 0);
+    const totalContent = context.previousOutputs.reduce((sum, o) => sum + o.output.length, 0) +
+      Array.from(context.scratchPad.values()).reduce((sum, v) => sum + v.length, 0);
     if (totalContent < 100) return null; // Nothing substantial to synthesize
 
     const messages: ChatMessage[] = [
@@ -222,7 +249,7 @@ export class AgentLoop {
 Given the user's original goal and all the data gathered by prior execution steps, compose a complete, well-formatted final answer.
 
 RULES:
-- Include ALL relevant data from the steps. The step outputs contain the actual gathered information — use it.
+- Include ALL relevant data from the steps AND the gathered data section. The gathered data contains detailed summaries extracted from multiple pages — this is your primary source material.
 - If the goal asks for a table, produce a COMPLETE markdown table filled with real data extracted from the steps. Use proper markdown syntax with leading and trailing pipes (e.g. "| Header 1 | Header 2 |").
 - NEVER produce: plans, outlines, "next steps", skeletons with "..." or "TBD", or descriptions of what you WOULD do.
 - If some data is missing or unclear from the steps, use what IS available and note gaps briefly in a Notes column.
@@ -230,7 +257,7 @@ RULES:
       },
       {
         role: 'user',
-        content: `Goal: ${plan.goal}\n\nData gathered from all execution steps:\n\n${allOutputs}\n\nUsing ALL the data above, produce the complete final answer NOW. Extract every relevant piece of information from the step outputs and include it in your response.`,
+        content: `Goal: ${plan.goal}\n\nStep summaries:\n\n${allOutputs}${gatheredData}\n\nUsing ALL the data above (especially the Gathered Data section), produce the complete final answer NOW. Extract every relevant piece of information and include it in your response.`,
       },
     ];
 
@@ -247,16 +274,37 @@ RULES:
 
   private async executeStep(step: AgentStep, context: StepContext): Promise<StepResult> {
     // For the last step (synthesis/presentation), provide much more context from prior steps
+    const contextLimit = getContextLimitForModel(this.settings.selectedModel);
     const isLastStep = context.previousOutputs.length >= 1 && step.type === 'think';
-    const maxOutputLen = isLastStep ? 4000 : 1000;
-    const maxPriorSteps = isLastStep ? context.previousOutputs.length : 5;
+    const maxOutputLen = isLastStep ? Math.min(Math.floor(contextLimit * 0.3), 30000) : Math.min(Math.floor(contextLimit * 0.1), 8000);
+    const maxPriorSteps = isLastStep ? context.previousOutputs.length : Math.min(context.previousOutputs.length, Math.max(5, Math.floor(contextLimit / 10000)));
     const contextSummary = context.previousOutputs.slice(-maxPriorSteps).map(o => `Step ${o.stepId}: ${o.output.slice(0, maxOutputLen)}`).join('\n\n');
+
+    // Append scratchPad data if available (from gather steps)
+    let scratchPadContext = '';
+    if (context.scratchPad.size > 0) {
+      const scratchBudget = Math.floor(contextLimit * 0.3);
+      const entries = Array.from(context.scratchPad.entries())
+        .map(([key, value]) => `[${key}]:\n${value}`)
+        .join('\n\n');
+      if (countTokens(entries) > scratchBudget) {
+        const tokens = encode(entries);
+        scratchPadContext = '\n\n--- Gathered Data (Working Memory) ---\n' + decode(tokens.slice(0, scratchBudget));
+      } else {
+        scratchPadContext = '\n\n--- Gathered Data (Working Memory) ---\n' + entries;
+      }
+    }
+
+    // Map-Reduce gather: batch-read pages and summarize each into scratchPad
+    if (step.type === 'gather') {
+      return await this.executeGatherStep(step, context);
+    }
 
     // For tool and search steps, use the full ReAct loop for iterative chaining
     if (step.type === 'tool' || step.type === 'search') {
       const messages: ChatMessage[] = [
         { role: 'system', content: STEP_SYSTEM_PROMPT },
-        { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}\n\nCurrent step: ${step.description}\n\nUse the available tools to accomplish this step. Call as many tools as needed.` },
+        { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}\n\nCurrent step: ${step.description}\n\nUse the available tools to accomplish this step. Call as many tools as needed.` },
       ];
       const reactResult = await runReActLoop(messages, {
         settings: this.settings,
@@ -278,7 +326,7 @@ RULES:
     // For read, write, think steps: single LLM call + action
     const messages: ChatMessage[] = [
       { role: 'system', content: STEP_SYSTEM_PROMPT },
-      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using the data from the previous context above, produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
+      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using the data from the previous context above, produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
     ];
 
     const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
@@ -357,6 +405,100 @@ RULES:
       default:
         return 'Unknown step type';
     }
+  }
+
+  private async executeGatherStep(step: AgentStep, context: StepContext): Promise<StepResult> {
+    let totalTokens = 0;
+
+    // Determine which pages to gather from prior step outputs
+    const priorOutputs = context.previousOutputs.map(o => o.output).join('\n');
+
+    // Ask LLM to extract page names from prior context
+    const extractMessages: ChatMessage[] = [
+      { role: 'system', content: 'Extract a JSON array of Logseq page names from the given context. Return ONLY a JSON array of strings, e.g. ["page1", "page2"]. If the context mentions page names, include them all. If no pages are mentioned, return an empty array [].' },
+      { role: 'user', content: `Goal: ${context.goal}\nStep description: ${step.description}\n\nPrior context:\n${priorOutputs.slice(0, 4000)}` },
+    ];
+
+    const extractResult = await queryLiteLLM(extractMessages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
+    const extractRaw = extractResult.choices?.[0]?.message?.content?.trim() ?? '[]';
+    totalTokens += countTokens(JSON.stringify(extractMessages)) + countTokens(extractRaw);
+
+    let pageNames: string[] = [];
+    try {
+      const jsonMatch = extractRaw.match(/\[[\s\S]*\]/);
+      pageNames = JSON.parse(jsonMatch ? jsonMatch[0] : extractRaw);
+    } catch {
+      // Fallback: split by newlines/commas
+      pageNames = priorOutputs.split(/[\n,]/).map(s => s.trim()).filter(s => s.length > 0 && s.length < 100).slice(0, 30);
+    }
+
+    if (pageNames.length === 0) {
+      return { success: true, output: 'No pages found to gather from.', tokensUsed: totalTokens };
+    }
+
+    // Process pages in batches
+    const BATCH_SIZE = 3;
+    const contextLimit = getContextLimitForModel(this.settings.selectedModel);
+    const maxPageTokens = Math.floor(contextLimit * 0.5);
+    const summaries: string[] = [];
+
+    for (let i = 0; i < pageNames.length; i += BATCH_SIZE) {
+      if (this.signal?.aborted) break;
+      if (this.tokenBudget > 0 && this.tokensUsed + totalTokens >= this.tokenBudget) break;
+
+      const batch = pageNames.slice(i, i + BATCH_SIZE);
+
+      // Read all pages in this batch
+      let batchContent = '';
+      for (const pageName of batch) {
+        try {
+          const blocks = await logseq.Editor.getPageBlocksTree(pageName);
+          if (blocks && blocks.length > 0) {
+            const formatBlock = (b: any, depth = 0): string => {
+              const indent = '  '.repeat(depth);
+              let text = `${indent}- ${b.content}\n`;
+              if (b.children) {
+                for (const child of b.children) text += formatBlock(child, depth + 1);
+              }
+              return text;
+            };
+            const pageContent = blocks.map((b: any) => formatBlock(b)).join('');
+            batchContent += `\n--- Page: ${pageName} ---\n${pageContent}\n`;
+          }
+        } catch {
+          batchContent += `\n--- Page: ${pageName} ---\n(failed to read)\n`;
+        }
+      }
+
+      // Truncate batch content to fit context
+      if (countTokens(batchContent) > maxPageTokens) {
+        const tokens = encode(batchContent);
+        batchContent = decode(tokens.slice(0, maxPageTokens)) + '\n... (truncated)';
+      }
+
+      // Summarize this batch (Map phase)
+      const summarizeMessages: ChatMessage[] = [
+        { role: 'system', content: GATHER_SUMMARIZE_PROMPT },
+        { role: 'user', content: `Goal: ${context.goal}\nExtraction task: ${step.description}\n\nPages content (batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(pageNames.length / BATCH_SIZE)}):\n${batchContent}\n\nExtract ALL relevant information from these pages. Be comprehensive.` },
+      ];
+
+      const batchResult = await queryLiteLLM(summarizeMessages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
+      const batchSummary = batchResult.choices?.[0]?.message?.content?.trim() ?? '';
+      totalTokens += countTokens(JSON.stringify(summarizeMessages)) + countTokens(batchSummary);
+
+      if (batchSummary) {
+        summaries.push(`[Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.join(', ')}]\n${batchSummary}`);
+      }
+    }
+
+    // Store accumulated summaries in scratchPad (Reduce input)
+    const gatherKey = `gather_step_${step.id}`;
+    const fullGatheredData = summaries.join('\n\n---\n\n');
+    context.scratchPad.set(gatherKey, fullGatheredData);
+
+    // Return a brief summary as step output (the full data is in scratchPad)
+    const outputSummary = `Gathered and summarized ${pageNames.length} pages in ${Math.ceil(pageNames.length / BATCH_SIZE)} batches. Data stored in working memory (${fullGatheredData.length} chars). Pages processed: ${pageNames.join(', ')}`;
+    return { success: true, output: outputSummary, tokensUsed: totalTokens };
   }
 
   private async handleFailure(step: AgentStep, error: string, attempt: number): Promise<'retry' | 'escalate' | 'skip'> {

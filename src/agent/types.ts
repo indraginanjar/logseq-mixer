@@ -1,4 +1,4 @@
-export type StepType = 'read' | 'write' | 'search' | 'tool' | 'think';
+export type StepType = 'read' | 'write' | 'search' | 'tool' | 'think' | 'gather';
 export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
 export interface AgentStep {
@@ -32,6 +32,8 @@ export interface StepContext {
   createdBlockUUIDs: string[];
   createdPages: string[];
   goal: string;
+  /** Working memory for Map-Reduce: accumulates structured data across gather steps */
+  scratchPad: Map<string, string>;
 }
 
 export type ProgressEventType =
