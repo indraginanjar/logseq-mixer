@@ -868,6 +868,34 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 return updated;
               });
             }
+
+            // Stream completed step outputs to chat when verbose + persist is on
+            const persistVerbose = verboseMode && (settings.agentPersistVerboseToChat as boolean);
+            if (persistVerbose && event.type === 'step_complete' && event.step?.output) {
+              const stepMsg = `**Step ${event.step.id}** [${event.step.type}]: ${event.step.description}\n\n${event.step.output}`;
+              setMessages(prev => [...prev, {
+                id: `agent_step_${event.step!.id}_${Date.now()}`,
+                content: stepMsg,
+                sender: 'assistant',
+              }]);
+            }
+            if (persistVerbose && event.type === 'step_failed' && event.step?.error) {
+              const failMsg = `**Step ${event.step.id}** [${event.step.type}]: ${event.step.description}\n\n❌ ${event.step.error}`;
+              setMessages(prev => [...prev, {
+                id: `agent_step_${event.step!.id}_fail_${Date.now()}`,
+                content: failMsg,
+                sender: 'assistant',
+              }]);
+            }
+            if (persistVerbose && event.type === 'self_correcting' && event.step) {
+              const correctMsg = `↩️ **Self-correcting step ${event.step.id}:** ${event.message}`;
+              setMessages(prev => [...prev, {
+                id: `agent_correct_${event.step!.id}_${Date.now()}`,
+                content: correctMsg,
+                sender: 'assistant',
+              }]);
+            }
+
             if (event.type === 'complete' || event.type === 'aborted') {
               setAgentRunning(false);
               setLoading(false);
@@ -876,7 +904,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               if (currentPlan) {
                 const stepsSummary = currentPlan.steps.map(s => {
                   const icon = s.status === 'done' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'skipped' ? '⏭️' : '⏳';
-                  return `${icon} ${s.id}. ${s.description}`;
+                  const verboseInfo = persistVerbose && s.tokensUsed ? ` *(${s.tokensUsed} tok)*` : '';
+                  return `${icon} ${s.id}. ${s.description}${verboseInfo}`;
                 }).join('  \n');
                 // Include the last completed step's output as the final answer
                 const doneSteps = currentPlan.steps.filter(s => s.status === 'done' && s.output);
@@ -889,8 +918,11 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                   sender: 'assistant',
                 }]);
                 // Add to conversation history so follow-up questions have context
+                const historyContent = persistVerbose
+                  ? doneSteps.map(s => `[Step ${s.id} - ${s.type}] ${s.description}:\n${s.output}`).join('\n\n')
+                  : (lastOutput || `Completed goal: ${currentPlan.goal}. ${event.message}`);
                 addToConversationHistory('user', `[Agent goal]: ${currentPlan.goal}`);
-                addToConversationHistory('assistant', lastOutput || `Completed goal: ${currentPlan.goal}. ${event.message}`);
+                addToConversationHistory('assistant', historyContent);
               }
               setAgentPlan(null);
               agentPlanRef.current = null;

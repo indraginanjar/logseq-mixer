@@ -169,6 +169,13 @@ const settings: SettingSchemaDesc[] = [
     title: 'Agent Verbose Mode',
     description: 'Show detailed step outputs, self-correction reasoning, and replan details in the progress UI.',
     default: true,
+  },
+  {
+    key: 'agentPersistVerboseToChat',
+    type: 'boolean',
+    title: 'Persist Agent Steps to Chat',
+    description: 'When Agent Verbose Mode is on, stream each completed step as a chat message and keep the full verbose output in the conversation context after the goal finishes.',
+    default: false,
   }
 ];
 

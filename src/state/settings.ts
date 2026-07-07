@@ -25,6 +25,7 @@ interface IPluginSettings {
   agentMaxRetries?: number;
   agentMaxIterations?: number;
   agentVerboseMode?: boolean;
+  agentPersistVerboseToChat?: boolean;
 }
 
 const settingsChangedEffect: AtomEffect<IPluginSettings> = ({ setSelf }) => {
