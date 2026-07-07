@@ -215,12 +215,14 @@ Open **Settings → Plugin Settings → Mixer**.
 | **Agent Max Tool Iterations** | `25` | Max ReAct iterations per query |
 | **Agent Max Retries Per Step** | `2` | Retries before escalating to user |
 | **Agent Verbose Mode** | `true` | Show step type badges, token usage, self-correction reasoning, and error details. Toggle via 📋 in the toolbar. |
+| **Persist Agent Steps to Chat** | `false` | When Verbose Mode is on, stream each completed step as a chat message and keep full output in conversation context. |
 
 ### MCP Servers
 
 | Setting | Format | Example |
 |---|---|---|
 | **MCP Servers Configuration** | JSON object | `{"server-name": {"url": "http://localhost:3002/sse"}}` |
+| **MCP Tool Call Timeout (seconds)** | `180` | Max wait time for an MCP tool call. Increase for slow tools like browser automation (Playwright). |
 
 ---
 
@@ -245,6 +247,16 @@ Open **Settings → Plugin Settings → Mixer**.
 
 **Cause:** 🤖 toggle is OFF, or messages are too short/question-like.
 **Fix:** Toggle 🤖 ON. Use imperative instructions: "Find all X and create Y" rather than "Can you find X?"
+
+### MCP tool calls time out
+
+**Cause:** The default timeout (180s) may not be enough for very slow tools, or the MCP server is unresponsive.
+**Fix:** Increase `MCP Tool Call Timeout` in settings. For browser automation (Playwright), try 300s. Also check that the MCP server process is still running.
+
+### Agent step output disappears after goal completes
+
+**Cause:** By default, step-by-step output only shows in the progress panel during execution and is replaced by a summary at completion.
+**Fix:** Enable `Persist Agent Steps to Chat` in settings (requires Verbose Mode to be ON). Each completed step will stream as a chat message and remain visible in the conversation history.
 
 ### Models not showing in dropdown
 

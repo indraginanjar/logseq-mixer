@@ -283,10 +283,27 @@ This means **MCP tools are available in all three contexts:**
 | SSE connection dropped | Status → `'disconnected'`, tools removed from active set |
 | Initialization fails | Status → `'error'` with "Initialization failed" message |
 | `tools/list` fails | Status stays `'connecting'`, retries on reconnect |
-| Tool execution timeout | Error propagated to LLM as tool result |
+| Tool execution timeout | Error propagated to LLM as tool result (includes timeout duration) |
 | Tool execution error | Error message returned as tool result (LLM can reason about it) |
 | Invalid function name | Reverse lookup fails → error logged, tool call skipped |
 | Config parse failure | All entries treated as invalid, error logged |
+
+### Timeout Configuration
+
+Tool calls use a configurable timeout to accommodate slow external tools:
+
+| Method | Default Timeout | Rationale |
+|---|---|---|
+| `initialize` | 30s | Server handshake should be fast |
+| `tools/list` | 30s | Fetching tool catalog |
+| `tools/call` | **180s** (configurable) | Browser automation, API calls, file operations |
+
+The `tools/call` timeout is read from the `MCP Tool Call Timeout` plugin setting. Users working with heavy tools (Playwright browser automation, large file operations, slow APIs) should increase this value.
+
+```
+Settings → Plugin Settings → Mixer → MCP Tool Call Timeout (seconds)
+Default: 180 | Recommended for Playwright: 300
+```
 
 ---
 

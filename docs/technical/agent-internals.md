@@ -329,11 +329,35 @@ Is it read/search + "not found"? ──Yes──→ Skip (non-critical)
      ↓ No
 Retries remaining? ──Yes──→ Ask LLM for alternative approach → Retry
      ↓ No
+Diagnose failure via LLM:
+  - WHAT failed (plain language)
+  - WHY it likely failed (root cause)
+  - SUGGESTION (actionable fix)
+     ↓
 Escalate to user:
-  - Show question + input field
+  - Show diagnostic + question + input field
   - User provides guidance
   - Resume with guidance as context
 ```
+
+### Failure Diagnostics
+
+When a step exhausts retries or escalates, the agent calls `diagnoseFailure()` which makes a lightweight LLM call to translate raw errors into human-readable explanations. This replaces cryptic messages like `"LLM request failed: 429"` with contextual analysis:
+
+```
+WHAT: The block insertion into "ML Overview" failed.
+WHY: The target parent block UUID doesn't exist — the page may not
+     have been created in a prior step.
+SUGGESTION: Run the page creation step first, then re-read the page
+            to get valid block UUIDs.
+```
+
+The diagnostic is shown in:
+- The `step_failed` progress event (visible in the AgentProgress UI)
+- The escalation prompt sent to the user
+- The step's `error` field (persisted on the AgentStep object)
+
+If the diagnostic LLM call itself fails (e.g., network down), it falls back to the raw error string.
 
 ---
 
@@ -554,7 +578,9 @@ User types message
 | **No navigation hijack** | `redirect: false` on all page creation calls |
 | **AbortSignal propagation** | User Stop button → signal.abort() → all pending operations cancelled |
 | **Budget enforcement** | Hard token limit per goal (emits warning at 80%) |
+| **MCP tool timeout** | Configurable per-call timeout (default 180s) prevents indefinite hangs on unresponsive tools |
 | **Escalation over guessing** | Agent asks user for guidance when stuck (never guesses on critical paths) |
+| **Failure diagnostics** | LLM-powered root cause analysis before escalating, so the user gets actionable context |
 | **Memory persistence** | Disabling memory stops injection, doesn't delete stored data |
 | **Plan approval** | Plan-first mode requires explicit consent before execution |
 | **Replan approval** | Plan changes pause for user confirmation (except autopilot) |

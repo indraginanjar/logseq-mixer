@@ -287,6 +287,8 @@ Plus any [MCP tools](https://github.com/indraginanjar/logseq-mixer/blob/main/doc
 | **Agent Max Tool Iterations** | `25` | Max ReAct tool-call iterations per query |
 | **Agent Max Retries Per Step** | `2` | Retry attempts per step before escalating |
 | **Agent Verbose Mode** | `true` | Show step type badges, token usage, self-correction reasoning, and error details. Toggle via 📋 in toolbar. |
+| **Persist Agent Steps to Chat** | `false` | Stream each step as a chat message and keep in conversation context. Requires Verbose Mode ON. |
+| **MCP Tool Call Timeout** | `180` | Seconds to wait for external tool calls. Increase for slow tools (Playwright: 300+). |
 | **Enable Agent Memory** | `true` | Toggle persistent memory (preserves data when disabled) |
 | **Auto-summarize Sessions** | `true` | Auto-summarize on "New Session" |
 | **Memory Token Budget (%)** | `10` | Context window allocation for memories (1-25%) |
