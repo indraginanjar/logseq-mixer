@@ -141,7 +141,10 @@ export class AgentLoop {
           const action = await this.handleFailure(step, result.error || 'Unknown error', attempt);
           if (action === 'skip') { result = { success: true, output: '(skipped)', tokensUsed: 0 }; break; }
           if (action === 'escalate') {
-            const answer = await this.onEscalate(`Step "${step.description}" failed: ${result.error}\nHow should I proceed?`);
+            const diagnostic = await this.diagnoseFailure(step, result.error || 'Unknown error', context);
+            step.error = diagnostic;
+            this.emit('step_failed', step, diagnostic, completedSteps, plan.steps.length);
+            const answer = await this.onEscalate(`Step "${step.description}" failed.\n\n${diagnostic}\n\nHow should I proceed?`);
             context.previousOutputs.push({ stepId: step.id, output: `User guidance: ${answer}` });
             break;
           }
@@ -149,9 +152,10 @@ export class AgentLoop {
           result = { success: false, output: '', tokensUsed: 0, error: err.message || String(err) };
           if (attempt >= this.maxRetries) {
             step.status = 'failed';
-            step.error = result.error;
-            this.emit('step_failed', step, result.error!, completedSteps, plan.steps.length);
-            const answer = await this.onEscalate(`Step "${step.description}" failed after ${this.maxRetries} retries: ${result.error}\nHow should I proceed?`);
+            const diagnostic = await this.diagnoseFailure(step, result.error || 'Unknown error', context);
+            step.error = diagnostic;
+            this.emit('step_failed', step, diagnostic, completedSteps, plan.steps.length);
+            const answer = await this.onEscalate(`Step "${step.description}" failed after ${this.maxRetries} retries.\n\n${diagnostic}\n\nHow should I proceed?`);
             context.previousOutputs.push({ stepId: step.id, output: `User guidance: ${answer}` });
           }
         }
@@ -505,6 +509,34 @@ RULES:
     if ((step.type === 'read' || step.type === 'search') && /not found|empty|null/i.test(error)) return 'skip';
     if (attempt < this.maxRetries) return 'retry';
     return 'escalate';
+  }
+
+  private async diagnoseFailure(step: AgentStep, error: string, context: StepContext): Promise<string> {
+    try {
+      const recentContext = context.previousOutputs.slice(-3).map(o => `Step ${o.stepId}: ${o.output.slice(0, 200)}`).join('\n');
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: `You are a diagnostic agent. Given a failed step, its error, and execution context, provide a brief, clear explanation of:
+1. WHAT failed (one sentence)
+2. WHY it likely failed (one sentence identifying the root cause)
+3. SUGGESTION (one actionable sentence on how to fix or work around it)
+
+Be concise and specific. Do not repeat the raw error verbatim — translate it into plain language the user can act on.`,
+        },
+        {
+          role: 'user',
+          content: `Step: "${step.description}" (type: ${step.type})\nError: ${error}\nGoal: ${context.goal}\nRecent context:\n${recentContext}`,
+        },
+      ];
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
+      const diagnostic = result.choices?.[0]?.message?.content?.trim() ?? '';
+      this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(diagnostic);
+      if (diagnostic) return diagnostic;
+    } catch {
+      // If diagnostic LLM call fails, fall back to raw error
+    }
+    return `Error: ${error}`;
   }
 
   private async rollback(context: StepContext): Promise<void> {
