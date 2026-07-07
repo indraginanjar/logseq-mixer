@@ -314,7 +314,16 @@ RULES:
         const pageName = action.page || action.pageName;
         if (!pageName) return 'No page specified';
         const blocks = await logseq.Editor.getPageBlocksTree(pageName);
-        return blocks?.map((b: any) => b.content).join('\n') || '(empty page)';
+        if (!blocks || blocks.length === 0) return '(empty page)';
+        const formatBlock = (b: any, depth = 0): string => {
+          const indent = '  '.repeat(depth);
+          let text = `${indent}- [${b.uuid}] ${b.content}\n`;
+          if (b.children) {
+            for (const child of b.children) text += formatBlock(child, depth + 1);
+          }
+          return text;
+        };
+        return blocks.map((b: any) => formatBlock(b)).join('');
       }
       case 'write': {
         if (!this.canWrite) {

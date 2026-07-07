@@ -199,8 +199,15 @@ async function fetchPageContext(budget: number): Promise<string> {
     }
     if (page !== null) {
       const pageContent = await logseq.Editor.getPageBlocksTree(page.uuid);
-      let wholePageContent = "";
-      pageContent.forEach(element => { wholePageContent += "- " + element.content + "\n"; });
+      const formatBlock = (b: any, depth = 0): string => {
+        const indent = '  '.repeat(depth);
+        let text = `${indent}- ${b.content}\n`;
+        if (b.children) {
+          for (const child of b.children) text += formatBlock(child, depth + 1);
+        }
+        return text;
+      };
+      const wholePageContent = pageContent.map((b: any) => formatBlock(b)).join('');
       const rawPageContext = "Current Page Context:\n" +
         `current_page_open_id: ${page.id}\ncurrent_page_open_name: ${page.name}\ncurrent_page_open_content: ${wholePageContent}\n\n`;
       return truncateToTokens(rawPageContext, budget);

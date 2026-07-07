@@ -919,7 +919,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         });
         agentLoopRef.current = loop;
         const pageCtx = await getActivePageContext();
-        const ctxStr = pageCtx ? `Page: ${pageCtx.pageName}\n${pageCtx.formattedTree?.slice(0, 500) || ''}` : '';
+        const ctxStr = pageCtx ? `Page: ${pageCtx.pageName}\n${pageCtx.formattedTree || ''}` : '';
         const plan = await loop.generatePlan(goal, ctxStr);
         setAgentPlan(plan);
         agentPlanRef.current = plan;
