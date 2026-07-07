@@ -528,8 +528,21 @@ export function parseContentWithTables(input: string): ContentPart[] {
 
   const flushTable = () => {
     if (currentTableLines.length >= 2) {
-      const headerLine = currentTableLines[0];
-      const rowsLines = currentTableLines.slice(2);
+      // Find the separator row (contains only |, -, :, and whitespace with at least ---)
+      const separatorIdx = currentTableLines.findIndex(l => {
+        const t = l.trim();
+        return t.includes('|') && /^[\s|:-]+$/.test(t) && /---/.test(t);
+      });
+
+      if (separatorIdx < 1) {
+        // No valid separator found or separator is the first line — treat as markdown
+        currentMarkdownLines.push(...currentTableLines);
+        currentTableLines = [];
+        return;
+      }
+
+      const headerLine = currentTableLines[separatorIdx - 1];
+      const rowsLines = currentTableLines.slice(separatorIdx + 1);
       const rawContent = currentTableLines.join('\n');
 
       const splitRow = (line: string) => {
@@ -540,14 +553,28 @@ export function parseContentWithTables(input: string): ContentPart[] {
       };
 
       const headers = splitRow(headerLine);
-      const rows = rowsLines.map(splitRow);
+      const rows = rowsLines
+        .filter(l => l.trim() !== '') // skip any empty lines in rows
+        .map(splitRow);
 
-      parts.push({
-        type: 'table',
-        headers,
-        rows,
-        rawContent,
-      });
+      // Only emit as table if we have headers and at least the structure is valid
+      if (headers.length > 0) {
+        // If there were lines before the header, flush them as markdown
+        const preHeaderLines = currentTableLines.slice(0, separatorIdx - 1);
+        if (preHeaderLines.length > 0) {
+          currentMarkdownLines.push(...preHeaderLines);
+          flushMarkdown();
+        }
+
+        parts.push({
+          type: 'table',
+          headers,
+          rows,
+          rawContent,
+        });
+      } else {
+        currentMarkdownLines.push(...currentTableLines);
+      }
       currentTableLines = [];
     } else if (currentTableLines.length > 0) {
       // Not enough lines for a table, treat as regular markdown
@@ -572,7 +599,12 @@ export function parseContentWithTables(input: string): ContentPart[] {
     const isClassicTableLine = hasPipes && trimmed.startsWith('|') && trimmed.endsWith('|');
     const isSeparatorRow = hasPipes && /^[\s|:-]+$/.test(trimmed) && /---/.test(trimmed);
 
-    if (isClassicTableLine) {
+    // Skip empty lines while collecting table lines (LLMs sometimes add blank lines in tables)
+    if (currentTableLines.length > 0 && trimmed === '') {
+      continue;
+    }
+
+    if (isClassicTableLine || isSeparatorRow) {
       flushMarkdown();
       currentTableLines.push(line);
     } else if (hasPipes && currentTableLines.length > 0) {
@@ -580,8 +612,9 @@ export function parseContentWithTables(input: string): ContentPart[] {
       currentTableLines.push(line);
     } else if (hasPipes && currentTableLines.length === 0) {
       // Potential table header without leading/trailing pipes — look ahead for separator
-      const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
-      const nextIsSeparator = nextLine.includes('|') && /^[\s|:-]+$/.test(nextLine) && /---/.test(nextLine);
+      const nextNonEmpty = lines.slice(i + 1).find(l => l.trim() !== '');
+      const nextTrimmed = nextNonEmpty?.trim() || '';
+      const nextIsSeparator = nextTrimmed.includes('|') && /^[\s|:-]+$/.test(nextTrimmed) && /---/.test(nextTrimmed);
       if (nextIsSeparator) {
         flushMarkdown();
         currentTableLines.push(line);
