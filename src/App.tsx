@@ -843,7 +843,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         ? '\n\n---\n' + fileContexts.map(f => `Attached file: ${f.name}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
         : '';
       const queryWithFile = messageToSend + fileAppendix;
-      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages[0]?.content ?? undefined);
+      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages.length > 0 ? attachedImages.map(img => img.content) : undefined);
       abortControllerRef.current = null;
 
       // Handle agent goal detection

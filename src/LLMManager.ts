@@ -95,9 +95,26 @@ export async function queryLiteLLM(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (chatProvider === 'ollama') {
+    // Ollama uses a different image format: { role, content, images: [base64...] }
+    const ollamaMessages = messages.map(m => {
+      if (Array.isArray(m.content)) {
+        const textParts = m.content.filter((p: any) => p.type === 'text').map((p: any) => p.text);
+        const imageParts = m.content.filter((p: any) => p.type === 'image_url').map((p: any) => {
+          const url: string = p.image_url.url;
+          // Strip data URL prefix to get raw base64
+          return url.includes(',') ? url.split(',')[1] : url;
+        });
+        return {
+          role: m.role,
+          content: textParts.join('\n'),
+          ...(imageParts.length > 0 ? { images: imageParts } : {}),
+        };
+      }
+      return m;
+    });
     requestBody = {
       model: model,
-      messages: messages,
+      messages: ollamaMessages,
       stream: false,
       options: {
         num_predict: getMaxTokensForModel(model),

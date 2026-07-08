@@ -218,12 +218,13 @@ async function fetchPageContext(budget: number): Promise<string> {
   return '';
 }
 
-export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string): Promise<string | EditQueryResult> {
+export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string | string[]): Promise<string | EditQueryResult> {
   lastMemorySaved = false;
   pendingAgentGoal = null;
 
   // Detect multi-step goals and route to agent loop
-  if (settings.agentMode === 'on' && !editMode && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
+  // Skip goal detection when an image is attached — images need the multipart message path
+  if (settings.agentMode === 'on' && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
     pendingAgentGoal = query;
     return '__AGENT_GOAL_DETECTED__';
   }
@@ -283,13 +284,21 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Assemble user message
   let userMessage = pageContextText + vectorContextText + editContextText;
-  if (editMode && imageDataUrl) {
-    userMessage += `\nNote: The user has attached an image. Use "![attached image]()" as placeholder.\n\n`;
+  // Normalize imageDataUrl to array
+  const images: string[] = imageDataUrl
+    ? (Array.isArray(imageDataUrl) ? imageDataUrl : [imageDataUrl])
+    : [];
+
+  if (editMode && images.length > 0) {
+    userMessage += `\nNote: The user has attached ${images.length > 1 ? images.length + ' images' : 'an image'}. Use "![attached image]()" as placeholder.\n\n`;
   }
   userMessage += query;
 
-  const userContent: string | MessageContentPart[] = imageDataUrl
-    ? [{ type: 'text', text: userMessage }, { type: 'image_url', image_url: { url: imageDataUrl } }]
+  const userContent: string | MessageContentPart[] = images.length > 0
+    ? [
+        { type: 'text', text: userMessage } as MessageContentPart,
+        ...images.map(url => ({ type: 'image_url', image_url: { url } }) as MessageContentPart),
+      ]
     : userMessage;
 
   const messages: ChatMessage[] = [
