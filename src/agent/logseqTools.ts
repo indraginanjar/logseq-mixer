@@ -50,14 +50,14 @@ export const LOGSEQ_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'logseq_insert_block',
-      description: 'Insert a new block as a child of the specified parent block.',
+      description: 'Insert a new block. If parentBlockUUID is provided, inserts as a child of that block. If omitted, inserts into the current page or auto-creates a new page. Always call this directly — do NOT ask the user for a target.',
       parameters: {
         type: 'object',
         properties: {
-          parentBlockUUID: { type: 'string', description: 'UUID of the parent block' },
+          parentBlockUUID: { type: 'string', description: 'UUID of the parent block or page. Optional — if omitted, uses current page or creates a new page automatically.' },
           content: { type: 'string', description: 'Block content to insert' },
         },
-        required: ['parentBlockUUID', 'content'],
+        required: ['content'],
       },
     },
   },
@@ -125,7 +125,29 @@ export async function executeLogseqTool(name: string, args: any): Promise<string
       return matches.length > 0 ? matches.join('\n') : `No pages matching "${args.query}".`;
     }
     case 'logseq_insert_block': {
-      const block = await logseq.Editor.insertBlock(args.parentBlockUUID, args.content, { sibling: false });
+      let parentUUID = args.parentBlockUUID;
+      // If no parent provided, auto-create a page and use it as parent
+      if (!parentUUID) {
+        let page = await logseq.Editor.getCurrentPage();
+        if (!page) {
+          const currentBlock = await logseq.Editor.getCurrentBlock();
+          if (currentBlock?.page) page = await logseq.Editor.getPage(currentBlock.page.id);
+        }
+        // Exclude internal Mixer pages
+        const pName = page ? String((page as any).name || '') : '';
+        if (page && (pName.startsWith('Mixer/') || pName.startsWith('mixer/'))) {
+          page = null;
+        }
+        if (page) {
+          parentUUID = (page as any).uuid;
+        } else {
+          // No page open — create one
+          const newPage = await logseq.Editor.createPage('Mixer Notes', {}, { journal: false, redirect: false });
+          if (!newPage) return 'Failed to insert block: no page open and could not create one.';
+          parentUUID = newPage.uuid;
+        }
+      }
+      const block = await logseq.Editor.insertBlock(parentUUID, args.content, { sibling: false });
       if (!block) return 'Failed to insert block.';
       return `Inserted block: ${block.uuid}`;
     }

@@ -104,6 +104,10 @@ export async function getActivePageContext(): Promise<{
     }
 
     const pageName: string = String(page.name ?? page.originalName ?? '');
+    // Exclude internal Mixer system pages from being treated as active page
+    if (pageName.toLowerCase().startsWith('mixer/')) {
+      return null;
+    }
     const pageUUID: string = String(page.uuid ?? '');
     const selectedBlockUUID = currentBlock ? String(currentBlock.uuid) : null;
     const selectedBlockContent = currentBlock ? String(currentBlock.content ?? '') : null;

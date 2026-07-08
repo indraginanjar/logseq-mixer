@@ -11,11 +11,21 @@ const OBVIOUS_QUERY_PATTERNS = [
   /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|sure)\b/i,
 ];
 
+// Single-step write/edit requests that should go through edit mode, not the agent
+const SINGLE_ACTION_PATTERNS = [
+  /^(write|add|insert|put|create|make)\s+(to\s+)?(a\s+)?(new\s+)?(block|bullet|item|entry|line|note)\b/i,
+  /^(write|add|insert|put)\s+(to\s+)?(a\s+)?(new\s+)?(block|bullet|item|entry|line|note)\s+["'""].+["'""]/i,
+  /^(write|add|insert|put)\s+["'""].+["'""]\s*(to|in|on|into|under|as)?\s*(a\s+)?(new\s+)?(block|page)?/i,
+  /^(update|change|edit|modify|rename|delete|remove)\s+(the\s+)?(block|bullet|this|current)/i,
+];
+
 function isObviouslyNotGoal(message: string): boolean {
   const trimmed = message.trim();
   if (trimmed.length < 15) return true;
   if (trimmed.endsWith('?') && trimmed.length < 80) return true;
-  return OBVIOUS_QUERY_PATTERNS.some(p => p.test(trimmed));
+  if (OBVIOUS_QUERY_PATTERNS.some(p => p.test(trimmed))) return true;
+  if (SINGLE_ACTION_PATTERNS.some(p => p.test(trimmed))) return true;
+  return false;
 }
 
 export async function detectGoal(

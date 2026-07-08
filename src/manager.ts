@@ -197,6 +197,13 @@ async function fetchPageContext(budget: number): Promise<string> {
       const currentBlock = await logseq.Editor.getCurrentBlock();
       if (currentBlock && currentBlock.page) page = await logseq.Editor.getPage(currentBlock.page.id);
     }
+    // Exclude internal Mixer system pages
+    if (page !== null) {
+      const pName = String((page as any).name || '');
+      if (pName.toLowerCase().startsWith('mixer/')) {
+        page = null;
+      }
+    }
     if (page !== null) {
       const pageContent = await logseq.Editor.getPageBlocksTree(page.uuid);
       const formatBlock = (b: any, depth = 0): string => {
@@ -224,6 +231,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Detect multi-step goals and route to agent loop
   // Skip goal detection when an image is attached — images need the multipart message path
+  // Skip goal detection when edit mode is on — edit mode handles write requests directly
   if (settings.agentMode === 'on' && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
     pendingAgentGoal = query;
     return '__AGENT_GOAL_DETECTED__';

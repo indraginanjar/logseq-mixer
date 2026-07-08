@@ -28,6 +28,14 @@ PLANNING RULES:
 const STEP_SYSTEM_PROMPT = `You are an execution agent for Logseq. Execute the given step and return the ACTUAL result — not a plan or description of what to do.
 Available Logseq APIs: getPage(name), getPageBlocksTree(nameOrUuid), getAllPages(), insertBlock(parentUUID, content, {sibling:false}), updateBlock(uuid, content), removeBlock(uuid), createPage(name, {}, {journal:false, redirect:false}).
 
+For "write" action steps, respond with a JSON object specifying the action:
+- To INSERT a block: {"action":"insert","parentBlockUUID":"<uuid>","content":"<text>"}
+- To UPDATE a block: {"action":"update","blockUUID":"<uuid>","content":"<text>"}
+- To DELETE a block: {"action":"delete","blockUUID":"<uuid>"}
+- To CREATE a new page (ONLY when explicitly asked): {"action":"createPage","pageName":"<name>"}
+
+IMPORTANT: Default to "insert" for writing content. Use "createPage" ONLY when the user explicitly requests creating a new page. If you need to write content to the current page, use "insert" with the page UUID or an existing block UUID as parentBlockUUID.
+
 CRITICAL RULES:
 - For "think" steps: produce the ACTUAL output described (e.g., if the step says "construct a table", write the complete table with real data from previous context — do NOT write a plan for how to construct it).
 - For action steps: respond with a JSON action to execute.
@@ -328,9 +336,41 @@ RULES:
     }
 
     // For read, write, think steps: single LLM call + action
+    let writeContext = '';
+    if (step.type === 'write') {
+      try {
+        let page = await logseq.Editor.getCurrentPage();
+        if (!page) {
+          const block = await logseq.Editor.getCurrentBlock();
+          if (block?.page) page = await logseq.Editor.getPage(block.page.id);
+        }
+        // Exclude internal Mixer pages from being used as write target
+        const pageName = page ? String((page as any).name || (page as any).uuid || '') : '';
+        if (page && (pageName.startsWith('Mixer/') || pageName.startsWith('mixer/'))) {
+          page = null;
+        }
+        if (page) {
+          const blocks = await logseq.Editor.getPageBlocksTree(pageName);
+          const formatBlock = (b: any, depth = 0): string => {
+            const indent = '  '.repeat(depth);
+            let text = `${indent}[uuid:${b.uuid}] ${b.content}\n`;
+            if (b.children) {
+              for (const child of b.children) text += formatBlock(child, depth + 1);
+            }
+            return text;
+          };
+          const tree = blocks?.map((b: any) => formatBlock(b)).join('') || '(empty page)';
+          writeContext = `\n\nCurrent page: "${pageName}"\nPage UUID: "${(page as any).uuid}" (use as parentBlockUUID to insert top-level blocks)\nBlock tree:\n${tree}`;
+        } else {
+          // No current page — tell LLM to just use insert, the system will auto-create a page
+          writeContext = `\n\nNOTE: No page is currently open/selected. Just use {"action":"insert","content":"<your content>"} — the system will automatically create a new page and insert the block there.`;
+        }
+      } catch { /* ignore */ }
+    }
+
     const messages: ChatMessage[] = [
       { role: 'system', content: STEP_SYSTEM_PROMPT },
-      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using ALL the data above — especially the "Gathered Data (Working Memory)" section if present — produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
+      { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}${writeContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using ALL the data above — especially the "Gathered Data (Working Memory)" section if present — produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
     ];
 
     const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, this.settings.chatEndpoint || this.settings.LiteLLMLink, this.signal, undefined, this.settings.chatProvider);
@@ -381,12 +421,34 @@ RULES:
         if (!this.canWrite) {
           return `[Direct Page Edit OFF] Would ${action.action}: ${action.content || action.pageName || 'block operation'}`;
         }
-        const cmd = { action: action.action, blockUUID: action.blockUUID, parentBlockUUID: action.parentBlockUUID, content: action.content };
         if (action.action === 'createPage') {
           const page = await logseq.Editor.createPage(action.pageName, {}, { journal: false, redirect: false });
-          if (page) context.createdPages.push(action.pageName);
-          return `Created page: ${action.pageName}`;
+          if (page) {
+            context.createdPages.push(action.pageName);
+            // Always insert content as first block: use explicit content, or fall back to pageName
+            const blockContent = action.content || action.pageName;
+            const block = await logseq.Editor.insertBlock(page.uuid, blockContent, { sibling: false });
+            if (block) context.createdBlockUUIDs.push(block.uuid);
+            return `📄 Created new page: "${action.pageName}" and wrote block: "${blockContent}"`;
+          }
+          return `Failed to create page: "${action.pageName}"`;
         }
+
+        // For insert: if no parentBlockUUID provided, auto-create a page and insert there
+        if (action.action === 'insert' && !action.parentBlockUUID && action.content) {
+          // Derive a page name from the goal or content
+          const autoPageName = context.goal.length > 50 ? context.goal.slice(0, 50) + '…' : context.goal;
+          const page = await logseq.Editor.createPage(autoPageName, {}, { journal: false, redirect: false });
+          if (page) {
+            context.createdPages.push(autoPageName);
+            const block = await logseq.Editor.insertBlock(page.uuid, action.content, { sibling: false });
+            if (block) context.createdBlockUUIDs.push(block.uuid);
+            return `📄 No page was open — created "${autoPageName}" and wrote block: "${action.content}"`;
+          }
+          throw new Error('Failed to create page for block insertion');
+        }
+
+        const cmd = { action: action.action, blockUUID: action.blockUUID, parentBlockUUID: action.parentBlockUUID, content: action.content };
         const outcome = await executeOne(cmd);
         if (outcome.status === 'success') {
           if (outcome.insertedBlockUUID) context.createdBlockUUIDs.push(outcome.insertedBlockUUID);
