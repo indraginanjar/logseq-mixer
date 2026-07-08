@@ -686,7 +686,7 @@ const getMarkdownComponents = (
     const isSVG = language === 'svg' || (language === 'html' && codeContent.trim().startsWith('<svg'));
 
     if (isMermaid) {
-      return <MermaidChart code={codeContent} />;
+      return <MermaidTabbedPanel code={codeContent} />;
     }
 
     if (isSVG || (!language && codeContent.trim().startsWith('<svg'))) {
@@ -865,6 +865,103 @@ const renderMarkdownWithProperties = (
     </>
   );
 };
+
+function MermaidTabbedPanel({ code }: { code: string }) {
+  const [activeTab, setActiveTab] = React.useState<'preview' | 'code'>('preview');
+  const [copied, setCopied] = React.useState(false);
+  const previewRef = React.useRef<HTMLDivElement>(null);
+
+  const handleCopy = async () => {
+    try {
+      if (activeTab === 'code') {
+        await navigator.clipboard.writeText(code);
+        setCopied(true);
+      } else if (activeTab === 'preview') {
+        // Copy the rendered chart as an image
+        const svgEl = previewRef.current?.querySelector('svg');
+        if (svgEl) {
+          const bbox = svgEl.getBoundingClientRect();
+          const width = bbox.width || svgEl.clientWidth || 400;
+          const height = bbox.height || svgEl.clientHeight || 300;
+          const svgData = new XMLSerializer().serializeToString(svgEl);
+          const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(svgBlob);
+          const img = new Image();
+          img.onload = async () => {
+            const canvas = document.createElement('canvas');
+            const scale = 2;
+            canvas.width = width * scale;
+            canvas.height = height * scale;
+            const ctx = canvas.getContext('2d')!;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.scale(scale, scale);
+            ctx.drawImage(img, 0, 0, width, height);
+            URL.revokeObjectURL(url);
+            canvas.toBlob(async (blob) => {
+              if (!blob) return;
+              try {
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                setCopied(true);
+              } catch {
+                await navigator.clipboard.writeText(svgData);
+                setCopied(true);
+              }
+            }, 'image/png');
+          };
+          img.src = url;
+        }
+      }
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleTabChange = (tab: 'preview' | 'code') => {
+    setActiveTab(tab);
+    setCopied(false);
+  };
+
+  return (
+    <SpecialPanel>
+      <PanelHeader>
+        <PanelTabButton
+          active={activeTab === 'preview'}
+          data-active={activeTab === 'preview'}
+          onClick={() => handleTabChange('preview')}
+        >
+          Preview
+        </PanelTabButton>
+        <PanelTabButton
+          active={activeTab === 'code'}
+          data-active={activeTab === 'code'}
+          onClick={() => handleTabChange('code')}
+        >
+          Code
+        </PanelTabButton>
+        <CopyButton
+          copied={copied}
+          onClick={handleCopy}
+          title={copied ? 'Copied!' : activeTab === 'code' ? 'Copy mermaid code' : 'Copy chart as image'}
+        >
+          {copied ? <CheckIcon /> : <CopyIcon />}
+          {copied ? 'Copied' : activeTab === 'code' ? 'Copy' : 'Copy Image'}
+        </CopyButton>
+      </PanelHeader>
+
+      <TabPanel active={activeTab === 'preview'}>
+        <div ref={previewRef}>
+          <MermaidChart code={code} />
+        </div>
+      </TabPanel>
+
+      <TabPanel active={activeTab === 'code'}>
+        <CodeArea>{code}</CodeArea>
+      </TabPanel>
+    </SpecialPanel>
+  );
+}
 
 function MarkdownTabbedPanel({
   content,
