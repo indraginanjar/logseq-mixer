@@ -872,7 +872,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             // Stream completed step outputs to chat when verbose + persist is on
             const persistVerbose = verboseMode && (settings.agentPersistVerboseToChat as boolean);
             if (persistVerbose && event.type === 'step_complete' && event.step?.output) {
-              const stepMsg = `**Step ${event.step.id}** [${event.step.type}]: ${event.step.description}\n\n${event.step.output}`;
+              const badge = event.step.type === 'gather' ? '📥' : event.step.type === 'search' ? '🔍' : event.step.type === 'read' ? '📖' : event.step.type === 'write' ? '✏️' : event.step.type === 'tool' ? '🔧' : '💭';
+              const stepMsg = `${badge} **Step ${event.step.id}** — ${event.step.description}\n\n${event.step.output}`;
               setMessages(prev => [...prev, {
                 id: `agent_step_${event.step!.id}_${Date.now()}`,
                 content: stepMsg,
@@ -880,7 +881,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               }]);
             }
             if (persistVerbose && event.type === 'step_failed' && event.step?.error) {
-              const failMsg = `**Step ${event.step.id}** [${event.step.type}]: ${event.step.description}\n\n❌ ${event.step.error}`;
+              const failMsg = `❌ **Step ${event.step.id} failed** — ${event.step.description}\n\n${event.step.error}`;
               setMessages(prev => [...prev, {
                 id: `agent_step_${event.step!.id}_fail_${Date.now()}`,
                 content: failMsg,
@@ -888,7 +889,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               }]);
             }
             if (persistVerbose && event.type === 'self_correcting' && event.step) {
-              const correctMsg = `↩️ **Self-correcting step ${event.step.id}:** ${event.message}`;
+              const correctMsg = `↩️ **Correcting step ${event.step.id}** — ${event.message}`;
               setMessages(prev => [...prev, {
                 id: `agent_correct_${event.step!.id}_${Date.now()}`,
                 content: correctMsg,
@@ -902,16 +903,42 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               // Convert completed agent plan to a chat message so it scrolls with history
               const currentPlan = agentPlanRef.current;
               if (currentPlan) {
+                const completed = currentPlan.steps.filter(s => s.status === 'done').length;
+                const failed = currentPlan.steps.filter(s => s.status === 'failed').length;
+                const total = currentPlan.steps.length;
+                const isAborted = event.type === 'aborted';
+
                 const stepsSummary = currentPlan.steps.map(s => {
-                  const icon = s.status === 'done' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'skipped' ? '⏭️' : '⏳';
-                  const verboseInfo = persistVerbose && s.tokensUsed ? ` *(${s.tokensUsed} tok)*` : '';
-                  return `${icon} ${s.id}. ${s.description}${verboseInfo}`;
-                }).join('  \n');
+                  const icon = s.status === 'done' ? '✓' : s.status === 'failed' ? '✗' : s.status === 'skipped' ? '→' : '○';
+                  const badge = s.type === 'gather' ? '📥' : s.type === 'search' ? '🔍' : s.type === 'read' ? '📖' : s.type === 'write' ? '✏️' : s.type === 'tool' ? '🔧' : '💭';
+                  const tokenInfo = persistVerbose && s.tokensUsed ? `  \`${Math.round(s.tokensUsed / 1000)}k tok\`` : '';
+                  return `| ${icon} | ${badge} ${s.description}${tokenInfo} |`;
+                }).join('\n');
+
+                const statusLine = isAborted
+                  ? `⚠️ *Stopped — ${completed}/${total} steps completed*`
+                  : failed > 0
+                    ? `⚠️ *Completed with ${failed} failed step${failed > 1 ? 's' : ''} — ${completed}/${total} succeeded*`
+                    : `✅ *All ${total} steps completed successfully*`;
+
+                const tokenSummary = persistVerbose ? ` • ${Math.round(event.tokensUsed / 1000)}k tokens used` : '';
+
                 // Include the last completed step's output as the final answer
                 const doneSteps = currentPlan.steps.filter(s => s.status === 'done' && s.output);
                 const lastOutput = doneSteps.length > 0 ? doneSteps[doneSteps.length - 1].output : '';
                 const finalAnswer = lastOutput ? `\n\n---\n\n${lastOutput}` : '';
-                const messageContent = `🤖 **Goal:** ${currentPlan.goal}\n\n${stepsSummary}\n\n${event.message}${finalAnswer}`;
+
+                const messageContent = [
+                  `### 🤖 ${currentPlan.goal}`,
+                  '',
+                  '| | Step |',
+                  '|---|---|',
+                  stepsSummary,
+                  '',
+                  `${statusLine}${tokenSummary}`,
+                  finalAnswer,
+                ].join('\n');
+
                 setMessages(prev => [...prev, {
                   id: `agent_${Date.now()}`,
                   content: messageContent,
