@@ -4,6 +4,7 @@ import { parseEditCommands } from 'editCommandParser';
 import { buildEditSystemPrompt, buildPageContextMessage } from 'editPromptBuilder';
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
+import { shouldRetrieveContext } from 'intentClassifier';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
 import { queryLiteLLM, type ChatMessage, type MessageContentPart, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
 import { countTokens, encode, decode } from 'tokenizer';
@@ -240,7 +241,11 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
-  const vectorContext = await retrieveVectorContext(query, settings, storageProvider);
+  // Determine whether RAG retrieval is needed for this query
+  const needsRetrieval = shouldRetrieveContext(query);
+  const vectorContext = needsRetrieval
+    ? await retrieveVectorContext(query, settings, storageProvider)
+    : '';
 
   // Build system message
   let systemMessage = settings.prompt;
@@ -290,8 +295,8 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     userBudget -= countTokens(vectorContextText);
   }
 
-  // Assemble user message
-  let userMessage = pageContextText + vectorContextText + editContextText;
+  // Assemble user message — user's request comes FIRST so the LLM sees intent before context
+  let userMessage = query + "\n";
   // Normalize imageDataUrl to array
   const images: string[] = imageDataUrl
     ? (Array.isArray(imageDataUrl) ? imageDataUrl : [imageDataUrl])
@@ -300,7 +305,17 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   if (editMode && images.length > 0) {
     userMessage += `\nNote: The user has attached ${images.length > 1 ? images.length + ' images' : 'an image'}. Use "![attached image]()" as placeholder.\n\n`;
   }
-  userMessage += query;
+
+  // Append context AFTER the user's query, clearly labeled as supplementary
+  if (vectorContextText) {
+    userMessage += "\n---\nContext from knowledge base (use ONLY if relevant to the request above):\n" + vectorContextText;
+  }
+  if (pageContextText) {
+    userMessage += "\n---\nCurrent page context:\n" + pageContextText;
+  }
+  if (editContextText) {
+    userMessage += "\n---\n" + editContextText;
+  }
 
   const userContent: string | MessageContentPart[] = images.length > 0
     ? [

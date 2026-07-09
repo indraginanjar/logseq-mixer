@@ -10,12 +10,14 @@ export interface HybridSearchOptions {
   limit?: number;       // max results, default 5
   threshold?: number;   // vector similarity threshold, default 0.5
   rrfK?: number;        // RRF constant, default 60
+  minRrfScore?: number; // minimum RRF score to include a result, default 0.025
   accelerator?: VectorSearchAccelerator;  // optional HNSW accelerator for fast vector search
 }
 
 const DEFAULT_LIMIT = 5;
 const DEFAULT_THRESHOLD = 0.5;
 const DEFAULT_RRF_K = 60;
+const DEFAULT_MIN_RRF_SCORE = 0.025;
 
 export async function hybridSearch(
   query: string,
@@ -27,6 +29,7 @@ export async function hybridSearch(
   const limit = options?.limit ?? DEFAULT_LIMIT;
   const threshold = options?.threshold ?? DEFAULT_THRESHOLD;
   const rrfK = options?.rrfK ?? DEFAULT_RRF_K;
+  const minRrfScore = options?.minRrfScore ?? DEFAULT_MIN_RRF_SCORE;
 
   // 1. Classify the query — default to mixed on error
   let bm25Weight = 1;
@@ -83,11 +86,11 @@ export async function hybridSearch(
     typeof (storageProvider as any).getDepthMetadata === 'function';
 
   if (!hasDepthMetadata || merged.length === 0) {
-    return merged;
+    return merged.filter(hit => hit.rrfScore >= minRrfScore);
   }
 
   const depthMeta = (storageProvider as any).getDepthMetadata(merged.map((h: RankedHit) => h.id)) as Map<string, { rootDepth: number; hasHeading: boolean }>;
   const weighted = applyDepthWeight(merged, depthMeta);
   weighted.sort((a, b) => b.weightedRrfScore - a.weightedRrfScore);
-  return weighted.slice(0, limit);
+  return weighted.filter(hit => hit.rrfScore >= minRrfScore).slice(0, limit);
 }
