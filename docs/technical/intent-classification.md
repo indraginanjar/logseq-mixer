@@ -8,11 +8,17 @@ This prevents the common failure mode where unrelated notes are retrieved and th
 
 ## How It Works
 
-When a message is sent, three layers of defense ensure the LLM responds to the user's intent rather than irrelevant retrieved context:
+When a message is sent, multiple layers of defense ensure the LLM responds to the user's intent rather than irrelevant retrieved context:
 
 ```
-User Query
+User Query (± image attachment)
     │
+    ▼
+┌─────────────────────────┐
+│  0. Image Bypass         │  → Image attached? Skip RAG entirely
+│     (hasImages check)    │
+└─────────────────────────┘
+    │ (no image)
     ▼
 ┌─────────────────────────┐
 │  1. Intent Classifier    │  → Should we retrieve context at all?
@@ -33,6 +39,68 @@ User Query
     │
     ▼
   Response
+```
+
+---
+
+## Layer 0: Image Attachment Bypass
+
+**File:** `src/manager.ts`
+
+When the user attaches one or more images to their message, RAG retrieval is **always skipped** regardless of the query text. This is because:
+
+1. **The user is asking about the image** — injecting unrelated knowledge base chunks distracts the vision model from analyzing the image content.
+2. **Context budget** — images consume significant context window space. Adding RAG chunks on top risks exceeding token limits or pushing the image processing out of the model's attention.
+3. **Noise reduction** — BM25 keyword matching on the query text (e.g., "explain this image") would match irrelevant notes containing those common words.
+
+### Image Hint Injection
+
+When images are attached (outside edit mode), a hint is injected into the text part of the multipart message:
+
+```
+[An image is attached below. Analyze the image content to answer the user's request.]
+```
+
+This ensures the model knows to look at the `image_url` content parts rather than claiming it cannot see an image. In edit mode, a different hint is used:
+
+```
+Note: The user has attached an image. Use "![attached image]()" as placeholder.
+```
+
+### Supported Providers
+
+Image attachments require a vision-capable model:
+
+| Provider | Vision Models |
+|----------|--------------|
+| OpenAI | GPT-4o, GPT-4 Turbo, GPT-5 series |
+| Ollama | LLaVA, Llama 3.2 Vision, BakLLaVA |
+| LiteLLM | Claude 3/3.5/4, Gemini 1.5 Pro, Gemini 2, any vision model |
+
+Non-vision models will receive the image data in the API call but may ignore it or respond with "I cannot see the image." This is a model limitation, not a plugin bug.
+
+### Message Format
+
+For OpenAI-compatible APIs, images are sent as multipart content:
+
+```json
+{
+  "role": "user",
+  "content": [
+    { "type": "text", "text": "User's query + hint" },
+    { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }
+  ]
+}
+```
+
+For Ollama, images are converted to the native format:
+
+```json
+{
+  "role": "user",
+  "content": "User's query + hint",
+  "images": ["<base64 data>"]
+}
 ```
 
 ---
@@ -189,6 +257,16 @@ This ensures the LLM sees the user's intent before encountering any context, red
 4. **LLM receives:** Query with no context
 5. **Result:** LLM answers from its training knowledge (no misleading notes injected)
 
+### Example 5: Image Attachment (RAG bypassed)
+
+**Query:** "Explain this image. Then search for more information about it." *(with image attached)*
+
+1. **Image bypass:** `hasImages = true` → RAG retrieval skipped entirely
+2. **No embedding call, no BM25 search**
+3. **Hint injected:** `[An image is attached below. Analyze the image content to answer the user's request.]`
+4. **LLM receives:** Multipart message with text (query + hint) and image_url data
+5. **Result:** Vision model analyzes the image and responds based on its content
+
 ---
 
 ## Configuration
@@ -196,3 +274,5 @@ This ensures the LLM sees the user's intent before encountering any context, red
 The intent classifier has no user-facing settings — it's designed to work transparently. The RRF threshold (`0.025`) is a code-level constant in `hybridSearch.ts` that can be tuned if needed.
 
 The system prompt priority rules are part of the default prompt in plugin settings. Users who customize their prompt should preserve the PRIORITY RULE section to maintain correct behavior.
+
+The image bypass is unconditional — whenever an image is attached, RAG is skipped. This cannot be overridden. If a user needs to reference their notes while also attaching an image, they should send the note-related query separately without the image, or use `[[page links]]` in their message to let the ReAct tool loop fetch page content on demand.

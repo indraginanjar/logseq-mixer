@@ -242,7 +242,9 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   conversationHistory.push({ role: "user", content: query });
 
   // Determine whether RAG retrieval is needed for this query
-  const needsRetrieval = shouldRetrieveContext(query);
+  // Skip retrieval when images are attached — the user is asking about the image, not their notes
+  const hasImages = !!imageDataUrl && (Array.isArray(imageDataUrl) ? imageDataUrl.length > 0 : true);
+  const needsRetrieval = !hasImages && shouldRetrieveContext(query);
   const vectorContext = needsRetrieval
     ? await retrieveVectorContext(query, settings, storageProvider)
     : '';
@@ -304,6 +306,8 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   if (editMode && images.length > 0) {
     userMessage += `\nNote: The user has attached ${images.length > 1 ? images.length + ' images' : 'an image'}. Use "![attached image]()" as placeholder.\n\n`;
+  } else if (images.length > 0) {
+    userMessage += `\n[${images.length > 1 ? images.length + ' images are' : 'An image is'} attached below. Analyze the image content to answer the user's request.]\n`;
   }
 
   // Append context AFTER the user's query, clearly labeled as supplementary
