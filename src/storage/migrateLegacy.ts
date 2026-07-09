@@ -47,11 +47,15 @@ export function migrateLegacyOrama(db: Database): { migrated: number; errors: nu
     const parsed = JSON.parse(raw);
     docsMap = parsed?.data?.docs?.docs;
     if (!docsMap || typeof docsMap !== 'object') {
-      console.warn('[migrateLegacyOrama] Orama JSON missing data.docs.docs structure.');
+      console.warn('[migrateLegacyOrama] Orama JSON missing data.docs.docs structure. Removing stale entry.');
+      // Delete the unusable entry to prevent re-triggering on every startup
+      try { db.run("DELETE FROM kv_store WHERE key = 'orama_db'"); } catch {}
       return stats;
     }
   } catch (err) {
     console.warn('[migrateLegacyOrama] Orama JSON is corrupted/unparseable:', err);
+    // Delete the unusable entry to prevent re-triggering on every startup
+    try { db.run("DELETE FROM kv_store WHERE key = 'orama_db'"); } catch {}
     return stats;
   }
 
