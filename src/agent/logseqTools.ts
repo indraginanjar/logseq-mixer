@@ -22,7 +22,7 @@ export const LOGSEQ_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'logseq_get_blocks',
-      description: 'Get the block tree of a Logseq page. Returns hierarchical block content.',
+      description: 'Get the block tree of a Logseq page. Returns hierarchical block content formatted as an indented tree. IMPORTANT: Indentation represents parent-child nesting (sub-blocks). Each level of indentation (2 spaces) means the block is a child (sub-block) of the nearest block above it with less indentation. For example:\n- [uuid1] Parent block\n  - [uuid2] Sub-block of uuid1\n    - [uuid3] Sub-block of uuid2 (grandchild of uuid1)\n  - [uuid4] Another sub-block of uuid1\nTo find sub-blocks of a specific block, look for all blocks indented one level deeper directly beneath it.',
       parameters: {
         type: 'object',
         properties: {
@@ -113,7 +113,8 @@ export async function executeLogseqTool(name: string, args: any): Promise<string
         }
         return text;
       };
-      return blocks.map((b: any) => format(b)).join('');
+      const header = `Block tree for "${args.page}" (each indentation level = sub-block/child of the parent above):\n`;
+      return header + blocks.map((b: any) => format(b)).join('');
     }
     case 'logseq_search_pages': {
       const pages = await logseq.Editor.getAllPages();

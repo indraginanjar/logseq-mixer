@@ -12,21 +12,28 @@ Available capabilities:
 - write: Insert, update, or delete blocks in Logseq pages; create new pages
 - search: Search the knowledge base using hybrid vector+keyword search
 - tool: Use external MCP tools (if available)
-- think: Analyze information and reason about next steps
-- gather: Read MULTIPLE pages in batches, extracting and summarizing key information from each. Use this when the goal requires processing more than 3 pages or collecting data across many sources. The gather step handles batching, per-page summarization, and accumulation automatically.
+- think: Analyze information and reason about next steps (also use this when you need to process data already available in the context)
+- gather: Read MULTIPLE pages in batches, extracting and summarizing key information from each. Use this ONLY when the goal requires processing more than 3 DIFFERENT PAGES or collecting data across many sources.
 
 Respond with ONLY valid JSON in this format:
 {"steps":[{"id":1,"description":"...","type":"read|write|search|tool|think|gather"}],"estimatedTokens":NUMBER}
 
 PLANNING RULES:
-- Use "gather" when the goal involves reading/processing multiple pages (e.g., "find all pages about X and extract Y", "summarize my notes on Z", "create an overview from multiple sources").
+- IMPORTANT: The "Current context" below already contains the current page's FULL block tree with UUIDs, AND the user's focused/selected block with its UUID. You do NOT need a "read" or "gather" step to access sub-blocks of the current block — they are ALREADY in the context. Use a "think" step to analyze them, then "write" steps to modify them.
+- Use "gather" ONLY when the goal involves reading/processing MULTIPLE DIFFERENT PAGES (e.g., "find all pages about X and extract Y", "summarize my notes on Z"). Do NOT use "gather" for reading sub-blocks of the current block.
+- Use "read" only when you need to read a DIFFERENT page than the one already in context.
+- Use "think" to process, analyze, or extract information from data already in context (including sub-blocks of the current block).
 - A gather step description should specify WHAT to look for and WHAT to extract. Example: "Gather all machine learning pages and extract key concepts, definitions, and relationships from each."
 - Use "search" first to find relevant pages, then "gather" to process them in bulk.
-- Use "read" only for reading a single specific page.
 - Keep steps atomic and sequential. Estimate total tokens needed for all LLM calls.`;
 
 const STEP_SYSTEM_PROMPT = `You are an execution agent for Logseq. Execute the given step and return the ACTUAL result — not a plan or description of what to do.
 Available Logseq APIs: getPage(name), getPageBlocksTree(nameOrUuid), getAllPages(), insertBlock(parentUUID, content, {sibling:false}), updateBlock(uuid, content), removeBlock(uuid), createPage(name, {}, {journal:false, redirect:false}).
+
+CONTEXT UNDERSTANDING:
+- The block tree below shows the current page's blocks. Indentation = sub-blocks (children) of the parent block above.
+- "Current/Focused Block UUID" indicates the block the user has selected. Its sub-blocks are the blocks indented directly beneath it in the tree.
+- You can reference any UUID from the block tree to update or insert under any block.
 
 For "write" action steps, respond with a JSON object specifying the action:
 - To INSERT a block: {"action":"insert","parentBlockUUID":"<uuid>","content":"<text>"}
@@ -40,7 +47,8 @@ CRITICAL RULES:
 - For "think" steps: produce the ACTUAL output described (e.g., if the step says "construct a table", write the complete table with real data from previous context — do NOT write a plan for how to construct it).
 - For action steps: respond with a JSON action to execute.
 - NEVER respond with plans, outlines, or "next steps" — always produce the final deliverable directly.
-- Use the data from "Previous context" AND "Gathered Data (Working Memory)" as your source material. The Gathered Data section contains comprehensive extractions from multiple pages — this is your PRIMARY data source when available. Use it to produce the output.`;
+- Use the data from "Previous context" AND "Gathered Data (Working Memory)" as your source material. The Gathered Data section contains comprehensive extractions from multiple pages — this is your PRIMARY data source when available. Use it to produce the output.
+- When you need to update MULTIPLE blocks, you may output a JSON ARRAY of actions: [{"action":"update","blockUUID":"...","content":"..."},{"action":"update","blockUUID":"...","content":"..."}]`;
 
 const EVAL_SYSTEM_PROMPT = `Evaluate whether the step output achieved the intended goal. Respond with ONLY valid JSON:
 {"adequate":true,"reason":"...","suggestion":"alternative approach if inadequate"}
@@ -314,9 +322,17 @@ RULES:
 
     // For tool and search steps, use the full ReAct loop for iterative chaining
     if (step.type === 'tool' || step.type === 'search') {
+      // Get current focused block for context
+      let focusedBlockContext = '';
+      try {
+        const currentBlock = await logseq.Editor.getCurrentBlock();
+        if (currentBlock) {
+          focusedBlockContext = `\nCurrent/Focused Block UUID: "${currentBlock.uuid}"\nCurrent/Focused Block Content: "${currentBlock.content || ''}"\n(When the user says "this block", "current block", or "selected block", they mean the block above. Its sub-blocks are the blocks indented one level deeper directly beneath it in the tool results.)\n`;
+        }
+      } catch { /* ignore */ }
       const messages: ChatMessage[] = [
         { role: 'system', content: STEP_SYSTEM_PROMPT },
-        { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}\n\nCurrent step: ${step.description}\n\nUse the available tools to accomplish this step. Call as many tools as needed.` },
+        { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}${focusedBlockContext}\n\nCurrent step: ${step.description}\n\nUse the available tools to accomplish this step. Call as many tools as needed.` },
       ];
       const reactResult = await runReActLoop(messages, {
         settings: this.settings,
@@ -340,9 +356,9 @@ RULES:
     if (step.type === 'write') {
       try {
         let page = await logseq.Editor.getCurrentPage();
+        const currentBlock = await logseq.Editor.getCurrentBlock();
         if (!page) {
-          const block = await logseq.Editor.getCurrentBlock();
-          if (block?.page) page = await logseq.Editor.getPage(block.page.id);
+          if (currentBlock?.page) page = await logseq.Editor.getPage(currentBlock.page.id);
         }
         // Exclude internal Mixer pages from being used as write target
         const pageName = page ? String((page as any).name || (page as any).uuid || '') : '';
@@ -360,7 +376,11 @@ RULES:
             return text;
           };
           const tree = blocks?.map((b: any) => formatBlock(b)).join('') || '(empty page)';
-          writeContext = `\n\nCurrent page: "${pageName}"\nPage UUID: "${(page as any).uuid}" (use as parentBlockUUID to insert top-level blocks)\nBlock tree:\n${tree}`;
+          writeContext = `\n\nCurrent page: "${pageName}"\nPage UUID: "${(page as any).uuid}" (use as parentBlockUUID to insert top-level blocks)\n`;
+          if (currentBlock) {
+            writeContext += `Current/Focused Block UUID: "${currentBlock.uuid}"\nCurrent/Focused Block Content: "${currentBlock.content || ''}"\n(When the user says "this block", "current block", or "selected block", they mean the block above. Its sub-blocks are the blocks indented one level deeper directly beneath it in the tree below.)\n`;
+          }
+          writeContext += `Block tree (indentation = sub-blocks/children of the parent above):\n${tree}`;
         } else {
           // No current page — tell LLM to just use insert, the system will auto-create a page
           writeContext = `\n\nNOTE: No page is currently open/selected. Just use {"action":"insert","content":"<your content>"} — the system will automatically create a new page and insert the block there.`;
@@ -382,14 +402,23 @@ RULES:
     }
 
     // Try to parse as JSON action; if LLM returned natural language instead, treat as analysis
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const jsonMatch = raw.match(/\[[\s\S]*\]/) || raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return { success: true, output: raw, tokensUsed: tokens };
     }
 
     try {
-      const action = JSON.parse(jsonMatch[0]);
-      const output = await this.executeAction(step.type, action, context);
+      const parsed = JSON.parse(jsonMatch[0]);
+      // Support arrays of actions (e.g., multiple updates in one step)
+      if (Array.isArray(parsed)) {
+        const results: string[] = [];
+        for (const action of parsed) {
+          const output = await this.executeAction(step.type, action, context);
+          results.push(output);
+        }
+        return { success: true, output: results.join('\n'), tokensUsed: tokens };
+      }
+      const output = await this.executeAction(step.type, parsed, context);
       return { success: true, output, tokensUsed: tokens };
     } catch (err: any) {
       // If JSON parse fails or action execution fails, return the raw text as context

@@ -978,7 +978,16 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         });
         agentLoopRef.current = loop;
         const pageCtx = await getActivePageContext();
-        const ctxStr = pageCtx ? `Page: ${pageCtx.pageName}\n${pageCtx.formattedTree || ''}` : '';
+        let ctxStr = '';
+        if (pageCtx) {
+          ctxStr = `Page: ${pageCtx.pageName}\n`;
+          if (pageCtx.selectedBlockUUID) {
+            ctxStr += `Current/Focused Block UUID: ${pageCtx.selectedBlockUUID}\n`;
+            ctxStr += `Current/Focused Block Content: ${pageCtx.selectedBlockContent || ''}\n`;
+            ctxStr += `(When the user says "this block", "current block", or "selected block", they mean the block above. Its sub-blocks are the blocks indented directly beneath it in the tree below.)\n`;
+          }
+          ctxStr += `Block tree (indentation = sub-blocks/children of the parent above):\n${pageCtx.formattedTree || '(empty page)'}`;
+        }
         const plan = await loop.generatePlan(goal, ctxStr);
         setAgentPlan(plan);
         agentPlanRef.current = plan;

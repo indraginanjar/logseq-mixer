@@ -194,8 +194,8 @@ function buildHistoryMessages(historyBudget: number): { messages: ChatMessage[];
 async function fetchPageContext(budget: number): Promise<string> {
   try {
     let page = await logseq.Editor.getCurrentPage();
+    const currentBlock = await logseq.Editor.getCurrentBlock();
     if (page === null) {
-      const currentBlock = await logseq.Editor.getCurrentBlock();
       if (currentBlock && currentBlock.page) page = await logseq.Editor.getPage(currentBlock.page.id);
     }
     // Exclude internal Mixer system pages
@@ -209,15 +209,22 @@ async function fetchPageContext(budget: number): Promise<string> {
       const pageContent = await logseq.Editor.getPageBlocksTree(page.uuid);
       const formatBlock = (b: any, depth = 0): string => {
         const indent = '  '.repeat(depth);
-        let text = `${indent}- ${b.content}\n`;
+        let text = `${indent}- [uuid:${b.uuid}] ${b.content}\n`;
         if (b.children) {
           for (const child of b.children) text += formatBlock(child, depth + 1);
         }
         return text;
       };
       const wholePageContent = pageContent.map((b: any) => formatBlock(b)).join('');
-      const rawPageContext = "Current Page Context:\n" +
-        `current_page_open_id: ${page.id}\ncurrent_page_open_name: ${page.name}\ncurrent_page_open_content: ${wholePageContent}\n\n`;
+      let rawPageContext = "Current Page Context (block tree where indentation = sub-blocks/children of the parent above):\n" +
+        `current_page_open_id: ${page.id}\ncurrent_page_open_name: ${page.name}\n`;
+      // Include current/focused block info so the AI knows which block the user is referring to
+      if (currentBlock) {
+        rawPageContext += `current_focused_block_uuid: ${currentBlock.uuid}\n`;
+        rawPageContext += `current_focused_block_content: ${currentBlock.content || ''}\n`;
+        rawPageContext += `(When the user says "this block" or "current block", they mean the focused block above. Its sub-blocks are the indented blocks directly beneath it in the tree below.)\n`;
+      }
+      rawPageContext += `current_page_open_content:\n${wholePageContent}\n\n`;
       return truncateToTokens(rawPageContext, budget);
     }
   } catch (err) {
