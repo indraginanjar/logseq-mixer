@@ -7,14 +7,14 @@ import type { PerDocumentStorageProvider } from './storage/StorageProvider';
 import type { VectorSearchAccelerator } from './storage/VectorSearchAccelerator';
 
 export interface HybridSearchOptions {
-  limit?: number;       // max results, default 5
+  limit?: number;       // max results, default 8
   threshold?: number;   // vector similarity threshold, default 0.5
   rrfK?: number;        // RRF constant, default 60
   minRrfScore?: number; // minimum RRF score to include a result, default 0.025
   accelerator?: VectorSearchAccelerator;  // optional HNSW accelerator for fast vector search
 }
 
-const DEFAULT_LIMIT = 5;
+const DEFAULT_LIMIT = 8;
 const DEFAULT_THRESHOLD = 0.5;
 const DEFAULT_RRF_K = 60;
 const DEFAULT_MIN_RRF_SCORE = 0.025;

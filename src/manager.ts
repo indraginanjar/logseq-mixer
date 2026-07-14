@@ -4,6 +4,7 @@ import { parseEditCommands } from 'editCommandParser';
 import { buildEditSystemPrompt, buildPageContextMessage } from 'editPromptBuilder';
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
+import type { RankedHit } from 'reranker';
 import { shouldRetrieveContext } from 'intentClassifier';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
 import { queryLiteLLM, type ChatMessage, type MessageContentPart, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
@@ -163,11 +164,153 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
         console.warn(`[retrieveVectorContext] Document count in store: ${docCount}`);
       }
     }
+
+    // --- Link-aware expansion ---
+    // Extract [[page_name]] references from the initial results and query.
+    // Also detect potential page names in the query itself (multi-word capitalized phrases).
+    // Search for additional chunks containing those page names from other pages (e.g. journals).
+    const existingIds = new Set(reranked.map(h => h.id));
+    const pageRefs = extractPageRefsFromResults(reranked.map(h => h.content), query);
+
+    // Also extract page names directly mentioned in the query (not just from results)
+    const queryPageRefs = extractPageNamesFromQuery(query, reranked.map(h => h.content));
+    for (const qRef of queryPageRefs) {
+      if (!pageRefs.includes(qRef)) {
+        pageRefs.push(qRef);
+      }
+    }
+
+    if (pageRefs.length > 0) {
+      console.info(`[retrieveVectorContext] Link-aware expansion: searching for page refs: ${pageRefs.join(', ')}`);
+      const expansionHits: RankedHit[] = [];
+      for (const pageName of pageRefs) {
+        // Search BM25 for chunks mentioning this page name (catches journal entries referencing the page)
+        const bm25Results = index.search(pageName, 5);
+        for (const hit of bm25Results) {
+          if (!existingIds.has(hit.id) && hit.score > 0) {
+            existingIds.add(hit.id);
+            expansionHits.push({ id: hit.id, content: hit.content, score: 0, rrfScore: hit.score * 0.5, keywordScore: hit.score, vectorRank: 0, keywordRank: 0 });
+          }
+        }
+      }
+      if (expansionHits.length > 0) {
+        // Sort expansion hits by score and take top 3
+        expansionHits.sort((a, b) => b.rrfScore - a.rrfScore);
+        const topExpansion = expansionHits.slice(0, 5);
+        console.info(`[retrieveVectorContext] Added ${topExpansion.length} expansion hits from link-aware search`);
+        reranked.push(...topExpansion);
+      }
+    }
+
     return reranked.map(hit => hit.content).join('\n\n');
   } catch (err) {
     console.error("Vector search failed:", err);
   }
   return '';
+}
+
+/**
+ * Extract page names from search results that are also relevant to the query.
+ * Looks for [[page_name]] links (in raw content) and note_links/note_backlinks headers
+ * (in normalized content where brackets are stripped).
+ * Returns page names that appear in both the results' links AND the query terms.
+ */
+function extractPageRefsFromResults(contents: string[], query: string): string[] {
+  const linkRegex = /\[\[(.+?)\]\]/g;
+  const pageNames = new Set<string>();
+
+  for (const content of contents) {
+    // Parse [[page]] links (may exist in non-normalized content)
+    let match: RegExpExecArray | null;
+    while ((match = linkRegex.exec(content)) !== null) {
+      pageNames.add(match[1]);
+    }
+    // Parse note_links header (normalized content format: "note_links: Page1, Page2, ...")
+    const linksMatch = content.match(/note_links:\s*(.+)/);
+    if (linksMatch) {
+      const links = linksMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+      for (const link of links) {
+        pageNames.add(link);
+      }
+    }
+    // Parse note_backlinks header
+    const backlinksMatch = content.match(/note_backlinks:\s*(.+)/);
+    if (backlinksMatch) {
+      const links = backlinksMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+      for (const link of links) {
+        pageNames.add(link);
+      }
+    }
+    // Parse note_name header (the page itself is a relevant reference)
+    const nameMatch = content.match(/note_name:\s*(.+)/);
+    if (nameMatch) {
+      pageNames.add(nameMatch[1].trim());
+    }
+  }
+
+  if (pageNames.size === 0) return [];
+
+  // Filter to page names whose terms overlap with the query
+  const queryTerms = new Set(query.toLowerCase().split(/[\s\p{P}]+/u).filter(Boolean));
+  const relevant: string[] = [];
+
+  for (const pageName of pageNames) {
+    const pageTerms = pageName.toLowerCase().split(/[\s\p{P}]+/u).filter(Boolean);
+    const overlap = pageTerms.filter(t => queryTerms.has(t));
+    // Page name is relevant if at least 40% of its terms appear in the query
+    if (overlap.length > 0 && overlap.length >= pageTerms.length * 0.4) {
+      relevant.push(pageName);
+    }
+  }
+
+  return relevant;
+}
+
+/**
+ * Extract potential page names directly from the user's query.
+ * Looks for multi-word phrases in the query that match page names found in indexed content
+ * (by checking note_name headers in results), or capitalized multi-word sequences.
+ * This catches cases like "QEN Team Member" where the user refers to a page by name.
+ */
+function extractPageNamesFromQuery(query: string, resultContents: string[]): string[] {
+  const pageNames: string[] = [];
+
+  // 1. Extract note_name values from search results to know what pages exist
+  const knownPages = new Set<string>();
+  for (const content of resultContents) {
+    const nameMatch = content.match(/note_name:\s*(.+)/);
+    if (nameMatch) {
+      knownPages.add(nameMatch[1].trim().toLowerCase());
+    }
+    // Also extract page names from [[...]] links in content
+    const linkRegex = /\[\[(.+?)\]\]/g;
+    let linkMatch: RegExpExecArray | null;
+    while ((linkMatch = linkRegex.exec(content)) !== null) {
+      knownPages.add(linkMatch[1].toLowerCase());
+    }
+  }
+
+  // 2. Check if any known page name appears as a substring of the query
+  const queryLower = query.toLowerCase();
+  for (const pageName of knownPages) {
+    if (pageName.length >= 3 && queryLower.includes(pageName)) {
+      pageNames.push(pageName);
+    }
+  }
+
+  // 3. Also look for capitalized multi-word sequences that might be page names
+  //    e.g. "QEN Team Member" in "show Data QEN Team Member table"
+  const capitalizedPhrases = query.match(/(?:[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)+)/g);
+  if (capitalizedPhrases) {
+    for (const phrase of capitalizedPhrases) {
+      const phraseLower = phrase.toLowerCase();
+      if (!pageNames.includes(phraseLower) && phrase.length >= 3) {
+        pageNames.push(phraseLower);
+      }
+    }
+  }
+
+  return pageNames;
 }
 
 /** Inject agent memory into system prompt. */

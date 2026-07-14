@@ -74,7 +74,7 @@ describe('hybridSearch', () => {
     const results = await hybridSearch(query, queryEmbedding, storageProvider, bm25Index);
 
     expect(storageProvider.searchByVector).toHaveBeenCalled();
-    expect(bm25Index.search).toHaveBeenCalledWith(query, 5);
+    expect(bm25Index.search).toHaveBeenCalledWith(query, 8);
     expect(mockedMergeWithRRF).toHaveBeenCalledWith(
       bm25Results.map((r) => ({ id: r.id, content: r.content, score: r.score })),
       [],
@@ -118,7 +118,7 @@ describe('hybridSearch', () => {
     expect(mockedMergeWithRRF).toHaveBeenCalledWith(
       bm25Results.map((r) => ({ id: r.id, content: r.content, score: r.score })),
       vectorResults.map((r) => ({ id: r.id, content: r.content, score: r.score })),
-      expect.objectContaining({ k: 60, limit: 5, bm25Weight: 1, vectorWeight: 1 }),
+      expect.objectContaining({ k: 60, limit: 8, bm25Weight: 1, vectorWeight: 1 }),
     );
     expect(results).toEqual(mergedResults);
   });
@@ -160,12 +160,12 @@ describe('hybridSearch', () => {
 
       const results = await hybridSearch(query, queryEmbedding, storageProvider, bm25Index, { accelerator });
 
-      expect(accelerator.searchByVector).toHaveBeenCalledWith(queryEmbedding, 5, 0.5);
+      expect(accelerator.searchByVector).toHaveBeenCalledWith(queryEmbedding, 8, 0.5);
       expect(storageProvider.searchByVector).not.toHaveBeenCalled();
       expect(mockedMergeWithRRF).toHaveBeenCalledWith(
         bm25Results.map((r) => ({ id: r.id, content: r.content, score: r.score })),
         acceleratorResults.map((r) => ({ id: r.id, content: r.content, score: r.score })),
-        expect.objectContaining({ k: 60, limit: 5 }),
+        expect.objectContaining({ k: 60, limit: 8 }),
       );
       expect(results).toEqual(mergedResults);
     });
@@ -178,7 +178,7 @@ describe('hybridSearch', () => {
       await hybridSearch(query, queryEmbedding, storageProvider, bm25Index, { accelerator });
 
       expect(accelerator.searchByVector).not.toHaveBeenCalled();
-      expect(storageProvider.searchByVector).toHaveBeenCalledWith(queryEmbedding, 5, 0.5);
+      expect(storageProvider.searchByVector).toHaveBeenCalledWith(queryEmbedding, 8, 0.5);
     });
 
     it('falls back to storageProvider when no accelerator is provided', async () => {
@@ -187,7 +187,7 @@ describe('hybridSearch', () => {
 
       await hybridSearch(query, queryEmbedding, storageProvider, bm25Index, {});
 
-      expect(storageProvider.searchByVector).toHaveBeenCalledWith(queryEmbedding, 5, 0.5);
+      expect(storageProvider.searchByVector).toHaveBeenCalledWith(queryEmbedding, 8, 0.5);
     });
 
     it('handles accelerator search failure via allSettled', async () => {
