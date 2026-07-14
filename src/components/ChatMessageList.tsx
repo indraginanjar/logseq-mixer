@@ -2,6 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { transformToMarkdownLinks as transformBlockRefs } from '../blockRefParser';
 import { transformToMarkdownLinks as transformPageLinks } from '../pageLinkParser';
+import { wrapCliInCodeBlocks } from '../utils/cliCodeBlockDetector';
 import { keyframes, styled } from '../stitches.config';
 import { BlockLink } from './BlockLink';
 import { CtrlLink } from './CtrlLink';
@@ -759,10 +760,10 @@ const renderMarkdownWithProperties = (
   wrapTables: boolean = false
 ) => {
   const { properties, content } = parseProperties(rawText);
-  let processedContent = content;
+  let processedContent = wrapCliInCodeBlocks(content);
 
   if (shouldTransform) {
-    processedContent = processMarkdownContent(content);
+    processedContent = processMarkdownContent(processedContent);
   }
 
   const parts = parseContentWithTables(processedContent);
