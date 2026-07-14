@@ -74,26 +74,42 @@ async function getMermaid() {
 /**
  * Remove any orphaned mermaid error elements from the document.
  * Mermaid v11 may inject elements with class "error-icon" or "mermaid"
- * containing error text directly into document.body on parse failures.
+ * containing error text directly into document.body on parse/render failures.
+ * Also cleans the parent document in case elements leak to Logseq's main window.
  */
 function cleanupMermaidErrors() {
-  // Remove floating error divs that mermaid injects
-  const errorElements = document.querySelectorAll(
-    '#d, [data-mermaid-error], .mermaid-error, [id^="mermaid-"] .error-icon'
-  );
-  errorElements.forEach(el => el.remove());
-
-  // Also check for any direct children of body that contain mermaid error text
-  const bodyChildren = document.body.children;
-  for (let i = bodyChildren.length - 1; i >= 0; i--) {
-    const child = bodyChildren[i] as HTMLElement;
-    if (
-      child.id?.startsWith('dmermaid-') ||
-      child.id === 'd' ||
-      (child.textContent?.includes('Syntax error in text') && child.textContent?.includes('mermaid version'))
-    ) {
-      child.remove();
+  const docs: Document[] = [document];
+  try {
+    if (top?.document && top.document !== document) {
+      docs.push(top.document);
     }
+  } catch { /* cross-origin */ }
+
+  for (const doc of docs) {
+    // Remove known mermaid error selectors
+    const errorElements = doc.querySelectorAll(
+      '#d, [data-mermaid-error], .mermaid-error, [id^="dmermaid-"], [id^="mermaid-"].error'
+    );
+    errorElements.forEach(el => el.remove());
+
+    // Remove any direct children of body that look like mermaid errors or temp render containers
+    const bodyChildren = doc.body.children;
+    for (let i = bodyChildren.length - 1; i >= 0; i--) {
+      const child = bodyChildren[i] as HTMLElement;
+      if (!child.id && !child.className) continue;
+      if (
+        child.id === 'd' ||
+        child.id?.startsWith('dmermaid-') ||
+        child.id?.startsWith('mermaid-') ||
+        (child.textContent?.includes('Syntax error in text') && child.textContent?.includes('mermaid version'))
+      ) {
+        child.remove();
+      }
+    }
+
+    // Remove offscreen containers that may have been left behind
+    const offscreenElements = doc.querySelectorAll('[style*="-9999px"][id^="mermaid-"]');
+    offscreenElements.forEach(el => el.remove());
   }
 }
 
@@ -147,18 +163,31 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
 
         const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+        // Create an offscreen container for rendering to isolate any side effects
+        const offscreen = document.createElement('div');
+        offscreen.id = id;
+        offscreen.style.position = 'absolute';
+        offscreen.style.left = '-9999px';
+        offscreen.style.top = '-9999px';
+        offscreen.style.visibility = 'hidden';
+        document.body.appendChild(offscreen);
+
         // Render in a try block with cleanup
         try {
           const { svg } = await mermaid.render(id, trimmedCode);
+          // Remove offscreen container immediately
+          offscreen.remove();
           if (!cancelled && containerRef.current) {
             containerRef.current.innerHTML = svg;
             setError(null);
             renderedCodeRef.current = trimmedCode;
           }
         } catch (renderErr: any) {
+          // Remove the offscreen container
+          offscreen.remove();
           // Clean up any orphaned error elements
           cleanupMermaidErrors();
-          // Also remove the temp element mermaid may have created
+          // Also remove any element with our ID that might still exist
           const tempEl = document.getElementById(id);
           if (tempEl) tempEl.remove();
           if (!cancelled) setError(renderErr.message || 'Failed to render chart');
@@ -167,13 +196,14 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
         cleanupMermaidErrors();
         if (!cancelled) setError(err.message || 'Failed to load mermaid');
       } finally {
+        // Always clean up any leaked mermaid elements
+        cleanupMermaidErrors();
         if (!cancelled) setLoading(false);
       }
     };
     render();
     return () => {
       cancelled = true;
-      // Clean up on unmount in case render was mid-flight
       cleanupMermaidErrors();
     };
   }, [code]);
