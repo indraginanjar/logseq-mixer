@@ -345,14 +345,20 @@ const InputArea = styled('div', {
 
 const InputWrapper = styled('div', {
   display: 'flex',
-  alignItems: 'flex-end',
-  gap: '8px',
+  flexDirection: 'column',
   border: '1px solid $slate7',
   borderRadius: '10px',
-  padding: '8px 8px 8px 12px',
+  padding: '8px',
   backgroundColor: '$elevation1',
   transition: 'border-color 0.15s, box-shadow 0.15s',
   '&:focus-within': { borderColor: '$blue8', boxShadow: '0 0 0 2px $colors$blue4' },
+});
+
+const InputButtonRow = styled('div', {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginTop: '4px',
 });
 
 const TextArea = styled('textarea', {
@@ -1445,20 +1451,6 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               style={{ display: 'none' }}
               onChange={(e) => { if (e.target.files) { Array.from(e.target.files).forEach(handleFile); } e.target.value = ''; }}
             />
-            <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" title="Attach file" disabled={loading}>
-              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6h-1v9.5a2 2 0 0 0 4 0V5a3.5 3.5 0 0 0-7 0v12.5a5 5 0 0 0 10 0V6h-1z" fill="currentColor"/></svg>
-            </ImageButton>
-            {inputHistory.length > 0 && (
-              <ImageButton
-                onClick={() => { setInputHistory([]); setHistoryIndex(-1); }}
-                aria-label="Clear input history"
-                title={`Clear input history (${inputHistory.length} entries)`}
-                disabled={loading}
-                css={{ width: '22px', height: '22px', opacity: 0.5, '&:hover:not(:disabled)': { opacity: 1, backgroundColor: '$red4', color: '$red11' } }}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6M10 11v6M14 11v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </ImageButton>
-            )}
             <TextArea
               ref={textareaRef}
               placeholder={loading ? 'Thinking...' : 'Ask about your notes...'}
@@ -1469,15 +1461,33 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               disabled={loading}
               rows={4}
             />
-            {loading ? (
-              <SendButton onClick={handleCancel} aria-label="Cancel" title="Cancel" css={{ backgroundColor: '$red9', '&:hover:not(:disabled)': { backgroundColor: '$red10' } }}>
-                <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
-              </SendButton>
-            ) : (
-              <SendButton onClick={handleSubmit} disabled={!inputMessage.trim()} aria-label="Send" title="Send">
-                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
-              </SendButton>
-            )}
+            <InputButtonRow>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" title="Attach file" disabled={loading}>
+                  <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6h-1v9.5a2 2 0 0 0 4 0V5a3.5 3.5 0 0 0-7 0v12.5a5 5 0 0 0 10 0V6h-1z" fill="currentColor"/></svg>
+                </ImageButton>
+                {inputHistory.length > 0 && (
+                  <ImageButton
+                    onClick={() => { setInputHistory([]); setHistoryIndex(-1); }}
+                    aria-label="Clear input history"
+                    title={`Clear input history (${inputHistory.length} entries)`}
+                    disabled={loading}
+                    css={{ width: '22px', height: '22px', opacity: 0.5, '&:hover:not(:disabled)': { opacity: 1, backgroundColor: '$red4', color: '$red11' } }}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6M10 11v6M14 11v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </ImageButton>
+                )}
+              </div>
+              {loading ? (
+                <SendButton onClick={handleCancel} aria-label="Cancel" title="Cancel" css={{ backgroundColor: '$red9', '&:hover:not(:disabled)': { backgroundColor: '$red10' } }}>
+                  <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
+                </SendButton>
+              ) : (
+                <SendButton onClick={handleSubmit} disabled={!inputMessage.trim()} aria-label="Send" title="Send">
+                  <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
+                </SendButton>
+              )}
+            </InputButtonRow>
           </InputWrapper>
           <ToolbarRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
