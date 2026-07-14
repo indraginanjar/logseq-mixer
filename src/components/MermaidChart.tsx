@@ -62,10 +62,38 @@ async function getMermaid() {
       theme: 'neutral',
       securityLevel: 'strict',
       fontFamily: 'Inter, sans-serif',
+      // Suppress mermaid's default error rendering which injects elements into the body
+      suppressErrorRendering: true,
     });
     mermaidInitialized = true;
   }
   return mermaid;
+}
+
+/**
+ * Remove any orphaned mermaid error elements from the document.
+ * Mermaid v11 may inject elements with class "error-icon" or "mermaid"
+ * containing error text directly into document.body on parse failures.
+ */
+function cleanupMermaidErrors() {
+  // Remove floating error divs that mermaid injects
+  const errorElements = document.querySelectorAll(
+    '#d, [data-mermaid-error], .mermaid-error, [id^="mermaid-"] .error-icon'
+  );
+  errorElements.forEach(el => el.remove());
+
+  // Also check for any direct children of body that contain mermaid error text
+  const bodyChildren = document.body.children;
+  for (let i = bodyChildren.length - 1; i >= 0; i--) {
+    const child = bodyChildren[i] as HTMLElement;
+    if (
+      child.id?.startsWith('dmermaid-') ||
+      child.id === 'd' ||
+      (child.textContent?.includes('Syntax error in text') && child.textContent?.includes('mermaid version'))
+    ) {
+      child.remove();
+    }
+  }
 }
 
 interface MermaidChartProps {
@@ -82,20 +110,51 @@ export default function MermaidChart({ code }: MermaidChartProps) {
     const render = async () => {
       try {
         const mermaid = await getMermaid();
+        const trimmedCode = code.trim();
+
+        // Validate syntax before attempting render to avoid DOM pollution
+        try {
+          await (mermaid as any).parse(trimmedCode);
+        } catch (parseErr: any) {
+          // Clean up any error elements mermaid may have injected during parse
+          cleanupMermaidErrors();
+          if (!cancelled) {
+            setError(parseErr.message || 'Invalid mermaid syntax');
+            setLoading(false);
+          }
+          return;
+        }
+
         const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const { svg } = await mermaid.render(id, code.trim());
-        if (!cancelled && containerRef.current) {
-          containerRef.current.innerHTML = svg;
-          setError(null);
+
+        // Render in a try block with cleanup
+        try {
+          const { svg } = await mermaid.render(id, trimmedCode);
+          if (!cancelled && containerRef.current) {
+            containerRef.current.innerHTML = svg;
+            setError(null);
+          }
+        } catch (renderErr: any) {
+          // Clean up any orphaned error elements
+          cleanupMermaidErrors();
+          // Also remove the temp element mermaid may have created
+          const tempEl = document.getElementById(id);
+          if (tempEl) tempEl.remove();
+          if (!cancelled) setError(renderErr.message || 'Failed to render chart');
         }
       } catch (err: any) {
-        if (!cancelled) setError(err.message || 'Failed to render chart');
+        cleanupMermaidErrors();
+        if (!cancelled) setError(err.message || 'Failed to load mermaid');
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     render();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Clean up on unmount in case render was mid-flight
+      cleanupMermaidErrors();
+    };
   }, [code]);
 
   if (error) {
