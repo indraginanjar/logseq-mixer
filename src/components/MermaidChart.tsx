@@ -101,6 +101,17 @@ interface MermaidChartProps {
   code: string;
 }
 
+/**
+ * Strip fixed width/height attributes from SVG elements so they can
+ * scale to fill their container in the maximize view.
+ */
+function stripSvgDimensions(html: string): string {
+  return html
+    .replace(/(<svg[^>]*)\s+width="[^"]*"/gi, '$1')
+    .replace(/(<svg[^>]*)\s+height="[^"]*"/gi, '$1')
+    .replace(/(<svg[^>]*)\s+style="[^"]*"/gi, '$1 style="width:100%;height:100%"');
+}
+
 export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -239,7 +250,7 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
         </MaximizeButton>
       )}
       <MaximizeOverlay open={isMaximized} onClose={closeMaximize}>
-        <div dangerouslySetInnerHTML={{ __html: containerRef.current?.innerHTML || '' }} />
+        <div dangerouslySetInnerHTML={{ __html: stripSvgDimensions(containerRef.current?.innerHTML || '') }} />
       </MaximizeOverlay>
     </Wrapper>
   );

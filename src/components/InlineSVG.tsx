@@ -81,6 +81,14 @@ interface InlineSVGProps {
   content: string;
 }
 
+/** Strip fixed width/height from SVG so it scales to fill the maximize view. */
+function stripSvgFixedSize(svgHtml: string): string {
+  return svgHtml
+    .replace(/(<svg[^>]*)\s+width="[^"]*"/gi, '$1')
+    .replace(/(<svg[^>]*)\s+height="[^"]*"/gi, '$1')
+    .replace(/(<svg[^>]*?)(\s*>)/i, '$1 style="width:100%;height:100%"$2');
+}
+
 export default function InlineSVG({ content }: InlineSVGProps) {
   const sanitized = useMemo(() => sanitizeSVG(content), [content]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -153,7 +161,7 @@ export default function InlineSVG({ content }: InlineSVGProps) {
         </CopyButton>
       </ButtonRow>
       <MaximizeOverlay open={maximized} onClose={() => setMaximized(false)}>
-        <div dangerouslySetInnerHTML={{ __html: sanitized }} style={{ background: 'white', borderRadius: 8, padding: 24 }} />
+        <div dangerouslySetInnerHTML={{ __html: stripSvgFixedSize(sanitized) }} style={{ background: 'white', borderRadius: 8, padding: 24, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
       </MaximizeOverlay>
     </Wrapper>
   );

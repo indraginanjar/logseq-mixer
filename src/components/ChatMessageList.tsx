@@ -683,7 +683,7 @@ function ImageWithMaximize({ src, alt, ...props }: any) {
         style={{ position: 'absolute', top: 4, right: 4, fontSize: 11, padding: '2px 6px', borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: 'rgba(255,255,255,0.9)', cursor: 'pointer' }}
       >📋 Copy</button>
       <MaximizeOverlay open={maximized} onClose={() => setMaximized(false)}>
-        <img src={src} alt={alt || ''} style={{ maxWidth: '95vw', maxHeight: '90vh', objectFit: 'contain' }} />
+        <img src={src} alt={alt || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
       </MaximizeOverlay>
     </span>
   );

@@ -101,14 +101,16 @@ const OVERLAY_STYLES = `
   z-index: 99999;
   cursor: zoom-out;
   animation: mixer-fade-in 0.15s ease-out;
+  padding: 24px;
+  box-sizing: border-box;
 }
 @keyframes mixer-fade-in {
   0% { opacity: 0; }
   100% { opacity: 1; }
 }
 .mixer-maximize-content {
-  max-width: 95vw;
-  max-height: 95vh;
+  width: 100%;
+  height: 100%;
   overflow: auto;
   display: flex;
   align-items: center;
@@ -116,17 +118,38 @@ const OVERLAY_STYLES = `
   cursor: default;
 }
 .mixer-maximize-content img {
-  max-width: 95vw;
-  max-height: 90vh;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 4px;
 }
 .mixer-maximize-content svg {
-  max-width: 95vw;
-  max-height: 90vh;
+  width: 100% !important;
+  height: auto !important;
+  max-height: 100%;
   background: white;
   border-radius: 8px;
-  padding: 16px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.mixer-maximize-content > div {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.mixer-maximize-content > div > svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
 }
 .mixer-maximize-hint {
   position: fixed;
