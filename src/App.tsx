@@ -16,12 +16,13 @@ import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
 import { clearConversationHistory, addToConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import { isHelpCommand, answerHelpQuestion } from './helpSystem';
-import React, { KeyboardEvent, useEffect, useRef, useState } from 'react';
+import React, { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { executeAll, verifyAndCorrect } from './blockExecutor';
 import { getActivePageContext } from './blockTreeFormatter';
 import { getButtonState } from './buttonState';
 import { AutoEmbedToggle } from './components/AutoEmbedToggle';
+import { MemoryIndicator, MemoryWarning } from './components/MemoryIndicator';
 import { ChangeSummary } from './components/ChangeSummary';
 import { AgentToggle } from './components/AgentToggle';
 import { EditToggle } from './components/EditToggle';
@@ -29,6 +30,8 @@ import { VerboseToggle } from './components/VerboseToggle';
 import { cancelCooldown, startCooldown } from './cooldownManager';
 import { useAppVisible } from './hooks/useAppVisible';
 import { useCtrlKey } from './hooks/useCtrlKey';
+import { useMemoryMonitor } from './hooks/useMemoryMonitor';
+import type { MemoryStatus } from './hooks/useMemoryMonitor';
 import { aiEditModeState, settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
@@ -605,6 +608,44 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       localStorage.setItem('logseq-mixer-input-history', JSON.stringify(capped));
     } catch { /* ignore quota errors */ }
   }, [inputHistory]);
+
+  // Memory monitor: tracks heap usage, DOM nodes, and message count
+  const MAX_MESSAGES = 100;
+  const TRIM_TO = 40;
+
+  const handleTrimMessages = useCallback(() => {
+    setMessages(prev => {
+      if (prev.length <= TRIM_TO) return prev;
+      // Keep the most recent TRIM_TO messages
+      const trimmed = prev.slice(-TRIM_TO);
+      console.info(`[MemoryMonitor] Trimmed messages: ${prev.length} → ${trimmed.length}`);
+      return trimmed;
+    });
+  }, []);
+
+  const handlePressureChange = useCallback((pressure: MemoryStatus['pressure'], status: MemoryStatus) => {
+    if (pressure === 'critical') {
+      console.warn(`[MemoryMonitor] CRITICAL memory pressure! Heap: ${(status.heapUsed / 1024 / 1024).toFixed(1)}MB, DOM: ${status.domNodeCount}, Messages: ${status.messageCount}`);
+      // Auto-trim on critical to prevent crash
+      handleTrimMessages();
+    } else if (pressure === 'high') {
+      console.warn(`[MemoryMonitor] High memory pressure. Messages: ${status.messageCount}, DOM: ${status.domNodeCount}`);
+    }
+  }, [handleTrimMessages]);
+
+  const memoryStatus = useMemoryMonitor({
+    messageCount: messages.length,
+    onPressureChange: handlePressureChange,
+    interval: 5000,
+  });
+
+  // Enforce message cap: automatically trim when exceeding MAX_MESSAGES
+  useEffect(() => {
+    if (messages.length > MAX_MESSAGES) {
+      console.info(`[MemoryMonitor] Message cap exceeded (${messages.length}/${MAX_MESSAGES}), auto-trimming.`);
+      setMessages(prev => prev.slice(-TRIM_TO));
+    }
+  }, [messages.length]);
 
   // Cancel cooldown timer on unmount
   useEffect(() => {
@@ -1364,11 +1405,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               ))}
             </ModelSelect>
             <HeaderButton onClick={handleNewSession} aria-label="New Session" title="New Session">✨ New</HeaderButton>
+            <MemoryIndicator status={memoryStatus} onTrimMessages={handleTrimMessages} />
             <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close" title="Close">✕</CloseButton>
           </HeaderRight>
         </Header>
 
         <MessagesContainer id="messages-container" className={ctrlHeld ? 'ctrl-held' : ''}>
+          <MemoryWarning status={memoryStatus} onTrimMessages={handleTrimMessages} />
           <ChatMessageList
             messages={messages}
             editResults={editResults}
