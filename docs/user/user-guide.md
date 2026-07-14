@@ -66,9 +66,19 @@ These control what the AI *can do* in response to your messages.
 | Element | What it does |
 |---|---|
 | **📎** | Attach files (text, code, CSV) or images to your message |
-| **Text Area** | Type your message. Enter sends, Shift+Enter for newline, Arrow Up recalls last message. |
+| **🗑️** | Clear input history — removes all saved previous inputs (only appears when history exists) |
+| **Text Area** | Type your message. Enter sends, Shift+Enter for newline, Arrow Up/Down navigates input history. |
 | **Send ▶** | Send message. Transforms to Cancel while AI is responding. |
 | **Page/Block Indicator** | Shows the active page (📄) and focused block (▸) — this is what Direct Page Edit targets. |
+
+### Persistent Input History
+
+Your chat inputs are automatically saved and persist across sessions — even after closing and reopening Logseq. Use Arrow Up/Down to navigate through previously sent messages.
+
+- **Storage:** Last 100 inputs saved in browser localStorage
+- **Navigation:** Arrow Up (at cursor position 0) goes back, Arrow Down goes forward
+- **Clear:** Click the tiny 🗑️ button next to the attach icon to erase all history
+- **Tooltip:** Hover over the clear button to see how many entries are stored
 
 ---
 
@@ -159,7 +169,8 @@ Type `/help` for instant documentation without consuming RAG context:
 |---|---|
 | **Enter** | Send message |
 | **Shift+Enter** | New line |
-| **Arrow Up** | Recall previous message |
+| **Arrow Up** | Navigate backward through input history (cursor must be at start) |
+| **Arrow Down** | Navigate forward through input history (cursor must be at end) |
 | **Ctrl+V** | Paste image from clipboard |
 | **Escape** | Close overlay panels |
 

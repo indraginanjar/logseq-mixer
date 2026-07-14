@@ -546,7 +546,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [isIndexing, setIsIndexing] = useState(isIndexingActive());
   const [editResults, setEditResults] = useState<Map<string | number, ExecutionResult>>(new Map());
 
-  const [inputHistory, setInputHistory] = useState<string[]>([]);
+  const [inputHistory, setInputHistory] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('logseq-mixer-input-history');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedDraft, setSavedDraft] = useState('');
   const [imageDataUrls, setImageDataUrls] = useState<{ name: string; content: string }[]>([]);
@@ -586,6 +591,14 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [replanReason, setReplanReason] = useState<string | null>(null);
   const [replanSteps, setReplanSteps] = useState<AgentStep[]>([]);
   const replanResolverRef = useRef<((approved: boolean) => void) | null>(null);
+
+  // Persist input history to localStorage (cap at 100 entries)
+  useEffect(() => {
+    try {
+      const capped = inputHistory.slice(-100);
+      localStorage.setItem('logseq-mixer-input-history', JSON.stringify(capped));
+    } catch { /* ignore quota errors */ }
+  }, [inputHistory]);
 
   // Cancel cooldown timer on unmount
   useEffect(() => {
@@ -1435,6 +1448,17 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" title="Attach file" disabled={loading}>
               <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6h-1v9.5a2 2 0 0 0 4 0V5a3.5 3.5 0 0 0-7 0v12.5a5 5 0 0 0 10 0V6h-1z" fill="currentColor"/></svg>
             </ImageButton>
+            {inputHistory.length > 0 && (
+              <ImageButton
+                onClick={() => { setInputHistory([]); setHistoryIndex(-1); }}
+                aria-label="Clear input history"
+                title={`Clear input history (${inputHistory.length} entries)`}
+                disabled={loading}
+                css={{ width: '22px', height: '22px', opacity: 0.5, '&:hover:not(:disabled)': { opacity: 1, backgroundColor: '$red4', color: '$red11' } }}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6M10 11v6M14 11v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </ImageButton>
+            )}
             <TextArea
               ref={textareaRef}
               placeholder={loading ? 'Thinking...' : 'Ask about your notes...'}

@@ -187,8 +187,11 @@ sequenceDiagram
 | **BM25Index** | Custom in-memory | Keyword search (inverted index) | Volatile (rebuilt from SQLite on startup) |
 | **Agent Memory** | SQLite `agent_memory` table | Preferences, facts, tasks, summaries | IndexedDB (same database) |
 | **Memory Pages** | Logseq graph | Long-term knowledge in RAG pipeline | Logseq's storage |
+| **Input History** | localStorage | Persistent chat input history (max 100) | Browser storage |
 | **MCP Preferences** | localStorage | Tool enable/disable state | Browser storage |
 | **Legacy (Orama)** | Orama in-memory | Vector search for `settings` backend | Logseq plugin settings (JSON blob) |
+
+> 📖 [Full storage & database reference →](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/storage.md)
 
 ---
 
@@ -252,6 +255,7 @@ LiteLLM provides a single OpenAI-compatible interface to 100+ providers. This me
 
 ## Related Documentation
 
+- [Storage & Database](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/storage.md) — Full database schema, persistence layers, data lifecycle
 - [Retrieval Pipeline](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/retrieval-pipeline.md) — Embedding, chunking, hybrid search internals
 - [Agent Internals](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/agent-internals.md) — Agent loop, ReAct, self-correction
 - [MCP Protocol](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/mcp-protocol.md) — Transport layer and tool calling
