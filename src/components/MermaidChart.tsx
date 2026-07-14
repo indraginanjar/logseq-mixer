@@ -95,7 +95,10 @@ async function getMermaid() {
 
 /**
  * Remove any mermaid error/temp elements from all accessible documents.
+ * Only removes elements that are NOT currently being used for active rendering.
  */
+let activeRenderId: string | null = null;
+
 function cleanupMermaidDOM() {
   const docs: Document[] = [document];
   try {
@@ -103,19 +106,19 @@ function cleanupMermaidDOM() {
   } catch { /* cross-origin */ }
 
   for (const doc of docs) {
-    // Remove by known patterns
-    doc.querySelectorAll(
-      '#d, [id^="dmermaid-"], [id^="mermaid-"], [data-mermaid-error], .mermaid-error'
-    ).forEach(el => {
-      // Don't remove our own visible container
-      if ((el as HTMLElement).dataset?.mixerChart) return;
-      el.remove();
-    });
-
     // Remove elements containing mermaid error text
     for (let i = doc.body.children.length - 1; i >= 0; i--) {
       const child = doc.body.children[i] as HTMLElement;
-      if (child.textContent?.includes('Syntax error in text') && child.textContent?.includes('mermaid version')) {
+      // Skip our active render element
+      if (activeRenderId && child.id === activeRenderId) continue;
+      // Skip elements that are part of the plugin UI
+      if ((child as HTMLElement).dataset?.mixerChart) continue;
+
+      if (
+        child.id === 'd' ||
+        child.id?.startsWith('dmermaid-') ||
+        (child.textContent?.includes('Syntax error in text') && child.textContent?.includes('mermaid version'))
+      ) {
         child.remove();
       }
     }
@@ -139,6 +142,7 @@ async function renderMermaidSafe(code: string, timeoutMs: number = 8000): Promis
 
   // Race render against timeout
   const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  activeRenderId = id;
 
   const renderPromise = (async () => {
     try {
@@ -147,24 +151,27 @@ async function renderMermaidSafe(code: string, timeoutMs: number = 8000): Promis
     } catch (e: any) {
       throw new Error(e.message || 'Render failed');
     } finally {
-      // Always cleanup: remove temp element and any error elements
+      activeRenderId = null;
+      // Remove temp element mermaid created
       const tempEl = document.getElementById(id);
       if (tempEl) tempEl.remove();
-      cleanupMermaidDOM();
     }
   })();
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => {
+      activeRenderId = null;
       reject(new Error('Render timed out. The diagram may be too complex.'));
-      // Force cleanup after timeout
       const tempEl = document.getElementById(id);
       if (tempEl) tempEl.remove();
-      cleanupMermaidDOM();
     }, timeoutMs);
   });
 
-  return Promise.race([renderPromise, timeoutPromise]);
+  try {
+    return await Promise.race([renderPromise, timeoutPromise]);
+  } finally {
+    cleanupMermaidDOM();
+  }
 }
 
 export default React.memo(function MermaidChart({ code }: MermaidChartProps) {

@@ -1290,5 +1290,9 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
       )}
     </React.Fragment>
   );
+}, (prevProps, nextProps) => {
+  // Only re-render when message content or result changes.
+  // Ignore function prop reference changes (getBlockMetadata, onFileReattach, onImageReattach)
+  return prevProps.msg === nextProps.msg && prevProps.result === nextProps.result;
 });
 
