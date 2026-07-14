@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { styled } from '../stitches.config';
+import { MaximizeOverlay, MaximizeButton, useMaximize } from './MaximizeOverlay';
 
 const Wrapper = styled('div', {
   position: 'relative',
@@ -84,6 +85,7 @@ export default function InlineSVG({ content }: InlineSVGProps) {
   const sanitized = useMemo(() => sanitizeSVG(content), [content]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState<'png' | 'svg' | null>(null);
+  const [maximized, setMaximized] = useState(false);
 
   if (!sanitized) return null;
 
@@ -140,6 +142,9 @@ export default function InlineSVG({ content }: InlineSVGProps) {
     <Wrapper>
       <SVGContainer ref={containerRef} dangerouslySetInnerHTML={{ __html: sanitized }} />
       <ButtonRow>
+        <MaximizeButton onClick={() => setMaximized(true)} title="View fullscreen">
+          ⛶
+        </MaximizeButton>
         <CopyButton onClick={handleCopySVG} title="Copy SVG source code">
           {copied === 'svg' ? '✓ Copied' : '📄 SVG'}
         </CopyButton>
@@ -147,6 +152,9 @@ export default function InlineSVG({ content }: InlineSVGProps) {
           {copied === 'png' ? '✓ Copied' : '🖼️ PNG'}
         </CopyButton>
       </ButtonRow>
+      <MaximizeOverlay open={maximized} onClose={() => setMaximized(false)}>
+        <div dangerouslySetInnerHTML={{ __html: sanitized }} style={{ background: 'white', borderRadius: 8, padding: 24 }} />
+      </MaximizeOverlay>
     </Wrapper>
   );
 }

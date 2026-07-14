@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { styled } from '../stitches.config';
+import { MaximizeOverlay, MaximizeButton, useMaximize } from './MaximizeOverlay';
 
 const Wrapper = styled('div', {
   position: 'relative',
@@ -206,6 +207,7 @@ export default function MermaidChart({ code }: MermaidChartProps) {
   };
 
   const [copied, setCopied] = useState(false);
+  const { isMaximized, open: openMaximize, close: closeMaximize } = useMaximize();
 
   return (
     <Wrapper>
@@ -218,6 +220,18 @@ export default function MermaidChart({ code }: MermaidChartProps) {
           {copied ? '✓ Copied' : '📋 Copy Image'}
         </CopyButton>
       )}
+      {!loading && !error && (
+        <MaximizeButton
+          onClick={openMaximize}
+          title="View fullscreen"
+          style={{ position: 'absolute', top: 8, right: 108 }}
+        >
+          ⛶ Maximize
+        </MaximizeButton>
+      )}
+      <MaximizeOverlay open={isMaximized} onClose={closeMaximize}>
+        <div dangerouslySetInnerHTML={{ __html: containerRef.current?.innerHTML || '' }} />
+      </MaximizeOverlay>
     </Wrapper>
   );
 }
