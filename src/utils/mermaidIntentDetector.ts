@@ -35,36 +35,21 @@ export function isMermaidIntent(text: string): boolean {
  * The Mermaid rules to inject into the system prompt when a diagram is being generated.
  */
 export const MERMAID_RULES = `
-MERMAID DIAGRAM RULES (CRITICAL — violations will cause parse errors):
+MERMAID DIAGRAM RULES (output formatting only — still use ALL data from context):
+
+IMPORTANT: These rules are ONLY about how to format the Mermaid code output. You must still READ and USE all data from the context (names, statuses, values, etc.) — just output them as plain text in the diagram without Logseq markup.
 
 The Mermaid parser treats [ ] ( ) # as special syntax characters. If they appear in node labels or style values, the parser fails with errors like "Expecting 'SPACELINE', got 'NODE_DSTART'".
 
-FORBIDDEN patterns inside Mermaid code (these WILL cause parse errors):
-- [[page name]] — Logseq page links. Use plain text: "page name"
-- [text](logseq://...) — Logseq URL links. Use plain text only.
-- [#hexcolor](url) — This is NOT how to color nodes. Use classDef or style syntax.
-- Unquoted labels with special chars: A[Label with (parens)] — WRONG
-
-CORRECT patterns:
-- Node with special chars: A["Label with (parens) and #hash"]
-- Style/classDef colors: classDef highlight fill:#1f8ef1,stroke:#333
-- Plain text labels: A[Simple Label]
-- If data from context contains [[page links]] or [markdown](links), STRIP the brackets and use only the plain text inside.
-
-Example of what the LLM often does WRONG:
-  QEN_Table[QEN Team Member Table fill:[#1f8ef1](logseq://page/1f8ef1)]
-Fixed version:
-  QEN_Table["QEN Team Member Table"]
-  style QEN_Table fill:#1f8ef1
+WHEN WRITING MERMAID CODE:
+- Convert [[page name]] from context → use "page name" as plain text in node labels
+- Convert [text](logseq://...) from context → use "text" as plain text in node labels
+- For colors in styles: fill:#1f8ef1 (plain hex, no brackets or links)
+- If node text contains special characters (#, :, (, ), [, ]), wrap in double-quotes: A["Label"]
 
 DIAGRAM-SPECIFIC STYLING:
-- flowchart/graph: Use "style NodeId fill:#color" or "classDef" on separate lines. This is correct.
-- mindmap: Do NOT use "style" or "classDef" as separate lines — they will cause "There can be only one root" errors. Instead, use :::className inline on the node:
-    mindmap
-      root((Title)):::highlight
-        Child1:::blue
-        Child2
-  And optionally define classDef BEFORE the tree starts (not after or inside it).
-- sequence/gantt/pie: Use the diagram's own configuration syntax, not "style" lines.
+- flowchart/graph: Use "style NodeId fill:#color" or "classDef" on separate lines.
+- mindmap: Do NOT use "style" or "classDef" as separate lines — they cause "There can be only one root" errors. Use :::className inline on the node instead.
+- sequence/gantt/pie: Use the diagram's own configuration syntax.
 
-RULE: When using data from the user's notes as node labels, ALWAYS strip all Logseq markup ([[...]], ((...)), [text](url)) and use only the plain text content.`;
+REMEMBER: Use ALL the data provided (names, statuses, etc.) — just ensure the Mermaid syntax is clean.`;
