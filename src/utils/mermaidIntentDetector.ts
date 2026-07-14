@@ -57,4 +57,14 @@ Fixed version:
   QEN_Table["QEN Team Member Table"]
   style QEN_Table fill:#1f8ef1
 
+DIAGRAM-SPECIFIC STYLING:
+- flowchart/graph: Use "style NodeId fill:#color" or "classDef" on separate lines. This is correct.
+- mindmap: Do NOT use "style" or "classDef" as separate lines — they will cause "There can be only one root" errors. Instead, use :::className inline on the node:
+    mindmap
+      root((Title)):::highlight
+        Child1:::blue
+        Child2
+  And optionally define classDef BEFORE the tree starts (not after or inside it).
+- sequence/gantt/pie: Use the diagram's own configuration syntax, not "style" lines.
+
 RULE: When using data from the user's notes as node labels, ALWAYS strip all Logseq markup ([[...]], ((...)), [text](url)) and use only the plain text content.`;
