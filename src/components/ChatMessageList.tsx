@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import { transformToMarkdownLinks as transformBlockRefs } from '../blockRefParser';
 import { transformToMarkdownLinks as transformPageLinks } from '../pageLinkParser';
 import { wrapCliInCodeBlocks } from '../utils/cliCodeBlockDetector';
+import { detectCsvBlocks, mightContainCsv } from '../utils/csvDetector';
+import type { CsvTable } from '../utils/csvDetector';
 import { keyframes, styled } from '../stitches.config';
 import { BlockLink } from './BlockLink';
 import { CtrlLink } from './CtrlLink';
@@ -766,9 +768,100 @@ const renderMarkdownWithProperties = (
     processedContent = processMarkdownContent(processedContent);
   }
 
-  const parts = parseContentWithTables(processedContent);
   const hasProperties = Object.keys(properties).length > 0;
   const components = getMarkdownComponents(shouldTransform, getBlockMetadata);
+
+  // Check for CSV content and split into segments
+  const csvParts = mightContainCsv(processedContent) ? detectCsvBlocks(processedContent) : null;
+
+  const renderMarkdownSegment = (text: string, key: number | string) => {
+    const parts = parseContentWithTables(text);
+    return (
+      <React.Fragment key={key}>
+        {parts.map((part, index) => {
+          if (part.type === 'table') {
+            if (wrapTables) {
+              return (
+                <MarkdownTabbedPanel
+                  key={index}
+                  content={part.rawContent}
+                  getBlockMetadata={getBlockMetadata}
+                />
+              );
+            }
+
+            return (
+              <StyledTable key={index}>
+                <thead>
+                  <tr>
+                    {part.headers.map((header, hIndex) => (
+                      <TableHeaderCell key={hIndex}>
+                        <ReactMarkdown
+                          transformLinkUri={(uri: string) => uri}
+                          components={components as any}
+                        >
+                          {header}
+                        </ReactMarkdown>
+                      </TableHeaderCell>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {part.rows.map((row, rIndex) => (
+                    <TableRow key={rIndex}>
+                      {row.map((cell, cIndex) => (
+                        <TableCell key={cIndex}>
+                          <ReactMarkdown
+                            transformLinkUri={(uri: string) => uri}
+                            components={components as any}
+                          >
+                            {cell}
+                          </ReactMarkdown>
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </tbody>
+              </StyledTable>
+            );
+          }
+
+          // Detect inline SVG in content and render separately
+          if (part.content.includes('<svg')) {
+            const svgRegex = /(<svg[\s\S]*?<\/svg>)/gi;
+            const segments = part.content.split(svgRegex);
+            return (
+              <React.Fragment key={index}>
+                {segments.map((seg, i) =>
+                  seg.trim().toLowerCase().startsWith('<svg')
+                    ? <InlineSVG key={i} content={seg} />
+                    : seg.trim() ? (
+                      <ReactMarkdown
+                        key={i}
+                        transformLinkUri={(uri: string) => uri}
+                        components={components as any}
+                      >
+                        {seg}
+                      </ReactMarkdown>
+                    ) : null
+                )}
+              </React.Fragment>
+            );
+          }
+
+          return (
+            <ReactMarkdown
+              key={index}
+              transformLinkUri={(uri: string) => uri}
+              components={components as any}
+            >
+              {part.content}
+            </ReactMarkdown>
+          );
+        })}
+      </React.Fragment>
+    );
+  };
 
   return (
     <>
@@ -782,87 +875,16 @@ const renderMarkdownWithProperties = (
           ))}
         </PropertyBlock>
       )}
-      {parts.map((part, index) => {
-        if (part.type === 'table') {
-          if (wrapTables) {
-            return (
-              <MarkdownTabbedPanel
-                key={index}
-                content={part.rawContent}
-                getBlockMetadata={getBlockMetadata}
-              />
-            );
+      {csvParts ? (
+        csvParts.map((part, index) => {
+          if (part.type === 'csv') {
+            return <CsvTabbedPanel key={index} table={part.table} />;
           }
-
-          return (
-            <StyledTable key={index}>
-              <thead>
-                <tr>
-                  {part.headers.map((header, hIndex) => (
-                    <TableHeaderCell key={hIndex}>
-                      <ReactMarkdown
-                        transformLinkUri={(uri: string) => uri}
-                        components={components as any}
-                      >
-                        {header}
-                      </ReactMarkdown>
-                    </TableHeaderCell>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {part.rows.map((row, rIndex) => (
-                  <TableRow key={rIndex}>
-                    {row.map((cell, cIndex) => (
-                      <TableCell key={cIndex}>
-                        <ReactMarkdown
-                          transformLinkUri={(uri: string) => uri}
-                          components={components as any}
-                        >
-                          {cell}
-                        </ReactMarkdown>
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </tbody>
-            </StyledTable>
-          );
-        }
-
-        // Detect inline SVG in content and render separately
-        if (part.content.includes('<svg')) {
-          const svgRegex = /(<svg[\s\S]*?<\/svg>)/gi;
-          const segments = part.content.split(svgRegex);
-          return (
-            <React.Fragment key={index}>
-              {segments.map((seg, i) =>
-                seg.trim().toLowerCase().startsWith('<svg')
-                  ? <InlineSVG key={i} content={seg} />
-                  : seg.trim() ? (
-                    <ReactMarkdown
-                      key={i}
-                      transformLinkUri={(uri: string) => uri}
-                      components={components as any}
-                    >
-                      {seg}
-                    </ReactMarkdown>
-                  ) : null
-              )}
-            </React.Fragment>
-          );
-        }
-
-        return (
-          <ReactMarkdown
-            key={index}
-            transformLinkUri={(uri: string) => uri}
-            components={components as any}
-          >
-            {part.content}
-          </ReactMarkdown>
-        );
-      })}
+          return renderMarkdownSegment(part.content, index);
+        })
+      ) : (
+        renderMarkdownSegment(processedContent, 'main')
+      )}
     </>
   );
 };
@@ -1041,6 +1063,100 @@ function MarkdownTabbedPanel({
       <TabPanel active={activeTab === 'preview'}>
         <PreviewArea ref={previewRef}>
           {renderMarkdownWithProperties(content, true, getBlockMetadata, false)}
+        </PreviewArea>
+      </TabPanel>
+    </SpecialPanel>
+  );
+}
+
+function CsvTabbedPanel({ table }: { table: CsvTable }) {
+  const [activeTab, setActiveTab] = React.useState<'code' | 'preview'>('preview');
+  const [copied, setCopied] = React.useState(false);
+  const previewRef = React.useRef<HTMLDivElement>(null);
+
+  const handleCopy = async () => {
+    try {
+      if (activeTab === 'code') {
+        await navigator.clipboard.writeText(table.rawContent);
+      } else if (activeTab === 'preview' && previewRef.current) {
+        const text = previewRef.current.innerText || previewRef.current.textContent || '';
+        const html = previewRef.current.innerHTML || '';
+
+        if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard.write === 'function') {
+          const textBlob = new Blob([text], { type: 'text/plain' });
+          const htmlBlob = new Blob([html], { type: 'text/html' });
+          const item = new ClipboardItem({
+            'text/plain': textBlob,
+            'text/html': htmlBlob,
+          });
+          await navigator.clipboard.write([item]);
+        } else {
+          await navigator.clipboard.writeText(text);
+        }
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy CSV:', err);
+    }
+  };
+
+  const handleTabChange = (tab: 'code' | 'preview') => {
+    setActiveTab(tab);
+    setCopied(false);
+  };
+
+  return (
+    <SpecialPanel>
+      <PanelHeader>
+        <PanelTabButton
+          active={activeTab === 'code'}
+          data-active={activeTab === 'code'}
+          onClick={() => handleTabChange('code')}
+        >
+          Code
+        </PanelTabButton>
+        <PanelTabButton
+          active={activeTab === 'preview'}
+          data-active={activeTab === 'preview'}
+          onClick={() => handleTabChange('preview')}
+        >
+          Preview
+        </PanelTabButton>
+        <CopyButton
+          copied={copied}
+          onClick={handleCopy}
+          title={copied ? 'Copied!' : activeTab === 'code' ? 'Copy CSV' : 'Copy table'}
+        >
+          {copied ? <CheckIcon /> : <CopyIcon />}
+          {copied ? 'Copied' : 'Copy'}
+        </CopyButton>
+      </PanelHeader>
+
+      <TabPanel active={activeTab === 'code'}>
+        <CodeArea>{table.rawContent}</CodeArea>
+      </TabPanel>
+
+      <TabPanel active={activeTab === 'preview'}>
+        <PreviewArea ref={previewRef}>
+          <StyledTable>
+            <thead>
+              <tr>
+                {table.headers.map((header, hIndex) => (
+                  <TableHeaderCell key={hIndex}>{header}</TableHeaderCell>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, rIndex) => (
+                <TableRow key={rIndex}>
+                  {row.map((cell, cIndex) => (
+                    <TableCell key={cIndex}>{cell}</TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </tbody>
+          </StyledTable>
         </PreviewArea>
       </TabPanel>
     </SpecialPanel>
