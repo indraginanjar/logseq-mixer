@@ -153,12 +153,14 @@ interface MaximizeOverlayProps {
  */
 export function MaximizeOverlay({ open, onClose, children }: MaximizeOverlayProps) {
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const containerRef = React.useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) {
       // Clean up when closing
-      if (portalContainer) {
-        portalContainer.remove();
+      if (containerRef.current) {
+        containerRef.current.remove();
+        containerRef.current = null;
         setPortalContainer(null);
       }
       return;
@@ -186,10 +188,12 @@ export function MaximizeOverlay({ open, onClose, children }: MaximizeOverlayProp
     const container = targetDoc.createElement('div');
     container.id = 'mixer-maximize-overlay';
     targetDoc.body.appendChild(container);
+    containerRef.current = container;
     setPortalContainer(container);
 
     return () => {
       container.remove();
+      containerRef.current = null;
       setPortalContainer(null);
     };
   }, [open]);
@@ -219,18 +223,11 @@ export function MaximizeOverlay({ open, onClose, children }: MaximizeOverlayProp
     };
   }, [open, onClose]);
 
-  if (!open || !portalContainer) {
-    // Fallback: render in current document if portal isn't ready yet
-    if (!open) return null;
-    return (
-      <Backdrop onClick={onClose}>
-        <CloseHint>Press Esc or click to close</CloseHint>
-        <ContentWrapper onClick={(e) => e.stopPropagation()}>
-          {children}
-        </ContentWrapper>
-      </Backdrop>
-    );
-  }
+  // Don't render anything when closed
+  if (!open) return null;
+
+  // Don't render fallback - wait for portal to be ready
+  if (!portalContainer) return null;
 
   // Render into the top-level document via portal
   return ReactDOM.createPortal(
