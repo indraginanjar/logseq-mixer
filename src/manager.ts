@@ -145,9 +145,24 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
   try {
     const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider);
     const provider = storageProvider as PerDocumentStorageProvider;
-    if (typeof provider.searchByVector !== 'function') return '';
+    if (typeof provider.searchByVector !== 'function') {
+      console.warn('[retrieveVectorContext] storageProvider has no searchByVector — returning empty');
+      return '';
+    }
     const index = ensureBM25Index(provider);
     const reranked = await hybridSearch(query, queryEmbedding, provider, index, { accelerator: accelerator ?? undefined });
+    console.info(`[retrieveVectorContext] Query: "${query.slice(0, 80)}..." → ${reranked.length} results`);
+    if (reranked.length > 0) {
+      reranked.forEach((hit, i) => {
+        console.info(`  [${i}] score=${hit.rrfScore.toFixed(4)} id=${hit.id} content="${hit.content.slice(0, 100)}..."`);
+      });
+    } else {
+      console.warn('[retrieveVectorContext] No results from hybrid search! Check if documents are indexed.');
+      if ('getDocumentCount' in provider && typeof (provider as any).getDocumentCount === 'function') {
+        const docCount = await (provider as any).getDocumentCount();
+        console.warn(`[retrieveVectorContext] Document count in store: ${docCount}`);
+      }
+    }
     return reranked.map(hit => hit.content).join('\n\n');
   } catch (err) {
     console.error("Vector search failed:", err);
@@ -252,9 +267,11 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Skip retrieval when images are attached — the user is asking about the image, not their notes
   const hasImages = !!imageDataUrl && (Array.isArray(imageDataUrl) ? imageDataUrl.length > 0 : true);
   const needsRetrieval = !hasImages && shouldRetrieveContext(query);
+  console.info(`[handleQuery] needsRetrieval=${needsRetrieval}, hasImages=${hasImages}`);
   const vectorContext = needsRetrieval
     ? await retrieveVectorContext(query, settings, storageProvider)
     : '';
+  console.info(`[handleQuery] vectorContext length=${vectorContext.length} chars`);
 
   // Build system message
   let systemMessage = settings.prompt;
@@ -274,9 +291,12 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Inject memory
   const { memoryText, accessedIds } = injectMemoryContext(query, settings, userBudget, vectorContext);
   if (memoryText) {
+    console.info(`[handleQuery] Memory injected: ${countTokens(memoryText)} tokens, ${accessedIds.length} memory entries`);
     systemMessage += memoryText;
     userBudget -= countTokens(memoryText);
     memoryStore!.updateLastAccessed(accessedIds);
+  } else {
+    console.info('[handleQuery] No memory injected');
   }
 
   // Build edit context

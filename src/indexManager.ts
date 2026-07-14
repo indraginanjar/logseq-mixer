@@ -167,13 +167,15 @@ function collectBlockContent(blocks: any[]): string[] {
 }
 
 const isInternalPage = (name: string) => {
-  return name.startsWith('card') ||
-         name.startsWith('contents') ||
-         name.startsWith('favorites') ||
-         name.startsWith('__') ||
-         name === 'journals' ||
-         name === 'contents' ||
-         name === 'favorites';
+  const lower = name.toLowerCase();
+  return lower.startsWith('card') ||
+         lower.startsWith('contents') ||
+         lower.startsWith('favorites') ||
+         lower.startsWith('__') ||
+         lower.startsWith('mixer/') ||
+         lower === 'journals' ||
+         lower === 'contents' ||
+         lower === 'favorites';
 };
 
 export async function checkAndIndexUpdatedPages(
