@@ -6,6 +6,7 @@ import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import type { RankedHit } from 'reranker';
 import { shouldRetrieveContext } from 'intentClassifier';
+import { isMermaidIntent, MERMAID_RULES } from './utils/mermaidIntentDetector';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
 import { queryLiteLLM, type ChatMessage, type MessageContentPart, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
 import { countTokens, encode, decode } from 'tokenizer';
@@ -422,6 +423,11 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   if (editMode) {
     try { editPageContext = await getActivePageContext(); } catch {}
     systemMessage += '\n\n' + buildEditSystemPrompt();
+  }
+
+  // Conditionally inject Mermaid rules if the query is about diagrams/charts
+  if (isMermaidIntent(query)) {
+    systemMessage += '\n' + MERMAID_RULES;
   }
 
   // Calculate token budgets

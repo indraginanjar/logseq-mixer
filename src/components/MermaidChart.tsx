@@ -53,8 +53,38 @@ const LoadingText = styled('div', {
   padding: '8px',
 });
 
+const FixButton = styled('button', {
+  fontSize: '11px',
+  padding: '4px 10px',
+  borderRadius: '4px',
+  border: '1px solid $blue6',
+  backgroundColor: '$blue3',
+  color: '$blue11',
+  cursor: 'pointer',
+  marginTop: '6px',
+  transition: 'all 0.15s',
+  '&:hover': {
+    backgroundColor: '$blue4',
+    borderColor: '$blue7',
+  },
+  '&:disabled': {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+});
+
+const FixingText = styled('div', {
+  fontSize: '11px',
+  color: '$blue10',
+  padding: '4px 0',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+});
+
 interface MermaidChartProps {
   code: string;
+  onCodeFixed?: (fixedCode: string) => void;
 }
 
 function stripSvgDimensions(html: string): string {
@@ -82,7 +112,7 @@ async function getMermaid() {
     mermaid.initialize({
       startOnLoad: false,
       theme: 'neutral',
-      securityLevel: 'strict',
+      securityLevel: 'loose',
       fontFamily: 'Inter, sans-serif',
       suppressErrorRendering: true,
     });
@@ -129,7 +159,7 @@ function cleanupMermaidDOM() {
  * Perform mermaid rendering with a hard timeout.
  * Returns the SVG string or throws an error.
  */
-async function renderMermaidSafe(code: string, timeoutMs: number = 8000): Promise<string> {
+export async function renderMermaidSafe(code: string, timeoutMs: number = 8000): Promise<string> {
   const mermaid = await getMermaid();
 
   // Validate syntax first (fast, rarely causes DOM issues)
@@ -174,7 +204,9 @@ async function renderMermaidSafe(code: string, timeoutMs: number = 8000): Promis
   }
 }
 
-export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
+const MAX_AUTO_FIX_ATTEMPTS = 2;
+
+export default React.memo(function MermaidChart({ code, onCodeFixed }: MermaidChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,6 +214,18 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
   const renderedCodeRef = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
   const { isMaximized, open: openMaximize, close: closeMaximize } = useMaximize();
+  const [fixing, setFixing] = useState(false);
+  const [fixAttempts, setFixAttempts] = useState(0);
+  const [autoFixDone, setAutoFixDone] = useState(false);
+  const currentCodeRef = useRef(code);
+
+  // Track current code for auto-fix
+  useEffect(() => {
+    currentCodeRef.current = code;
+    // Reset fix state when code prop changes externally
+    setFixAttempts(0);
+    setAutoFixDone(false);
+  }, [code]);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +246,17 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
     const timerId = setTimeout(async () => {
       if (cancelled) return;
 
+      // Pre-render sanitization: fix common Logseq markup patterns
+      // that LLMs inject into Mermaid code from RAG context
+      const { sanitizeMermaidCode } = await import('../utils/mermaidSanitizer');
+      const sanitized = sanitizeMermaidCode(trimmedCode);
+
+      // If sanitizer changed the code, emit the fix and let re-render happen naturally
+      if (sanitized !== trimmedCode && onCodeFixed) {
+        onCodeFixed(sanitized);
+        return;
+      }
+
       try {
         const svg = await renderMermaidSafe(trimmedCode);
         if (!cancelled) {
@@ -211,8 +266,14 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
         }
       } catch (err: any) {
         if (!cancelled) {
-          setError(err.message || 'Failed to render chart');
+          const errorMsg = err.message || 'Failed to render chart';
+          setError(errorMsg);
           setSvgContent(null);
+
+          // Auto-fix on first error if we haven't exhausted attempts
+          if (fixAttempts < MAX_AUTO_FIX_ATTEMPTS && !autoFixDone && onCodeFixed) {
+            triggerAutoFix(trimmedCode, errorMsg);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -230,6 +291,46 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
     };
   }, [code]);
 
+  const triggerAutoFix = async (brokenCode: string, errorMsg: string) => {
+    if (!onCodeFixed || fixing) return;
+    setFixing(true);
+    setFixAttempts(prev => prev + 1);
+
+    try {
+      const { fixMermaidWithLLM } = await import('../utils/mermaidFixer');
+      const settings = (window as any).logseq?.settings;
+      if (!settings) {
+        setAutoFixDone(true);
+        return;
+      }
+
+      const fixedCode = await fixMermaidWithLLM(brokenCode, errorMsg, {
+        selectedModel: settings.selectedModel,
+        apiKey: settings.apiKey,
+        chatEndpoint: settings.chatEndpoint,
+        chatProvider: settings.chatProvider,
+      });
+
+      if (fixedCode && fixedCode !== brokenCode) {
+        onCodeFixed(fixedCode);
+      } else {
+        setAutoFixDone(true);
+      }
+    } catch (e) {
+      console.error('[MermaidChart] Auto-fix failed:', e);
+      setAutoFixDone(true);
+    } finally {
+      setFixing(false);
+    }
+  };
+
+  const handleManualFix = () => {
+    if (!error || !onCodeFixed) return;
+    setFixAttempts(0);
+    setAutoFixDone(false);
+    triggerAutoFix(code.trim(), error);
+  };
+
   // Update visible container when SVG changes
   useEffect(() => {
     if (svgContent && containerRef.current) {
@@ -241,6 +342,17 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
     return (
       <ChartContainer>
         <ErrorText>⚠️ Chart render error: {error}</ErrorText>
+        {fixing && (
+          <FixingText>
+            <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>🔄</span>
+            Fixing with AI (attempt {fixAttempts}/{MAX_AUTO_FIX_ATTEMPTS})...
+          </FixingText>
+        )}
+        {!fixing && onCodeFixed && (
+          <FixButton onClick={handleManualFix} disabled={fixing}>
+            🔧 Fix with AI
+          </FixButton>
+        )}
         <pre style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{code}</pre>
       </ChartContainer>
     );

@@ -904,16 +904,24 @@ const renderMarkdownWithProperties = (
   );
 };
 
-const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code }: { code: string }) {
+const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code: initialCode }: { code: string }) {
   const [activeTab, setActiveTab] = React.useState<'preview' | 'code'>('code');
   const [copied, setCopied] = React.useState(false);
   const [renderRequested, setRenderRequested] = React.useState(false);
   const previewRef = React.useRef<HTMLDivElement>(null);
+  const [currentCode, setCurrentCode] = React.useState(initialCode);
+
+  // Update currentCode if the parent provides new code
+  React.useEffect(() => { setCurrentCode(initialCode); }, [initialCode]);
+
+  const handleCodeFixed = React.useCallback((fixedCode: string) => {
+    setCurrentCode(fixedCode);
+  }, []);
 
   const handleCopy = async () => {
     try {
       if (activeTab === 'code') {
-        await navigator.clipboard.writeText(code);
+        await navigator.clipboard.writeText(currentCode);
         setCopied(true);
       } else if (activeTab === 'preview') {
         // Copy the rendered chart as an image
@@ -995,7 +1003,7 @@ const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code }: { co
       <TabPanel active={activeTab === 'preview'}>
         <div ref={previewRef}>
           {renderRequested ? (
-            <MermaidChart code={code} />
+            <MermaidChart code={currentCode} onCodeFixed={handleCodeFixed} />
           ) : (
             <div style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>
               Click "Preview" to render the chart
@@ -1005,7 +1013,7 @@ const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code }: { co
       </TabPanel>
 
       <TabPanel active={activeTab === 'code'}>
-        <CodeArea>{code}</CodeArea>
+        <CodeArea>{currentCode}</CodeArea>
       </TabPanel>
     </SpecialPanel>
   );
