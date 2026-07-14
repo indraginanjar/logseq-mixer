@@ -57,10 +57,6 @@ interface MermaidChartProps {
   code: string;
 }
 
-/**
- * Strip fixed width/height attributes from SVG elements so they can
- * scale to fill their container in the maximize view.
- */
 function stripSvgDimensions(html: string): string {
   return html
     .replace(/(<svg[^>]*)\s+width="[^"]*"/gi, '$1')
@@ -69,24 +65,119 @@ function stripSvgDimensions(html: string): string {
 }
 
 /**
- * Renders mermaid diagrams inside a sandboxed iframe to completely isolate
- * mermaid's DOM manipulation from the host document (Logseq).
- *
- * This prevents mermaid from injecting error elements, measurement divs,
- * or any other DOM pollution into Logseq's document that could block UI.
- *
- * The iframe loads mermaid from CDN, renders the diagram, and communicates
- * the resulting SVG back via postMessage.
+ * Render mermaid code asynchronously using the bundled library but with
+ * aggressive isolation: render in a hidden container, with a timeout,
+ * and scheduled via requestIdleCallback/setTimeout to avoid blocking
+ * the main thread during Logseq interactions.
  */
+let mermaidInstance: any = null;
+let mermaidLoading: Promise<any> | null = null;
+
+async function getMermaid() {
+  if (mermaidInstance) return mermaidInstance;
+  if (mermaidLoading) return mermaidLoading;
+
+  mermaidLoading = import('mermaid').then(m => {
+    const mermaid = m.default;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'neutral',
+      securityLevel: 'strict',
+      fontFamily: 'Inter, sans-serif',
+      suppressErrorRendering: true,
+    });
+    mermaidInstance = mermaid;
+    return mermaid;
+  });
+
+  return mermaidLoading;
+}
+
+/**
+ * Remove any mermaid error/temp elements from all accessible documents.
+ */
+function cleanupMermaidDOM() {
+  const docs: Document[] = [document];
+  try {
+    if (top?.document && top.document !== document) docs.push(top.document);
+  } catch { /* cross-origin */ }
+
+  for (const doc of docs) {
+    // Remove by known patterns
+    doc.querySelectorAll(
+      '#d, [id^="dmermaid-"], [id^="mermaid-"], [data-mermaid-error], .mermaid-error'
+    ).forEach(el => {
+      // Don't remove our own visible container
+      if ((el as HTMLElement).dataset?.mixerChart) return;
+      el.remove();
+    });
+
+    // Remove elements containing mermaid error text
+    for (let i = doc.body.children.length - 1; i >= 0; i--) {
+      const child = doc.body.children[i] as HTMLElement;
+      if (child.textContent?.includes('Syntax error in text') && child.textContent?.includes('mermaid version')) {
+        child.remove();
+      }
+    }
+  }
+}
+
+/**
+ * Perform mermaid rendering with a hard timeout.
+ * Returns the SVG string or throws an error.
+ */
+async function renderMermaidSafe(code: string, timeoutMs: number = 8000): Promise<string> {
+  const mermaid = await getMermaid();
+
+  // Validate syntax first (fast, rarely causes DOM issues)
+  try {
+    await (mermaid as any).parse(code);
+  } catch (e: any) {
+    cleanupMermaidDOM();
+    throw new Error(e.message || 'Invalid mermaid syntax');
+  }
+
+  // Race render against timeout
+  const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const renderPromise = (async () => {
+    try {
+      const { svg } = await mermaid.render(id, code);
+      return svg;
+    } catch (e: any) {
+      throw new Error(e.message || 'Render failed');
+    } finally {
+      // Always cleanup: remove temp element and any error elements
+      const tempEl = document.getElementById(id);
+      if (tempEl) tempEl.remove();
+      cleanupMermaidDOM();
+    }
+  })();
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Render timed out. The diagram may be too complex.'));
+      // Force cleanup after timeout
+      const tempEl = document.getElementById(id);
+      if (tempEl) tempEl.remove();
+      cleanupMermaidDOM();
+    }, timeoutMs);
+  });
+
+  return Promise.race([renderPromise, timeoutPromise]);
+}
+
 export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const renderedCodeRef = useRef<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const { isMaximized, open: openMaximize, close: closeMaximize } = useMaximize();
 
   useEffect(() => {
+    let cancelled = false;
     const trimmedCode = code.trim();
 
     // Skip if already rendered this code
@@ -98,72 +189,41 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
     setLoading(true);
     setError(null);
 
-    // Timeout to prevent infinite hanging
-    const timeout = setTimeout(() => {
-      setError('Render timed out (10s). The diagram may be too complex or have syntax errors.');
-      setLoading(false);
-      cleanup();
-    }, 10000);
+    // Use setTimeout(0) to yield to the event loop before starting render.
+    // This ensures the UI updates (shows "Rendering...") before mermaid
+    // potentially blocks the thread.
+    const timerId = setTimeout(async () => {
+      if (cancelled) return;
 
-    // Listen for message from iframe
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'mermaid-result') {
-        clearTimeout(timeout);
-        if (event.data.error) {
-          setError(event.data.error);
-          setSvgContent(null);
-        } else {
-          setSvgContent(event.data.svg);
+      try {
+        const svg = await renderMermaidSafe(trimmedCode);
+        if (!cancelled) {
+          setSvgContent(svg);
           renderedCodeRef.current = trimmedCode;
           setError(null);
         }
-        setLoading(false);
-        cleanup();
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message || 'Failed to render chart');
+          setSvgContent(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+        // Always do a final cleanup pass
+        cleanupMermaidDOM();
       }
-    };
-
-    window.addEventListener('message', handleMessage);
-
-    // Create sandboxed iframe for rendering
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'absolute';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    iframe.style.visibility = 'hidden';
-    iframe.style.pointerEvents = 'none';
-    // sandbox allows scripts but nothing else — no DOM access to parent
-    iframe.setAttribute('sandbox', 'allow-scripts');
-    document.body.appendChild(iframe);
-    iframeRef.current = iframe;
-
-    // Write the mermaid rendering script into the iframe
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (iframeDoc) {
-      iframeDoc.open();
-      iframeDoc.write(buildIframeHTML(trimmedCode));
-      iframeDoc.close();
-    } else {
-      clearTimeout(timeout);
-      setError('Failed to create render sandbox');
-      setLoading(false);
-    }
-
-    function cleanup() {
-      window.removeEventListener('message', handleMessage);
-      if (iframeRef.current) {
-        iframeRef.current.remove();
-        iframeRef.current = null;
-      }
-    }
+    }, 50); // Small delay to let UI breathe
 
     return () => {
-      clearTimeout(timeout);
-      cleanup();
+      cancelled = true;
+      clearTimeout(timerId);
+      cleanupMermaidDOM();
     };
   }, [code]);
 
-  // Update the visible container when SVG content changes
+  // Update visible container when SVG changes
   useEffect(() => {
     if (svgContent && containerRef.current) {
       containerRef.current.innerHTML = svgContent;
@@ -218,14 +278,11 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
     } catch { /* ignore */ }
   };
 
-  const [copied, setCopied] = useState(false);
-  const { isMaximized, open: openMaximize, close: closeMaximize } = useMaximize();
-
   return (
     <Wrapper>
       <ChartContainer>
         {loading && <LoadingText>Rendering chart...</LoadingText>}
-        <div ref={containerRef} />
+        <div ref={containerRef} data-mixer-chart="true" />
       </ChartContainer>
       {!loading && !error && svgContent && (
         <CopyButton onClick={handleCopy} title="Copy chart as image">
@@ -247,44 +304,3 @@ export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
     </Wrapper>
   );
 });
-
-/**
- * Build the HTML content for the sandboxed iframe.
- * Loads mermaid from CDN (esm.sh) and renders the diagram,
- * posting the result back to the parent via postMessage.
- */
-function buildIframeHTML(code: string): string {
-  // Escape the code for safe embedding in a script
-  const escapedCode = JSON.stringify(code);
-
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body>
-<div id="render-target"></div>
-<script type="module">
-import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
-
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'neutral',
-  securityLevel: 'strict',
-  fontFamily: 'Inter, sans-serif',
-  suppressErrorRendering: true,
-});
-
-const code = ${escapedCode};
-
-try {
-  // Validate first
-  await mermaid.parse(code);
-  // Render
-  const { svg } = await mermaid.render('diagram', code);
-  parent.postMessage({ type: 'mermaid-result', svg: svg }, '*');
-} catch (err) {
-  parent.postMessage({ type: 'mermaid-result', error: err.message || 'Render failed' }, '*');
-}
-</script>
-</body>
-</html>`;
-}
