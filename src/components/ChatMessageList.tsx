@@ -905,8 +905,9 @@ const renderMarkdownWithProperties = (
 };
 
 const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code }: { code: string }) {
-  const [activeTab, setActiveTab] = React.useState<'preview' | 'code'>('preview');
+  const [activeTab, setActiveTab] = React.useState<'preview' | 'code'>('code');
   const [copied, setCopied] = React.useState(false);
+  const [renderRequested, setRenderRequested] = React.useState(false);
   const previewRef = React.useRef<HTMLDivElement>(null);
 
   const handleCopy = async () => {
@@ -959,6 +960,9 @@ const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code }: { co
   const handleTabChange = (tab: 'preview' | 'code') => {
     setActiveTab(tab);
     setCopied(false);
+    if (tab === 'preview') {
+      setRenderRequested(true);
+    }
   };
 
   return (
@@ -990,7 +994,13 @@ const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code }: { co
 
       <TabPanel active={activeTab === 'preview'}>
         <div ref={previewRef}>
-          <MermaidChart code={code} />
+          {renderRequested ? (
+            <MermaidChart code={code} />
+          ) : (
+            <div style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>
+              Click "Preview" to render the chart
+            </div>
+          )}
         </div>
       </TabPanel>
 
