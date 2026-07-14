@@ -904,7 +904,7 @@ const renderMarkdownWithProperties = (
   );
 };
 
-function MermaidTabbedPanel({ code }: { code: string }) {
+const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code }: { code: string }) {
   const [activeTab, setActiveTab] = React.useState<'preview' | 'code'>('preview');
   const [copied, setCopied] = React.useState(false);
   const previewRef = React.useRef<HTMLDivElement>(null);
@@ -999,7 +999,7 @@ function MermaidTabbedPanel({ code }: { code: string }) {
       </TabPanel>
     </SpecialPanel>
   );
-}
+});
 
 function MarkdownTabbedPanel({
   content,
@@ -1196,64 +1196,89 @@ export default function ChatMessageList({ messages, editResults, getBlockMetadat
       {messages.map((msg) => {
         const result = editResults?.get(msg.id);
         return (
-          <React.Fragment key={msg.id}>
-            <MessageRow align={msg.sender}>
-              {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
-              <Bubble role={msg.sender}>
-                {msg.image && msg.image.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {msg.image.map((img, imgIdx) => (
-                        <span key={imgIdx} style={{ display: 'inline-block', position: 'relative' }}>
-                          <img src={img.content} alt={img.name} style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
-                        </span>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {msg.image.map((img, i) => (
-                        <span
-                          key={i}
-                          onClick={() => onImageReattach?.(img)}
-                          style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
-                          title="Click to re-attach this image"
-                        >📷 {img.name}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {msg.file && msg.file.length > 0 && (
-                  <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-                    {msg.file.map((f, i) => (
-                      <span
-                        key={i}
-                        onClick={() => onFileReattach?.(f)}
-                        style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
-                        title="Click to re-attach this file"
-                      >📎 {f.name}</span>
-                    ))}
-                  </span>
-                )}
-                {renderMarkdownWithProperties(
-                  msg.content,
-                  msg.sender === 'assistant',
-                  getBlockMetadata,
-                  msg.sender === 'assistant'
-                )}
-              </Bubble>
-              {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
-            </MessageRow>
-            {result && (
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '4px', marginBottom: '12px' }}>
-                <div style={{ width: '28px', flexShrink: 0 }} />
-                <div style={{ maxWidth: '80%', width: '100%' }}>
-                  <ChangeSummary result={result} />
-                </div>
-              </div>
-            )}
-          </React.Fragment>
+          <ChatMessageItem
+            key={msg.id}
+            msg={msg}
+            result={result}
+            getBlockMetadata={getBlockMetadata}
+            onFileReattach={onFileReattach}
+            onImageReattach={onImageReattach}
+          />
         );
       })}
     </Container>
   );
 }
+
+const ChatMessageItem = React.memo(function ChatMessageItem({
+  msg,
+  result,
+  getBlockMetadata,
+  onFileReattach,
+  onImageReattach,
+}: {
+  msg: ChatMessage;
+  result?: ExecutionResult;
+  getBlockMetadata?: ChatMessageListProps['getBlockMetadata'];
+  onFileReattach?: ChatMessageListProps['onFileReattach'];
+  onImageReattach?: ChatMessageListProps['onImageReattach'];
+}) {
+  return (
+    <React.Fragment>
+      <MessageRow align={msg.sender}>
+        {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
+        <Bubble role={msg.sender}>
+          {msg.image && msg.image.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {msg.image.map((img, imgIdx) => (
+                  <span key={imgIdx} style={{ display: 'inline-block', position: 'relative' }}>
+                    <img src={img.content} alt={img.name} style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {msg.image.map((img, i) => (
+                  <span
+                    key={i}
+                    onClick={() => onImageReattach?.(img)}
+                    style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                    title="Click to re-attach this image"
+                  >📷 {img.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {msg.file && msg.file.length > 0 && (
+            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+              {msg.file.map((f, i) => (
+                <span
+                  key={i}
+                  onClick={() => onFileReattach?.(f)}
+                  style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                  title="Click to re-attach this file"
+                >📎 {f.name}</span>
+              ))}
+            </span>
+          )}
+          {renderMarkdownWithProperties(
+            msg.content,
+            msg.sender === 'assistant',
+            getBlockMetadata,
+            msg.sender === 'assistant'
+          )}
+        </Bubble>
+        {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
+      </MessageRow>
+      {result && (
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '4px', marginBottom: '12px' }}>
+          <div style={{ width: '28px', flexShrink: 0 }} />
+          <div style={{ maxWidth: '80%', width: '100%' }}>
+            <ChangeSummary result={result} />
+          </div>
+        </div>
+      )}
+    </React.Fragment>
+  );
+});
 
