@@ -101,13 +101,21 @@ interface MermaidChartProps {
   code: string;
 }
 
-export default function MermaidChart({ code }: MermaidChartProps) {
+export default React.memo(function MermaidChart({ code }: MermaidChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const renderedCodeRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Skip if we've already rendered this exact code
+    if (renderedCodeRef.current === code.trim()) {
+      setLoading(false);
+      return;
+    }
+
     const render = async () => {
       try {
         const mermaid = await getMermaid();
@@ -134,6 +142,7 @@ export default function MermaidChart({ code }: MermaidChartProps) {
           if (!cancelled && containerRef.current) {
             containerRef.current.innerHTML = svg;
             setError(null);
+            renderedCodeRef.current = trimmedCode;
           }
         } catch (renderErr: any) {
           // Clean up any orphaned error elements
@@ -234,4 +243,4 @@ export default function MermaidChart({ code }: MermaidChartProps) {
       </MaximizeOverlay>
     </Wrapper>
   );
-}
+});
