@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { keyframes, styled } from '../stitches.config';
 
 const fadeIn = keyframes({
@@ -85,32 +86,161 @@ export const maximizeButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+/**
+ * Styles injected into the parent document for the fullscreen overlay.
+ * We can't use stitches there since it's a different document context.
+ */
+const OVERLAY_STYLES = `
+.mixer-maximize-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  cursor: zoom-out;
+  animation: mixer-fade-in 0.15s ease-out;
+}
+@keyframes mixer-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.mixer-maximize-content {
+  max-width: 95vw;
+  max-height: 95vh;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+.mixer-maximize-content img {
+  max-width: 95vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.mixer-maximize-content svg {
+  max-width: 95vw;
+  max-height: 90vh;
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+}
+.mixer-maximize-hint {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  user-select: none;
+  z-index: 100000;
+}
+`;
+
 interface MaximizeOverlayProps {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }
 
+/**
+ * Tries to render the overlay in the top-level document (Logseq's main window)
+ * to get full desktop-sized display. Falls back to the current iframe if
+ * cross-origin restrictions prevent access.
+ */
 export function MaximizeOverlay({ open, onClose, children }: MaximizeOverlayProps) {
-  // Close on Escape
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      // Clean up when closing
+      if (portalContainer) {
+        portalContainer.remove();
+        setPortalContainer(null);
+      }
+      return;
+    }
+
+    // Try to render in the top-level document for full desktop size
+    let targetDoc: Document;
+    try {
+      targetDoc = top?.document ?? document;
+      // Test access (will throw if cross-origin)
+      void targetDoc.body;
+    } catch {
+      targetDoc = document;
+    }
+
+    // Inject styles if not already present
+    if (!targetDoc.getElementById('mixer-maximize-styles')) {
+      const style = targetDoc.createElement('style');
+      style.id = 'mixer-maximize-styles';
+      style.textContent = OVERLAY_STYLES;
+      targetDoc.head.appendChild(style);
+    }
+
+    // Create container for the overlay
+    const container = targetDoc.createElement('div');
+    container.id = 'mixer-maximize-overlay';
+    targetDoc.body.appendChild(container);
+    setPortalContainer(container);
+
+    return () => {
+      container.remove();
+      setPortalContainer(null);
+    };
+  }, [open]);
+
+  // Close on Escape key (listen on both documents)
   useEffect(() => {
     if (!open) return;
+
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
+
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    try {
+      if (top?.document && top.document !== document) {
+        top.document.addEventListener('keydown', handler);
+      }
+    } catch { /* cross-origin */ }
+
+    return () => {
+      document.removeEventListener('keydown', handler);
+      try {
+        if (top?.document && top.document !== document) {
+          top.document.removeEventListener('keydown', handler);
+        }
+      } catch { /* cross-origin */ }
+    };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !portalContainer) {
+    // Fallback: render in current document if portal isn't ready yet
+    if (!open) return null;
+    return (
+      <Backdrop onClick={onClose}>
+        <CloseHint>Press Esc or click to close</CloseHint>
+        <ContentWrapper onClick={(e) => e.stopPropagation()}>
+          {children}
+        </ContentWrapper>
+      </Backdrop>
+    );
+  }
 
-  return (
-    <Backdrop onClick={onClose}>
-      <CloseHint>Press Esc or click to close</CloseHint>
-      <ContentWrapper onClick={(e) => e.stopPropagation()}>
+  // Render into the top-level document via portal
+  return ReactDOM.createPortal(
+    <div className="mixer-maximize-backdrop" onClick={onClose}>
+      <div className="mixer-maximize-hint">Press Esc or click to close</div>
+      <div className="mixer-maximize-content" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
         {children}
-      </ContentWrapper>
-    </Backdrop>
+      </div>
+    </div>,
+    portalContainer
   );
 }
 
