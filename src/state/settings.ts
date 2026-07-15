@@ -26,6 +26,7 @@ interface IPluginSettings {
   agentMaxIterations?: number;
   agentVerboseMode?: boolean;
   agentPersistVerboseToChat?: boolean;
+  plantumlServer?: string;
 }
 
 const settingsChangedEffect: AtomEffect<IPluginSettings> = ({ setSelf }) => {

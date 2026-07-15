@@ -3,7 +3,7 @@ import { countTokens, encode, decode } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import { executeOne } from 'blockExecutor';
 import { runReActLoop } from './ReActLoop';
-import { isMermaidIntent, MERMAID_RULES } from '../utils/mermaidIntentDetector';
+import { isDiagramIntent, DIAGRAM_RULES } from '../utils/diagramIntentDetector';
 import type { AgentPlan, AgentStep, AgentProgressEvent, StepResult, StepContext } from './types';
 
 const PLAN_SYSTEM_PROMPT = `You are a planning agent for a Logseq knowledge management system. Break down the user's goal into atomic steps.
@@ -331,7 +331,7 @@ RULES:
           focusedBlockContext = `\nCurrent/Focused Block UUID: "${currentBlock.uuid}"\nCurrent/Focused Block Content: "${currentBlock.content || ''}"\n(When the user says "this block", "current block", or "selected block", they mean the block above. Its sub-blocks are the blocks indented one level deeper directly beneath it in the tool results.)\n`;
         }
       } catch { /* ignore */ }
-      const stepMermaidRules = isMermaidIntent(step.description) || isMermaidIntent(context.goal) ? MERMAID_RULES : '';
+      const stepMermaidRules = isDiagramIntent(step.description) || isDiagramIntent(context.goal) ? DIAGRAM_RULES : '';
       const messages: ChatMessage[] = [
         { role: 'system', content: STEP_SYSTEM_PROMPT + stepMermaidRules },
         { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}${focusedBlockContext}\n\nCurrent step: ${step.description}\n\nUse the available tools to accomplish this step. Call as many tools as needed.` },
@@ -390,7 +390,7 @@ RULES:
       } catch { /* ignore */ }
     }
 
-    const mermaidRules = isMermaidIntent(step.description) || isMermaidIntent(context.goal) ? MERMAID_RULES : '';
+    const mermaidRules = isDiagramIntent(step.description) || isDiagramIntent(context.goal) ? DIAGRAM_RULES : '';
     const messages: ChatMessage[] = [
       { role: 'system', content: STEP_SYSTEM_PROMPT + mermaidRules },
       { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}${writeContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using ALL the data above — especially the "Gathered Data (Working Memory)" section if present — produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },

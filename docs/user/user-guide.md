@@ -141,10 +141,25 @@ The AI can generate visual content directly in chat.
 
 ### Supported Formats
 
-| Format | Diagram Types |
+| Format | Diagram Types | Rendering |
+|---|---|---|
+| **Mermaid** | Flowcharts, sequence diagrams, mindmaps, pie charts, gantt charts, ER diagrams, state diagrams | Client-side (bundled library) |
+| **PlantUML** | Class diagrams, sequence diagrams, component diagrams, deployment diagrams, activity diagrams, use case diagrams | External server |
+| **SVG** | Custom illustrations and diagrams | Inline rendering |
+
+### Format Selection
+
+The AI automatically chooses the best format based on your request:
+
+| Best for Mermaid | Best for PlantUML |
 |---|---|
-| **Mermaid** | Flowcharts, sequence diagrams, mindmaps, pie charts, gantt charts, ER diagrams, state diagrams, and more |
-| **SVG** | Custom illustrations and diagrams |
+| Flowcharts and process flows | UML class diagrams (methods, attributes, inheritance) |
+| Mindmaps and tree structures | Complex sequence diagrams (lifelines, alt/opt blocks) |
+| Pie charts and Gantt charts | Component and deployment diagrams |
+| Simple ER diagrams | Activity diagrams with complex branching |
+| State diagrams | Use case diagrams |
+
+You can also explicitly request a format: "create a mermaid mindmap" or "generate a plantuml class diagram."
 
 ### Mermaid Diagram Panel
 
@@ -155,36 +170,52 @@ When the AI generates a Mermaid diagram, it appears in a tabbed panel:
 | **Preview** | Rendered diagram (click to activate rendering) |
 | **Code** | Raw Mermaid source code |
 
-Actions available:
+### PlantUML Diagram Panel
+
+PlantUML diagrams render via an external server (configurable in settings):
+
+| Tab | Description |
+|---|---|
+| **Preview** | Rendered diagram (loads automatically from server) |
+| **Code** | Raw PlantUML source code |
+
+Actions available on both:
 - **Copy** — Copy source code (in Code tab) or copy as PNG image (in Preview tab)
 - **⛶ Maximize** — View the chart fullscreen
 
-### Auto-Fix for Mermaid Errors
+### Auto-Fix for Diagram Errors
 
-If a generated Mermaid diagram fails to render:
+If a generated diagram fails to render:
 
-1. **Programmatic sanitizer** runs first — fixes common syntax issues automatically (no LLM call needed)
-2. **AI-powered fixer** — If sanitizer can't fix it, the error + code are sent to the LLM for correction (up to 2 attempts)
+1. **Programmatic sanitizer** (Mermaid only) — fixes common syntax issues automatically
+2. **AI-powered fixer** — The error + code are sent to the LLM for correction (up to 2 attempts)
 3. **Manual retry** — A "🔧 Fix with AI" button lets you trigger another fix attempt
 
 ### Mermaid Diagram Limitations
 
-The following are known limitations of Mermaid diagram generation in Logseq Mixer:
+| Limitation | Details |
+|---|---|
+| **No emoji in node labels** | Emoji characters crash the Mermaid renderer. They are automatically stripped. |
+| **Mindmap coloring** | Mindmaps do not support per-node color styling. Colors are assigned by theme. |
+| **Logseq links in output** | `[[page links]]` are automatically stripped before rendering. |
+| **Large diagrams** | 8-second timeout — overly complex diagrams will show a timeout error. |
+
+### PlantUML Diagram Limitations
 
 | Limitation | Details |
 |---|---|
-| **No emoji in node labels** | Emoji characters (🟩🟨🟧✅❌ etc.) crash the Mermaid renderer. They are automatically stripped by the sanitizer. |
-| **Mindmap coloring** | Mindmaps do not support per-node color styling (`:::className` or `style` lines). Colors are assigned automatically by the theme based on branch depth. |
-| **Logseq links in output** | The AI may copy `[[page links]]` from your notes into diagram code. These are automatically stripped before rendering. |
-| **Large diagrams** | Diagrams with 50+ nodes may render slowly. There is an 8-second timeout — overly complex diagrams will show a timeout error. |
-| **Diagram type support** | Rendering depends on the bundled Mermaid version. Experimental diagram types may not be available. |
+| **Requires network** | Diagrams are rendered by an external server. Offline usage requires a self-hosted server. |
+| **Privacy** | Diagram source code is sent to the configured server. For sensitive data, self-host the server. |
+| **Self-hosting** | Run `docker run -p 8080:8080 plantuml/plantuml-server:jetty` and set the endpoint to `http://localhost:8080`. |
+| **Error messages** | The PlantUML server returns error images rather than text — auto-fix relies on the LLM analyzing the code. |
 
 ### Tips for Better Diagrams
 
-- **Be specific about diagram type:** "Create a flowchart showing..." or "Make a mindmap of..." gives better results than "visualize this data."
-- **Specify structure:** For mindmaps, describe the grouping you want (e.g., "group by status" or "group by team").
-- **Colors in flowcharts work:** For flowchart/graph diagrams, you can ask for colors — the AI can use `style` and `classDef` directives that render correctly.
-- **Keep it focused:** Diagrams with too many nodes become unreadable. Ask the AI to show top-level categories or limit to a subset.
+- **Be specific about diagram type:** "Create a flowchart showing..." or "Make a class diagram of..." gives better results.
+- **Specify structure:** For mindmaps, describe the grouping you want (e.g., "group by status").
+- **UML diagrams:** For class diagrams, component diagrams, or deployment diagrams, the AI will typically choose PlantUML automatically.
+- **Colors in flowcharts work:** For Mermaid flowchart/graph diagrams, you can ask for colors.
+- **Keep it focused:** Diagrams with too many nodes become unreadable. Ask to limit to a subset.
 
 ---
 
@@ -274,6 +305,12 @@ Open **Settings → Plugin Settings → Mixer**.
 |---|---|---|
 | **MCP Servers Configuration** | JSON object | `{"server-name": {"url": "http://localhost:3002/sse"}}` |
 | **MCP Tool Call Timeout (seconds)** | `180` | Max wait time for an MCP tool call. Increase for slow tools like browser automation (Playwright). |
+
+### PlantUML
+
+| Setting | Default | Description |
+|---|---|---|
+| **PlantUML Server URL** | `https://www.plantuml.com/plantuml` | The server endpoint for rendering PlantUML diagrams. For privacy, self-host: `docker run -p 8080:8080 plantuml/plantuml-server:jetty` and set to `http://localhost:8080`. |
 
 ---
 

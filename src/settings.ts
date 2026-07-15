@@ -183,6 +183,13 @@ const settings: SettingSchemaDesc[] = [
     title: 'MCP Tool Call Timeout (seconds)',
     description: 'Maximum time to wait for an MCP tool call to complete. Increase for slow tools like browser automation (Playwright). Default 180 seconds (3 minutes).',
     default: 180,
+  },
+  {
+    key: 'plantumlServer',
+    type: 'string',
+    title: 'PlantUML Server URL',
+    description: 'The PlantUML server endpoint for rendering diagrams. Default uses the public server. For privacy, self-host with: docker run -p 8080:8080 plantuml/plantuml-server:jetty',
+    default: 'https://www.plantuml.com/plantuml',
   }
 ];
 

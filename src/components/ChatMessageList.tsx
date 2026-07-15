@@ -11,6 +11,7 @@ import { CtrlLink } from './CtrlLink';
 import { PageLink } from './PageLink';
 import { ChangeSummary } from './ChangeSummary';
 import MermaidChart from './MermaidChart';
+import PlantUMLChart from './PlantUMLChart';
 import InlineSVG from './InlineSVG';
 import { MaximizeOverlay, maximizeButtonStyle } from './MaximizeOverlay';
 import type { ExecutionResult } from '../types/editTypes';
@@ -738,10 +739,15 @@ const getMarkdownComponents = (
     const codeContent = String(children).replace(/\n$/, '');
     const isMarkdown = language === 'markdown' || language === 'md';
     const isMermaid = language === 'mermaid';
+    const isPlantUML = language === 'plantuml' || language === 'puml';
     const isSVG = language === 'svg' || (language === 'html' && codeContent.trim().startsWith('<svg'));
 
     if (isMermaid) {
       return <MermaidTabbedPanel code={codeContent} />;
+    }
+
+    if (isPlantUML) {
+      return <PlantUMLTabbedPanel code={codeContent} />;
     }
 
     if (isSVG || (!language && codeContent.trim().startsWith('<svg'))) {
@@ -1010,6 +1016,70 @@ const MermaidTabbedPanel = React.memo(function MermaidTabbedPanel({ code: initia
             </div>
           )}
         </div>
+      </TabPanel>
+
+      <TabPanel active={activeTab === 'code'}>
+        <CodeArea>{currentCode}</CodeArea>
+      </TabPanel>
+    </SpecialPanel>
+  );
+});
+
+const PlantUMLTabbedPanel = React.memo(function PlantUMLTabbedPanel({ code: initialCode }: { code: string }) {
+  const [activeTab, setActiveTab] = React.useState<'preview' | 'code'>('preview');
+  const [copied, setCopied] = React.useState(false);
+  const [currentCode, setCurrentCode] = React.useState(initialCode);
+
+  React.useEffect(() => { setCurrentCode(initialCode); }, [initialCode]);
+
+  const handleCodeFixed = React.useCallback((fixedCode: string) => {
+    setCurrentCode(fixedCode);
+  }, []);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(currentCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleTabChange = (tab: 'preview' | 'code') => {
+    setActiveTab(tab);
+    setCopied(false);
+  };
+
+  return (
+    <SpecialPanel>
+      <PanelHeader>
+        <PanelTabButton
+          active={activeTab === 'preview'}
+          data-active={activeTab === 'preview'}
+          onClick={() => handleTabChange('preview')}
+        >
+          Preview
+        </PanelTabButton>
+        <PanelTabButton
+          active={activeTab === 'code'}
+          data-active={activeTab === 'code'}
+          onClick={() => handleTabChange('code')}
+        >
+          Code
+        </PanelTabButton>
+        <CopyButton
+          copied={copied}
+          onClick={handleCopy}
+          title={copied ? 'Copied!' : 'Copy PlantUML code'}
+        >
+          {copied ? <CheckIcon /> : <CopyIcon />}
+          {copied ? 'Copied' : 'Copy'}
+        </CopyButton>
+      </PanelHeader>
+
+      <TabPanel active={activeTab === 'preview'}>
+        <PlantUMLChart code={currentCode} onCodeFixed={handleCodeFixed} />
       </TabPanel>
 
       <TabPanel active={activeTab === 'code'}>
