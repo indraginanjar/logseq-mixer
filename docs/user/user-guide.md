@@ -137,14 +137,54 @@ When using Direct Page Edit with an attached image:
 
 ## Charts & Visuals
 
-The AI can generate visual content directly in chat:
+The AI can generate visual content directly in chat.
 
-- **Mermaid diagrams** — Flowcharts, sequence diagrams, pie charts, gantt charts
-- **SVG graphics** — Custom illustrations and diagrams
+### Supported Formats
 
-Rendered charts include:
-- **📄 SVG** button — Copy source code
-- **🖼️ PNG** button — Copy as image for pasting elsewhere
+| Format | Diagram Types |
+|---|---|
+| **Mermaid** | Flowcharts, sequence diagrams, mindmaps, pie charts, gantt charts, ER diagrams, state diagrams, and more |
+| **SVG** | Custom illustrations and diagrams |
+
+### Mermaid Diagram Panel
+
+When the AI generates a Mermaid diagram, it appears in a tabbed panel:
+
+| Tab | Description |
+|---|---|
+| **Preview** | Rendered diagram (click to activate rendering) |
+| **Code** | Raw Mermaid source code |
+
+Actions available:
+- **Copy** — Copy source code (in Code tab) or copy as PNG image (in Preview tab)
+- **⛶ Maximize** — View the chart fullscreen
+
+### Auto-Fix for Mermaid Errors
+
+If a generated Mermaid diagram fails to render:
+
+1. **Programmatic sanitizer** runs first — fixes common syntax issues automatically (no LLM call needed)
+2. **AI-powered fixer** — If sanitizer can't fix it, the error + code are sent to the LLM for correction (up to 2 attempts)
+3. **Manual retry** — A "🔧 Fix with AI" button lets you trigger another fix attempt
+
+### Mermaid Diagram Limitations
+
+The following are known limitations of Mermaid diagram generation in Logseq Mixer:
+
+| Limitation | Details |
+|---|---|
+| **No emoji in node labels** | Emoji characters (🟩🟨🟧✅❌ etc.) crash the Mermaid renderer. They are automatically stripped by the sanitizer. |
+| **Mindmap coloring** | Mindmaps do not support per-node color styling (`:::className` or `style` lines). Colors are assigned automatically by the theme based on branch depth. |
+| **Logseq links in output** | The AI may copy `[[page links]]` from your notes into diagram code. These are automatically stripped before rendering. |
+| **Large diagrams** | Diagrams with 50+ nodes may render slowly. There is an 8-second timeout — overly complex diagrams will show a timeout error. |
+| **Diagram type support** | Rendering depends on the bundled Mermaid version. Experimental diagram types may not be available. |
+
+### Tips for Better Diagrams
+
+- **Be specific about diagram type:** "Create a flowchart showing..." or "Make a mindmap of..." gives better results than "visualize this data."
+- **Specify structure:** For mindmaps, describe the grouping you want (e.g., "group by status" or "group by team").
+- **Colors in flowcharts work:** For flowchart/graph diagrams, you can ask for colors — the AI can use `style` and `classDef` directives that render correctly.
+- **Keep it focused:** Diagrams with too many nodes become unreadable. Ask the AI to show top-level categories or limit to a subset.
 
 ---
 
