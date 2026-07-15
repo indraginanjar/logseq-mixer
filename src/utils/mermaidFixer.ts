@@ -2,23 +2,34 @@ import { queryLiteLLM, ChatMessage } from '../LLMManager';
 
 const MERMAID_FIX_SYSTEM_PROMPT = `You are a Mermaid diagram syntax expert. The user will provide a broken Mermaid diagram and the error message from the parser. Your job is to fix the syntax error and return ONLY the corrected Mermaid code.
 
-COMMON ERROR: "Expecting 'SPACELINE', got 'NODE_DSTART'" — caused by [ appearing unexpectedly in a node label or style. The Mermaid parser interprets [ as the start of a new node definition.
+COMMON ERRORS AND FIXES:
 
-ROOT CAUSE: Logseq-style markup like [[page name]], [text](logseq://...), or [#color](url) was placed inside node labels or style values. The [ triggers the parser error.
+1. "Expecting 'SPACELINE', got 'NODE_DSTART'" — caused by [ appearing unexpectedly.
+   FIX: Strip Logseq markup ([[text]] → text, [text](url) → text). Quote labels with special chars: A["text"].
 
-FIX RULES:
-- Return ONLY the corrected Mermaid code, no markdown fences, no explanation.
-- Strip ALL Logseq/markdown link syntax: [[text]] → "text", [text](url) → "text"
-- Move any color values out of node labels into separate style/classDef lines.
-- For hex colors in styles: fill:#1f8ef1 (plain, no brackets).
-- If node text contains special characters (#, :, (, ), [, ]), wrap in double-quotes: A["Node text"]
-- Keep the diagram structure and intent identical — only fix the syntax.
-- Never use markdown link syntax or Logseq [[page]] links inside Mermaid code.
+2. "There can be only one root. No parent could be found for (X)" — in mindmaps, every node except root MUST be indented under its parent. Node X has no indentation or same level as root.
+   FIX: Ensure proper indentation hierarchy. Every child must be indented deeper than its parent:
+   WRONG:
+     mindmap
+       root((Title))
+       Child1
+       Child2
+   FIXED:
+     mindmap
+       root((Title))
+         Child1
+         Child2
 
-Example fix:
-  WRONG: QEN_Table[QEN Team fill:[#1f8ef1](logseq://page/1f8ef1)]
-  FIXED: QEN_Table["QEN Team"]
-         style QEN_Table fill:#1f8ef1`;
+3. "style" or "classDef" lines in mindmaps — mindmaps don't support standalone style lines.
+   FIX: Remove style/classDef lines from mindmaps, or use :::className inline.
+
+RULES:
+- Return ONLY the corrected Mermaid code, no markdown fences, no explanation, no commentary.
+- Keep ALL data/content — do not remove nodes, just fix the structure.
+- For mindmaps: ensure every non-root node is indented with spaces under its parent.
+- Strip Logseq-specific markup: [[text]] → text, [text](logseq://...) → text
+- For hex colors in styles (flowcharts only): fill:#1f8ef1 (plain, no brackets).
+- If node text has special characters, wrap in double-quotes.`;
 
 /**
  * Attempt to fix a broken Mermaid diagram by asking the LLM.
@@ -27,12 +38,23 @@ Example fix:
 export async function fixMermaidWithLLM(
   brokenCode: string,
   errorMessage: string,
-  settings: { selectedModel: string; apiKey: string; chatEndpoint?: string; chatProvider?: string }
+  settings: {
+    selectedModel?: string;
+    apiKey?: string;
+    chatEndpoint?: string;
+    chatProvider?: string;
+    LiteLLMLink?: string;
+  }
 ): Promise<string | null> {
-  const endpoint = settings.chatEndpoint || 'https://api.openai.com/v1/chat/completions';
+  const endpoint = settings.chatEndpoint || settings.LiteLLMLink || 'https://api.openai.com/v1/chat/completions';
   const model = settings.selectedModel || 'gpt-4o';
   const apiKey = settings.apiKey || '';
   const provider = settings.chatProvider || 'openai';
+
+  if (!endpoint) {
+    console.warn('[mermaidFixer] No endpoint configured, cannot fix');
+    return null;
+  }
 
   const messages: ChatMessage[] = [
     { role: 'system', content: MERMAID_FIX_SYSTEM_PROMPT },

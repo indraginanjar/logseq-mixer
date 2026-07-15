@@ -309,6 +309,7 @@ export default React.memo(function MermaidChart({ code, onCodeFixed }: MermaidCh
         apiKey: settings.apiKey,
         chatEndpoint: settings.chatEndpoint,
         chatProvider: settings.chatProvider,
+        LiteLLMLink: settings.LiteLLMLink,
       });
 
       if (fixedCode && fixedCode !== brokenCode) {

@@ -47,9 +47,22 @@ WHEN WRITING MERMAID CODE:
 - For colors in styles: fill:#1f8ef1 (plain hex, no brackets or links)
 - If node text contains special characters (#, :, (, ), [, ]), wrap in double-quotes: A["Label"]
 
+MINDMAP CRITICAL RULES (errors here cause "There can be only one root"):
+- There must be exactly ONE root node. ALL other nodes must be indented children.
+- Indentation defines hierarchy — every child MUST be indented deeper (more spaces) than its parent.
+- Do NOT put "style" or "classDef" as separate lines in mindmaps — they are interpreted as nodes.
+- Correct mindmap structure:
+    mindmap
+      root((Central Topic))
+        Branch1
+          Leaf1
+          Leaf2
+        Branch2
+          Leaf3
+
 DIAGRAM-SPECIFIC STYLING:
 - flowchart/graph: Use "style NodeId fill:#color" or "classDef" on separate lines.
-- mindmap: Do NOT use "style" or "classDef" as separate lines — they cause "There can be only one root" errors. Use :::className inline on the node instead.
+- mindmap: Use :::className inline only. No standalone style lines.
 - sequence/gantt/pie: Use the diagram's own configuration syntax.
 
 REMEMBER: Use ALL the data provided (names, statuses, etc.) — just ensure the Mermaid syntax is clean.`;
