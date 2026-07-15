@@ -51,19 +51,18 @@ WHEN WRITING MERMAID CODE:
 MINDMAP CRITICAL RULES (errors here cause "There can be only one root"):
 - There must be exactly ONE root node. ALL other nodes must be indented children.
 - Indentation defines hierarchy — every child MUST be indented deeper (more spaces) than its parent.
-- Do NOT put "style" or "classDef" as separate lines in mindmaps — they are interpreted as nodes.
-- Correct mindmap structure:
+- Do NOT put "style" or "classDef" as separate lines INSIDE the tree — they are interpreted as nodes.
+- Correct mindmap structure with colors (classDef MUST come BEFORE the tree):
     mindmap
       root((Central Topic))
-        Branch1
-          Leaf1
-          Leaf2
-        Branch2
-          Leaf3
+        Branch1:::green
+          Leaf1:::green
+        Branch2:::orange
+          Leaf2:::orange
 
 DIAGRAM-SPECIFIC STYLING:
 - flowchart/graph: Use "style NodeId fill:#color" or "classDef" on separate lines.
-- mindmap: Use :::className inline only. No standalone style lines.
+- mindmap: Colors are NOT supported via :::className in most Mermaid versions. Do NOT use :::color syntax. Instead, rely on the tree structure without colors — it renders cleaner.
 - sequence/gantt/pie: Use the diagram's own configuration syntax.
 
 REMEMBER: Use ALL the data provided (names, statuses, etc.) — just ensure the Mermaid syntax is clean.`;

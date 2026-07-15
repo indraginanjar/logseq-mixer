@@ -57,6 +57,13 @@ export function sanitizeMermaidCode(code: string): string {
   // Mermaid's text parsing cannot handle Unicode emoji in node labels.
   result = result.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}]\s*/gu, '');
 
+  // Strip :::className from mindmap nodes — in most Mermaid versions used in
+  // browser contexts, mindmap classDef/class styling is not rendered properly
+  // and shows ":::classname" as literal text in the output.
+  if (result.trim().startsWith('mindmap')) {
+    result = result.replace(/:::\w+/g, '');
+  }
+
   // Fix mindmap-specific issues
   result = fixMindmapStructure(result);
 
