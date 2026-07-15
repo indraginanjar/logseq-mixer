@@ -218,13 +218,18 @@ export default React.memo(function MermaidChart({ code, onCodeFixed }: MermaidCh
   const [fixAttempts, setFixAttempts] = useState(0);
   const [autoFixDone, setAutoFixDone] = useState(false);
   const currentCodeRef = useRef(code);
+  const attemptedCodesRef = useRef<Set<string>>(new Set());
 
   // Track current code for auto-fix
   useEffect(() => {
     currentCodeRef.current = code;
-    // Reset fix state when code prop changes externally
-    setFixAttempts(0);
-    setAutoFixDone(false);
+    // Only reset fix state when code changes from an external source (user/LLM),
+    // not from the fixer. We detect this by checking if the new code was already attempted.
+    if (!attemptedCodesRef.current.has(code.trim())) {
+      setFixAttempts(0);
+      setAutoFixDone(false);
+      attemptedCodesRef.current.clear();
+    }
   }, [code]);
 
   useEffect(() => {
@@ -253,6 +258,7 @@ export default React.memo(function MermaidChart({ code, onCodeFixed }: MermaidCh
 
       // If sanitizer changed the code, emit the fix and let re-render happen naturally
       if (sanitized !== trimmedCode && onCodeFixed) {
+        attemptedCodesRef.current.add(sanitized);
         onCodeFixed(sanitized);
         return;
       }
@@ -271,8 +277,10 @@ export default React.memo(function MermaidChart({ code, onCodeFixed }: MermaidCh
           setSvgContent(null);
 
           // Auto-fix on first error if we haven't exhausted attempts
-          if (fixAttempts < MAX_AUTO_FIX_ATTEMPTS && !autoFixDone && onCodeFixed) {
+          if (fixAttempts < MAX_AUTO_FIX_ATTEMPTS && !autoFixDone && onCodeFixed && !attemptedCodesRef.current.has(trimmedCode)) {
             triggerAutoFix(trimmedCode, errorMsg);
+          } else {
+            setAutoFixDone(true);
           }
         }
       } finally {
@@ -293,17 +301,27 @@ export default React.memo(function MermaidChart({ code, onCodeFixed }: MermaidCh
 
   const triggerAutoFix = async (brokenCode: string, errorMsg: string) => {
     if (!onCodeFixed || fixing) return;
+
+    // Don't re-attempt codes we've already tried to fix
+    if (attemptedCodesRef.current.has(brokenCode)) {
+      setAutoFixDone(true);
+      return;
+    }
+    attemptedCodesRef.current.add(brokenCode);
+
     setFixing(true);
     setFixAttempts(prev => prev + 1);
 
     try {
       const { fixMermaidWithLLM } = await import('../utils/mermaidFixer');
-      const settings = (window as any).logseq?.settings;
+      const settings = (window as any).logseq?.settings ?? (typeof logseq !== 'undefined' ? logseq.settings : null);
       if (!settings) {
+        console.warn('[MermaidChart] No settings available for auto-fix');
         setAutoFixDone(true);
         return;
       }
 
+      console.info('[MermaidChart] Attempting auto-fix with model:', settings.selectedModel, 'endpoint:', settings.chatEndpoint || settings.LiteLLMLink);
       const fixedCode = await fixMermaidWithLLM(brokenCode, errorMsg, {
         selectedModel: settings.selectedModel,
         apiKey: settings.apiKey,
@@ -313,8 +331,10 @@ export default React.memo(function MermaidChart({ code, onCodeFixed }: MermaidCh
       });
 
       if (fixedCode && fixedCode !== brokenCode) {
+        console.info('[MermaidChart] Auto-fix produced new code, applying...');
         onCodeFixed(fixedCode);
       } else {
+        console.warn('[MermaidChart] Auto-fix returned null or same code');
         setAutoFixDone(true);
       }
     } catch (e) {
