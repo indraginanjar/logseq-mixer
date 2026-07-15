@@ -46,6 +46,7 @@ WHEN WRITING MERMAID CODE:
 - Convert [text](logseq://...) from context → use "text" as plain text in node labels
 - For colors in styles: fill:#1f8ef1 (plain hex, no brackets or links)
 - If node text contains special characters (#, :, (, ), [, ]), wrap in double-quotes: A["Label"]
+- Do NOT use emoji characters (🟩🟨🟧✅❌ etc.) in node labels — they crash the renderer. Use plain text or color styling instead.
 
 MINDMAP CRITICAL RULES (errors here cause "There can be only one root"):
 - There must be exactly ONE root node. ALL other nodes must be indented children.
