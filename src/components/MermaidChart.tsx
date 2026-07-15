@@ -111,7 +111,7 @@ async function getMermaid() {
     const mermaid = m.default;
     mermaid.initialize({
       startOnLoad: false,
-      theme: 'neutral',
+      theme: 'default',
       securityLevel: 'loose',
       fontFamily: 'Inter, sans-serif',
       suppressErrorRendering: true,
