@@ -73,7 +73,13 @@ Return ONLY the fixed Mermaid code, nothing else.`,
   ];
 
   try {
-    const response = await queryLiteLLM(messages, model, apiKey, endpoint, undefined, undefined, provider);
+    // Add a 30-second timeout to prevent hanging indefinitely
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const response = await queryLiteLLM(messages, model, apiKey, endpoint, controller.signal, undefined, provider);
+    clearTimeout(timeoutId);
+
     const content = response?.choices?.[0]?.message?.content?.trim();
     if (!content) return null;
 
