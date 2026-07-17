@@ -68,6 +68,7 @@ const USER_GUIDE = `
 - /help: show help topics
 - /help <topic>: get help on a specific topic
 - /tools: list available built-in Logseq tools
+- /raw <prompt>: send prompt directly to LLM without RAG, memory, or context
 
 ## Troubleshooting
 - "No active page": click into a block first

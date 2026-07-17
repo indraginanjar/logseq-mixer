@@ -17,6 +17,7 @@ import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, request
 import { clearConversationHistory, addToConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import { isHelpCommand, answerHelpQuestion } from './helpSystem';
 import { isToolsCommand, listBuiltInTools } from './toolsCommand';
+import { isRawCommand, extractRawPrompt, sendRawPrompt } from './rawCommand';
 import React, { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { executeAll, verifyAndCorrect } from './blockExecutor';
@@ -884,6 +885,26 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       setMessages(prev => [...prev, { id: Date.now() + '_tools', content: toolsResponse, sender: 'assistant' }]);
       setLoading(false);
       setThinkingText(null);
+      return;
+    }
+
+    // Handle /raw command — send prompt directly to LLM without RAG/memory/context
+    if (isRawCommand(messageToSend)) {
+      const rawPrompt = extractRawPrompt(messageToSend);
+      try {
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        const rawResponse = await sendRawPrompt(rawPrompt, settings, controller.signal);
+        abortControllerRef.current = null;
+        setMessages(prev => [...prev, { id: Date.now() + '_raw', content: rawResponse, sender: 'assistant' }]);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Raw command error');
+        }
+      } finally {
+        setLoading(false);
+        setThinkingText(null);
+      }
       return;
     }
 
