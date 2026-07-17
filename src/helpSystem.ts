@@ -64,6 +64,11 @@ const USER_GUIDE = `
 - Ctrl+V: paste image
 - Escape: close panels
 
+## Slash Commands
+- /help: show help topics
+- /help <topic>: get help on a specific topic
+- /tools: list available built-in Logseq tools
+
 ## Troubleshooting
 - "No active page": click into a block first
 - Direct Page Edit not working: ensure ✏️ is ON and page indicator shows target

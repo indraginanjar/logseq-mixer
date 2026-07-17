@@ -16,6 +16,7 @@ import type { IndexingResult } from 'indexManager';
 import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
 import { clearConversationHistory, addToConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
 import { isHelpCommand, answerHelpQuestion } from './helpSystem';
+import { isToolsCommand, listBuiltInTools } from './toolsCommand';
 import React, { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { executeAll, verifyAndCorrect } from './blockExecutor';
@@ -874,6 +875,15 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         setLoading(false);
         setThinkingText(null);
       }
+      return;
+    }
+
+    // Handle /tools command — list built-in Logseq tools
+    if (isToolsCommand(messageToSend)) {
+      const toolsResponse = listBuiltInTools();
+      setMessages(prev => [...prev, { id: Date.now() + '_tools', content: toolsResponse, sender: 'assistant' }]);
+      setLoading(false);
+      setThinkingText(null);
       return;
     }
 
