@@ -219,7 +219,11 @@ If a generated diagram fails to render:
 
 ---
 
-## In-Chat Help
+## Slash Commands
+
+Mixer supports slash commands that provide utilities and shortcuts directly in the chat input. These are processed locally before reaching the AI.
+
+### `/help` — In-Chat Help
 
 Type `/help` for instant documentation without consuming RAG context:
 
@@ -231,6 +235,47 @@ Type `/help` for instant documentation without consuming RAG context:
 | `/help agent` | Autonomous agent usage |
 | `/help mcp tools` | MCP tool setup |
 | `/help settings` | Settings quick reference |
+
+### `/tools` — List Built-in Tools
+
+Type `/tools` to see all built-in Logseq tools that the AI can use during conversations:
+
+```
+/tools
+```
+
+Displays each tool's name, description, and required parameters. This only shows the **built-in Logseq tools** (search, read, insert, update, delete, create pages). MCP tools are managed separately via the 🔌 panel.
+
+Useful for understanding what the AI can do with your graph, or for debugging when a tool call doesn't work as expected.
+
+### `/raw` — Send Prompt Without Context
+
+Type `/raw <prompt>` to send your message directly to the LLM without any of Mixer's context enrichment:
+
+```
+/raw What is the capital of France?
+/raw Explain the difference between TCP and UDP
+/raw Write a haiku about programming
+```
+
+**What gets stripped:**
+- ❌ No RAG retrieval (knowledge base search)
+- ❌ No memory injection
+- ❌ No page context
+- ❌ No conversation history
+- ❌ No tool calling (ReAct loop)
+- ❌ No agent goal detection
+
+**What remains:**
+- ✅ System prompt (from settings)
+- ✅ Your message (as-is)
+
+**When to use:**
+- Testing how the model responds without your notes influencing the answer
+- Getting general knowledge answers uncontaminated by graph context
+- Comparing raw model quality vs. RAG-enhanced responses
+- Debugging — isolating whether an issue comes from context injection or the model itself
+- Quick questions that don't need your notes at all
 
 ---
 
