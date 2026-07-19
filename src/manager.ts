@@ -6,6 +6,7 @@ import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import type { RankedHit } from 'reranker';
 import { shouldRetrieveContext } from 'intentClassifier';
+import { rewriteQueryForRetrieval } from './queryRewriter';
 import { isDiagramIntent, DIAGRAM_RULES } from './utils/diagramIntentDetector';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
 import { queryLiteLLM, type ChatMessage, type MessageContentPart, getContextLimitForModel, getMaxTokensForModel } from 'LLMManager';
@@ -30,6 +31,12 @@ const MAX_HISTORY_LENGTH = 6;
 export interface EditQueryResult {
   text: string;           // LLM response with json-edit blocks stripped
   commands: EditCommand[]; // parsed edit commands (may be empty)
+}
+
+/** A retrieved chunk with its relevance score preserved for filtering. */
+interface ScoredChunk {
+  content: string;
+  rrfScore: number;
 }
 
 /** Clear the conversation history for a fresh session. */
@@ -143,13 +150,13 @@ function truncateToTokens(text: string, maxTokens: number): string {
   return decode(tokens.slice(0, maxTokens)) + "\n... (truncated to fit model context limit)";
 }
 
-async function retrieveVectorContext(query: string, settings: any, storageProvider: StorageProvider): Promise<string> {
+async function retrieveVectorContext(query: string, settings: any, storageProvider: StorageProvider): Promise<ScoredChunk[]> {
   try {
     const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider);
     const provider = storageProvider as PerDocumentStorageProvider;
     if (typeof provider.searchByVector !== 'function') {
       console.warn('[retrieveVectorContext] storageProvider has no searchByVector — returning empty');
-      return '';
+      return [];
     }
     const index = ensureBM25Index(provider);
     const reranked = await hybridSearch(query, queryEmbedding, provider, index, { accelerator: accelerator ?? undefined });
@@ -167,13 +174,8 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
     }
 
     // --- Link-aware expansion ---
-    // Extract [[page_name]] references from the initial results and query.
-    // Also detect potential page names in the query itself (multi-word capitalized phrases).
-    // Search for additional chunks containing those page names from other pages (e.g. journals).
     const existingIds = new Set(reranked.map(h => h.id));
     const pageRefs = extractPageRefsFromResults(reranked.map(h => h.content), query);
-
-    // Also extract page names directly mentioned in the query (not just from results)
     const queryPageRefs = extractPageNamesFromQuery(query, reranked.map(h => h.content));
     for (const qRef of queryPageRefs) {
       if (!pageRefs.includes(qRef)) {
@@ -185,7 +187,6 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
       console.info(`[retrieveVectorContext] Link-aware expansion: searching for page refs: ${pageRefs.join(', ')}`);
       const expansionHits: RankedHit[] = [];
       for (const pageName of pageRefs) {
-        // Search BM25 for chunks mentioning this page name (catches journal entries referencing the page)
         const bm25Results = index.search(pageName, 5);
         for (const hit of bm25Results) {
           if (!existingIds.has(hit.id) && hit.score > 0) {
@@ -195,7 +196,6 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
         }
       }
       if (expansionHits.length > 0) {
-        // Sort expansion hits by score and take top 3
         expansionHits.sort((a, b) => b.rrfScore - a.rrfScore);
         const topExpansion = expansionHits.slice(0, 5);
         console.info(`[retrieveVectorContext] Added ${topExpansion.length} expansion hits from link-aware search`);
@@ -203,11 +203,12 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
       }
     }
 
-    return reranked.map(hit => hit.content).join('\n\n');
+    // Return scored chunks (preserving scores for downstream filtering)
+    return reranked.map(hit => ({ content: hit.content, rrfScore: hit.rrfScore }));
   } catch (err) {
     console.error("Vector search failed:", err);
   }
-  return '';
+  return [];
 }
 
 /**
@@ -392,6 +393,44 @@ async function fetchPageContext(budget: number): Promise<string> {
   return '';
 }
 
+/**
+ * Filter scored chunks by relevance using adaptive thresholding.
+ * If the top result has a high score, we raise the bar for what's "relevant enough"
+ * to include — preventing noisy low-scoring chunks from diluting good context.
+ */
+function filterByRelevance(chunks: ScoredChunk[], absoluteFloor: number): ScoredChunk[] {
+  if (chunks.length === 0) return [];
+
+  // Always keep chunks above the absolute floor
+  const aboveFloor = chunks.filter(c => c.rrfScore >= absoluteFloor);
+  if (aboveFloor.length === 0) return [];
+
+  // Adaptive threshold: if we have strong results, drop the weak tail.
+  // Threshold = max_score * 0.15 (keep chunks scoring at least 15% of the best)
+  const maxScore = aboveFloor[0].rrfScore; // chunks are already sorted by score
+  const adaptiveThreshold = Math.max(absoluteFloor, maxScore * 0.15);
+
+  const filtered = aboveFloor.filter(c => c.rrfScore >= adaptiveThreshold);
+  if (filtered.length < aboveFloor.length) {
+    console.info(`[filterByRelevance] Adaptive threshold ${adaptiveThreshold.toFixed(4)} (max=${maxScore.toFixed(4)}) dropped ${aboveFloor.length - filtered.length} weak chunks`);
+  }
+
+  return filtered;
+}
+
+/**
+ * Grounding instructions appended to the system prompt when RAG context is provided.
+ * These instruct the model to base its response on the retrieved context and cite sources.
+ */
+const GROUNDING_INSTRUCTIONS = `
+
+## Grounding Rules
+- Base your response primarily on the retrieved context provided below. Do not invent or hallucinate information not present in the context.
+- If the retrieved context does not contain sufficient information to answer the user's question, clearly state what you can answer from the context and what information is missing or unavailable.
+- When referencing specific information from the context, cite the source block using ((uuid)) format if a uuid is available in the context.
+- If the context contains conflicting information, acknowledge both perspectives rather than silently choosing one.
+- You may use your general knowledge to explain, synthesize, or contextualize the retrieved information, but clearly distinguish between what comes from the user's notes vs. general knowledge.`;
+
 export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string | string[]): Promise<string | EditQueryResult> {
   lastMemorySaved = false;
   pendingAgentGoal = null;
@@ -412,10 +451,31 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   const hasImages = !!imageDataUrl && (Array.isArray(imageDataUrl) ? imageDataUrl.length > 0 : true);
   const needsRetrieval = !hasImages && shouldRetrieveContext(query);
   console.info(`[handleQuery] needsRetrieval=${needsRetrieval}, hasImages=${hasImages}`);
-  const vectorContext = needsRetrieval
-    ? await retrieveVectorContext(query, settings, storageProvider)
-    : '';
-  console.info(`[handleQuery] vectorContext length=${vectorContext.length} chars`);
+
+  // --- Query rewriting for better retrieval ---
+  // Rewrite the query to resolve pronouns/references from conversation history.
+  // The rewritten query is used ONLY for retrieval, not for the final prompt to the LLM.
+  let retrievalQuery = query;
+  if (needsRetrieval && conversationHistory.length > 1) {
+    retrievalQuery = await rewriteQueryForRetrieval(query, conversationHistory.slice(0, -1), settings, signal);
+  }
+
+  // --- Retrieval with scored results ---
+  const scoredChunks: ScoredChunk[] = needsRetrieval
+    ? await retrieveVectorContext(retrievalQuery, settings, storageProvider)
+    : [];
+  console.info(`[handleQuery] Retrieved ${scoredChunks.length} scored chunks`);
+
+  // --- Relevance filtering ---
+  // Drop chunks with very low RRF scores that are unlikely to be helpful.
+  // The minimum threshold (0.025) is already applied in hybridSearch, but here we apply
+  // a higher adaptive threshold: if we have high-scoring results, drop the tail.
+  const RELEVANCE_FLOOR = 0.03; // absolute minimum to keep
+  const relevantChunks = filterByRelevance(scoredChunks, RELEVANCE_FLOOR);
+  console.info(`[handleQuery] After relevance filtering: ${relevantChunks.length}/${scoredChunks.length} chunks kept`);
+
+  // Join filtered chunks into context string
+  const vectorContext = relevantChunks.map(c => c.content).join('\n\n');
 
   // Build system message
   let systemMessage = settings.prompt;
@@ -428,6 +488,11 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Conditionally inject diagram rules if the query is about diagrams/charts
   if (isDiagramIntent(query)) {
     systemMessage += '\n' + DIAGRAM_RULES;
+  }
+
+  // Inject grounding instructions when RAG context was retrieved
+  if (vectorContext) {
+    systemMessage += GROUNDING_INSTRUCTIONS;
   }
 
   // Calculate token budgets
@@ -469,32 +534,35 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Build vector context text
   let vectorContextText = "";
   if (vectorContext) {
-    vectorContextText = truncateToTokens("Additional Context from Knowledge Base:\n" + vectorContext, userBudget);
+    vectorContextText = truncateToTokens(vectorContext, userBudget);
     userBudget -= countTokens(vectorContextText);
   }
 
-  // Assemble user message — user's request comes FIRST so the LLM sees intent before context
-  let userMessage = query + "\n";
+  // --- Build context message (separate from user query for better attention) ---
+  // Research shows models attend more reliably to context placed before the query.
+  // We assemble retrieved context as a separate user message labeled as reference material.
+  let contextBlock = "";
+  if (vectorContextText) {
+    contextBlock += "## Retrieved Context from Knowledge Base\n" + vectorContextText + "\n";
+  }
+  if (pageContextText) {
+    contextBlock += "\n## Current Page Context\n" + pageContextText + "\n";
+  }
+  if (editContextText) {
+    contextBlock += "\n## Edit Target\n" + editContextText + "\n";
+  }
+
+  // --- Assemble user message (clean — just the user's request + image notes) ---
+  let userMessage = query;
   // Normalize imageDataUrl to array
   const images: string[] = imageDataUrl
     ? (Array.isArray(imageDataUrl) ? imageDataUrl : [imageDataUrl])
     : [];
 
   if (editMode && images.length > 0) {
-    userMessage += `\nNote: The user has attached ${images.length > 1 ? images.length + ' images' : 'an image'}. Use "![attached image]()" as placeholder.\n\n`;
+    userMessage += `\n\nNote: The user has attached ${images.length > 1 ? images.length + ' images' : 'an image'}. Use "![attached image]()" as placeholder.`;
   } else if (images.length > 0) {
-    userMessage += `\n[${images.length > 1 ? images.length + ' images are' : 'An image is'} attached below. Analyze the image content to answer the user's request.]\n`;
-  }
-
-  // Append context AFTER the user's query, clearly labeled as supplementary
-  if (vectorContextText) {
-    userMessage += "\n---\nContext from knowledge base (use ONLY if relevant to the request above):\n" + vectorContextText;
-  }
-  if (pageContextText) {
-    userMessage += "\n---\nCurrent page context:\n" + pageContextText;
-  }
-  if (editContextText) {
-    userMessage += "\n---\n" + editContextText;
+    userMessage += `\n\n[${images.length > 1 ? images.length + ' images are' : 'An image is'} attached below. Analyze the image content to answer the user's request.]`;
   }
 
   const userContent: string | MessageContentPart[] = images.length > 0
@@ -504,9 +572,15 @@ export async function handleQuery(query: string, settings: any, storageProvider:
       ]
     : userMessage;
 
+  // --- Assemble final messages array ---
+  // Structure: system → history → [context block] → user query
+  // Context as a separate message ensures the model sees it before the query,
+  // improving attention and grounding without polluting the user's actual message.
   const messages: ChatMessage[] = [
     { role: 'system', content: systemMessage },
     ...historyMessages,
+    ...(contextBlock ? [{ role: 'user' as const, content: `[Reference material for answering the next question — do not treat as a user request]\n\n${contextBlock}` }] : []),
+    ...(contextBlock ? [{ role: 'assistant' as const, content: 'I have reviewed the reference material. Please go ahead with your question.' }] : []),
     { role: 'user', content: userContent },
   ];
 
