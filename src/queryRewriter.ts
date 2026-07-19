@@ -13,7 +13,7 @@
  * - Does NOT rewrite the query sent to the LLM for generation — only for retrieval
  */
 
-import { queryLiteLLM, type ChatMessage } from './LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from './LLMManager';
 
 /** Patterns that suggest the query references prior conversation context */
 const COREFERENCE_PATTERNS = [
@@ -71,7 +71,7 @@ export async function rewriteQueryForRetrieval(
     return query;
   }
 
-  const endpoint = settings.chatEndpoint || settings.LiteLLMLink;
+  const endpoint = resolveChatEndpoint(settings);
   if (!settings.selectedModel || !endpoint) {
     return query; // No LLM available, use original
   }

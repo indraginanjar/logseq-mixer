@@ -3,6 +3,29 @@ export type MessageContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } };
 
+/** Default chat endpoints per provider. Used when chatEndpoint is empty. */
+const DEFAULT_CHAT_ENDPOINTS: Record<string, string> = {
+  openai: 'https://api.openai.com/v1/chat/completions',
+  ollama: 'http://localhost:11434/api/chat',
+  litellm: 'http://127.0.0.1:4000/chat/completions',
+};
+
+/**
+ * Resolve the effective chat endpoint from settings.
+ * Priority: chatEndpoint (if non-empty) → provider default → legacy LiteLLMLink fallback.
+ */
+export function resolveChatEndpoint(settings: { chatEndpoint?: string; chatProvider?: string; LiteLLMLink?: string }): string {
+  if (settings.chatEndpoint && settings.chatEndpoint.trim()) {
+    return settings.chatEndpoint.trim();
+  }
+  const provider = settings.chatProvider || 'litellm';
+  if (DEFAULT_CHAT_ENDPOINTS[provider]) {
+    return DEFAULT_CHAT_ENDPOINTS[provider];
+  }
+  // Ultimate fallback for unknown providers: use LiteLLMLink or OpenAI default
+  return settings.LiteLLMLink || DEFAULT_CHAT_ENDPOINTS.openai;
+}
+
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content?: string | MessageContentPart[];

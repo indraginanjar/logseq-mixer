@@ -4,7 +4,7 @@
  * Only the system prompt and the user's raw message are sent.
  */
 
-import { queryLiteLLM, type ChatMessage } from './LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from './LLMManager';
 
 /**
  * Check if a message is a /raw command.
@@ -35,7 +35,7 @@ export async function sendRawPrompt(
     return '**Usage:** `/raw <your prompt>`\n\nSends your message directly to the LLM without any RAG context, memory, page context, or conversation history. Only the system prompt is included.';
   }
 
-  const endpoint = settings.chatEndpoint || settings.LiteLLMLink;
+  const endpoint = resolveChatEndpoint(settings);
   if (!settings.selectedModel || !endpoint) {
     return '⚠️ No model or endpoint configured. Please set up a provider in settings first.';
   }

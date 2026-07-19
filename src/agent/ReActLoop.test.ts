@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock LLMManager
 vi.mock('../LLMManager', () => ({
   queryLiteLLM: vi.fn(),
+  resolveChatEndpoint: (settings: any) => settings?.chatEndpoint || 'http://localhost:4000/chat/completions',
 }));
 
 // Mock MCPManager

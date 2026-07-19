@@ -1,4 +1,4 @@
-import { queryLiteLLM, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
 
 const USER_GUIDE = `
 # Logseq Mixer Quick Help
@@ -108,7 +108,7 @@ export async function answerHelpQuestion(message: string, settings: any): Promis
   }
 
   // Use LLM to answer based on the embedded guide
-  if (!settings?.selectedModel || !(settings?.chatEndpoint || settings?.LiteLLMLink)) {
+  if (!settings?.selectedModel || !resolveChatEndpoint(settings)) {
     // No LLM available, return raw guide section
     return searchGuideManually(topic);
   }
@@ -121,7 +121,7 @@ export async function answerHelpQuestion(message: string, settings: any): Promis
       },
       { role: 'user', content: topic },
     ];
-    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, undefined, undefined, settings.chatProvider);
+    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider);
     return result.choices?.[0]?.message?.content?.trim() || searchGuideManually(topic);
   } catch {
     return searchGuideManually(topic);

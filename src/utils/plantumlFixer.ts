@@ -1,4 +1,4 @@
-import { queryLiteLLM, ChatMessage } from '../LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, ChatMessage } from '../LLMManager';
 
 const PLANTUML_FIX_SYSTEM_PROMPT = `You are a PlantUML syntax expert. The user will provide a broken PlantUML diagram and an error description. Fix the syntax and return ONLY the corrected PlantUML code.
 
@@ -32,7 +32,7 @@ export async function fixPlantUMLWithLLM(
     LiteLLMLink?: string;
   }
 ): Promise<string | null> {
-  const endpoint = settings.chatEndpoint || settings.LiteLLMLink || 'https://api.openai.com/v1/chat/completions';
+  const endpoint = resolveChatEndpoint(settings);
   const model = settings.selectedModel || 'gpt-4o';
   const apiKey = settings.apiKey || '';
   const provider = settings.chatProvider || 'openai';

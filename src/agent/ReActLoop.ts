@@ -1,4 +1,4 @@
-import { queryLiteLLM, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
 import { countTokens } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import { executeLogseqTool, LOGSEQ_TOOLS } from './logseqTools';
@@ -56,7 +56,7 @@ export async function runReActLoop(
   }
 
   // Initial LLM call
-  let llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider);
+  let llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider);
   let assistantMessage = llmOutput.choices?.[0]?.message;
   tokensUsed += estimateTokens(messages, assistantMessage?.content || '', allTools);
 
@@ -135,7 +135,7 @@ export async function runReActLoop(
     }
 
     // Query LLM again with updated context
-    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, signal, allTools, settings.chatProvider);
+    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools, settings.chatProvider);
     assistantMessage = llmOutput.choices?.[0]?.message;
     tokensUsed += estimateTokens([], assistantMessage?.content || '');
 

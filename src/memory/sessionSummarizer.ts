@@ -1,4 +1,4 @@
-import { queryLiteLLM, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
 
 export async function summarizeSession(messages: Array<{ role: string; content: string }>, settings: any): Promise<string | null> {
   try {
@@ -10,7 +10,7 @@ export async function summarizeSession(messages: Array<{ role: string; content: 
       },
       { role: 'user', content: conversation },
     ];
-    const result = await queryLiteLLM(llmMessages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, undefined, undefined, settings.chatProvider);
+    const result = await queryLiteLLM(llmMessages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider);
     const response = result.choices?.[0]?.message?.content?.trim() ?? '';
     if (response === 'NOTHING_TO_REMEMBER') return null;
     return response || null;

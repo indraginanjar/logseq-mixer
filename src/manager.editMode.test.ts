@@ -6,6 +6,7 @@ vi.mock('./LLMManager', () => ({
   queryLiteLLM: vi.fn(),
   getContextLimitForModel: vi.fn(() => 16385),
   getMaxTokensForModel: vi.fn(() => 4096),
+  resolveChatEndpoint: (settings: any) => settings?.chatEndpoint || 'http://localhost:4000/chat/completions',
 }));
 
 vi.mock('./embedManager', () => ({

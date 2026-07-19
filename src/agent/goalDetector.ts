@@ -1,4 +1,4 @@
-import { queryLiteLLM, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
 
 const CLASSIFICATION_PROMPT = `Classify this user message as either "goal" or "query".
 - "goal": A multi-step task requiring autonomous actions (creating pages, organizing notes, researching + writing, bulk operations)
@@ -37,7 +37,7 @@ export async function detectGoal(
     return { isGoal: false, confidence: 0 };
   }
 
-  if (!settings?.selectedModel || !(settings?.chatEndpoint || settings?.LiteLLMLink)) {
+  if (!settings?.selectedModel || !resolveChatEndpoint(settings)) {
     return detectGoalRegex(message, threshold);
   }
 
@@ -46,7 +46,7 @@ export async function detectGoal(
       { role: 'system', content: CLASSIFICATION_PROMPT },
       { role: 'user', content: message },
     ];
-    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, settings.chatEndpoint || settings.LiteLLMLink, undefined, undefined, settings.chatProvider);
+    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider);
     const response = result.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
     if (response.startsWith('goal')) {
       return { isGoal: threshold <= 0.8, confidence: 0.85 };
