@@ -83,8 +83,6 @@ const Overlay = styled('div', {
 const ChatPanel = styled('main', {
   position: 'fixed',
   top: 0, right: 0, bottom: 0,
-  width: '520px',
-  maxWidth: '85%',
   backgroundColor: '$elevation0',
   boxShadow: '-4px 0 24px rgba(0, 0, 0, 0.12)',
   display: 'flex',
@@ -540,6 +538,47 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isVisible = useAppVisible();
+
+  // Resizable panel width
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('logseq-mixer-panel-width');
+      return saved ? Math.max(320, Math.min(Number(saved), window.innerWidth * 0.85)) : 520;
+    } catch { return 520; }
+  });
+  const isResizingRef = useRef(false);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const delta = startX - ev.clientX;
+      const newWidth = Math.max(320, Math.min(startWidth + delta, window.innerWidth * 0.85));
+      setPanelWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isResizingRef.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // Persist width from the panel element's current computed width
+      if (panelRef.current) {
+        const finalWidth = panelRef.current.offsetWidth;
+        try { localStorage.setItem('logseq-mixer-panel-width', String(finalWidth)); } catch {}
+      }
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [panelWidth]);
   const themeMode = useThemeMode(initialThemeMode);
   const ctrlHeld = useCtrlKey();
   const settings = useRecoilValue(settingsState);
@@ -1475,7 +1514,25 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     <Overlay onClick={e => {
       if (!panelRef.current?.contains(e.target as Node)) window.logseq.hideMainUI();
     }}>
-      <ChatPanel ref={panelRef} className={themeMode === 'dark' ? darkTheme.className : ''}>
+      <ChatPanel ref={panelRef} className={themeMode === 'dark' ? darkTheme.className : ''} css={{ width: `${panelWidth}px` }}>
+        {/* Resize handle */}
+        <div
+          onMouseDown={handleResizeStart}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: '5px',
+            cursor: 'col-resize',
+            zIndex: 101,
+            background: 'transparent',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(139, 92, 246, 0.3)')}
+          onMouseLeave={e => { if (!isResizingRef.current) e.currentTarget.style.background = 'transparent'; }}
+          title="Drag to resize"
+        />
         <Header>
           <HeaderLeft>
             <LogoIcon src={themeMode === 'dark' ? 'icon-dark-transparent.png' : 'icon.png'} alt="Mixer Logo" />
