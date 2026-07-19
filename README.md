@@ -37,11 +37,58 @@ Logseq gave you a second brain. Mixer gives that brain a voice — and hands.
 
 ---
 
-Logseq Mixer isn't a chatbot bolted onto your notes. It's an **autonomous agent** with persistent memory, hybrid RAG retrieval, and direct graph editing — powered by any model from any provider. Give it a goal, and it plans, executes, self-corrects, and learns.
+## The problem Mixer solves
+
+You've been writing in Logseq for months — maybe years. Hundreds of pages. Thousands of blocks. Your knowledge is *in there*. But:
+
+> **You know you wrote about it... somewhere.**
+> You search. 40 results. You open tabs. You skim. You cross-reference dates. Twenty minutes later, you've pieced together what a single question should have answered.
+
+> **You want to create something from what you already know.**
+> A summary. An overview page. A structured collection from scattered notes. But gathering the material, reading it, and organizing it is an hour of manual work.
+
+> **Your graph is growing, but your ability to use it isn't keeping up.**
+> The more you write, the harder it becomes to find, connect, and build on what you've already captured. The value is compounding — but you can't access it fast enough.
+
+Mixer exists because your notes deserve better than a search bar.
+
+---
+
+## What changes with Mixer
+
+**Before:** You want to find everything you've noted about a project across 3 months of journals. You open search, try keywords, open a dozen pages, mentally cross-reference them.
+
+**After:** You ask Mixer. It finds 7 relevant blocks across your graph, synthesizes them into a coherent answer, and cites each source with `((block-ref))` links you can click to jump straight there. 8 seconds.
+
+**Before:** You need a structured overview page for a topic scattered across your notes. You spend an hour reading, copy-pasting, reorganizing.
+
+**After:** You tell Mixer: *"Create an overview of my machine learning notes with links to sources."* The agent searches, reads, extracts, creates the page, writes structured content with backlinks. You approve the plan and watch it execute.
+
+**Before:** You ask your AI assistant something about your notes. It gives a generic answer because it can't see your graph.
+
+**After:** Mixer has indexed your entire graph. It retrieves relevant context, understands block hierarchy, resolves references, and answers grounded in *your actual notes* — not hallucinations.
+
+---
+
+## Who uses Mixer?
+
+- **Researchers** cross-referencing papers, literature notes, and experimental observations
+- **Developers** maintaining project logs, architecture decisions, and technical knowledge bases
+- **Writers** building interconnected worldbuilding, story bibles, or content plans
+- **Students** synthesizing lecture notes, readings, and study material before exams
+- **Knowledge workers** managing meeting notes, project timelines, and institutional memory
+
+If your graph has more than 50 pages, you're leaving value on the table without Mixer.
+
+---
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/indraginanjar/logseq-mixer/main/docs/assets/demo.gif" alt="Logseq Mixer in action" width="800">
 </p>
+
+---
+
+Logseq Mixer isn't a chatbot bolted onto your notes. It's an **autonomous agent** with persistent memory, hybrid RAG retrieval, and direct graph editing — powered by any model from any provider. Give it a goal, and it plans, executes, self-corrects, and learns.
 
 ---
 
@@ -98,15 +145,14 @@ Agent: 🤖 Goal detected. Generating plan...
 
 ## Understands your notes
 
-Mixer uses a **hybrid RAG pipeline** that actually understands the structure of your knowledge graph — not just flat text search.
+Ask about something you wrote months ago. Mixer finds it — even if you don't remember the exact words. It understands meaning, not just keywords.
 
-- **HNSW-accelerated vector search** — Sub-5ms semantic retrieval across 20,000+ chunks
-- **BM25 keyword search** — Precise term matching for code, names, and quoted phrases
-- **Reciprocal Rank Fusion** — Merges both result sets with intelligent query-adaptive weighting
-- **Hierarchy-aware chunking** — Respects Logseq's block tree structure, preserves parent context across chunk boundaries
-- **Clickable block citations** — The AI cites source blocks as `((uuid))` links you can click to navigate directly to the source
+- **Semantic search** — Finds conceptually related content even when words differ. "What were my concerns about the deadline?" finds blocks that say "timeline is too aggressive."
+- **Keyword precision** — Also does exact term matching for code, names, and quoted phrases when that's what you need.
+- **Hierarchy-aware** — Respects Logseq's block tree structure. Parent context is preserved, so answers maintain the original nesting and relationships.
+- **Clickable citations** — Every answer cites source blocks as `((uuid))` links. Click to navigate directly to the source. Verify, expand, or edit in place.
 
-Your notes are indexed locally in SQLite (via IndexedDB). Nothing leaves your machine unless you choose a cloud embedding provider. Incremental indexing means only changed pages are re-processed — even massive graphs stay fast.
+Under the hood: HNSW-accelerated vector search (sub-5ms across 20,000+ chunks), BM25 keyword index, and Reciprocal Rank Fusion — all running locally in your browser. Nothing leaves your machine unless you choose a cloud embedding provider.
 
 > 📖 [Retrieval pipeline deep-dive →](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/retrieval-pipeline.md)
 
@@ -152,7 +198,7 @@ Web search, browser automation, file system access, database queries — anythin
 The easiest way — install from the **Logseq Plugin Marketplace**:
 
 1. Open Logseq → Plugins → Marketplace
-2. Search for **"Logseq Mixer"**
+2. Search for **"Mixer"**
 3. Click Install — done.
 
 <details>
