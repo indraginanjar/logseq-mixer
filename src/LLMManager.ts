@@ -96,6 +96,29 @@ export function getContextLimitForModel(model: string): number {
   return 8192; // safe default fallback
 }
 
+/**
+ * Set of model names (lowercased) that have been discovered at runtime to require
+ * `max_completion_tokens` instead of `max_tokens`. Persists for the session so
+ * the retry only happens once per model.
+ */
+const _modelsRequiringMaxCompletionTokens = new Set<string>();
+
+/**
+ * Determine whether a model requires `max_completion_tokens` instead of `max_tokens`.
+ * Covers OpenAI reasoning models (o-series) and future models, plus any models
+ * discovered at runtime via error recovery.
+ */
+export function shouldUseMaxCompletionTokens(model: string): boolean {
+  const normalized = model.toLowerCase();
+  // Runtime-discovered models
+  if (_modelsRequiringMaxCompletionTokens.has(normalized)) return true;
+  // OpenAI o-series reasoning models: o1, o1-mini, o3, o3-mini, o4-mini, etc.
+  if (/^o\d/.test(normalized)) return true;
+  // Future GPT-5+
+  if (normalized.includes('gpt-5')) return true;
+  return false;
+}
+
 export async function queryLiteLLM(
   messages: ChatMessage[],
   model: string,
@@ -107,12 +130,7 @@ export async function queryLiteLLM(
 ): Promise<any> {
   const chatProvider = provider || 'litellm';
 
-  const useMaxCompletionTokens =
-    model.toLowerCase().includes('o1-') ||
-    model.toLowerCase().startsWith('o1') ||
-    model.toLowerCase().includes('o3-') ||
-    model.toLowerCase().startsWith('o3') ||
-    model.toLowerCase().includes('gpt-5');
+  const useMaxCompletionTokens = shouldUseMaxCompletionTokens(model);
 
   let requestBody: Record<string, any>;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -175,6 +193,43 @@ export async function queryLiteLLM(
   });
 
   if (!response.ok) {
+    // Check if the error is about unsupported max_tokens parameter
+    let errorBody = '';
+    try {
+      errorBody = await response.text();
+    } catch { /* ignore read errors */ }
+
+    if (
+      !useMaxCompletionTokens &&
+      response.status === 400 &&
+      errorBody.includes('max_tokens') &&
+      errorBody.includes('max_completion_tokens')
+    ) {
+      // Retry with max_completion_tokens instead of max_tokens
+      console.info(`[queryLiteLLM] Model "${model}" rejected max_tokens, retrying with max_completion_tokens.`);
+      // Remember this model for future requests
+      _modelsRequiringMaxCompletionTokens.add(model.toLowerCase());
+      delete requestBody.max_tokens;
+      requestBody.max_completion_tokens = getMaxTokensForModel(model);
+
+      const retryResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+        signal,
+      });
+
+      if (!retryResponse.ok) {
+        throw new Error(`LLM request failed: ${retryResponse.status} ${retryResponse.statusText}`);
+      }
+
+      const retryData = await retryResponse.json();
+      if (chatProvider === 'ollama' && retryData.message && !retryData.choices) {
+        return { choices: [{ message: retryData.message }] };
+      }
+      return retryData;
+    }
+
     throw new Error(`LLM request failed: ${response.status} ${response.statusText}`);
   }
 
