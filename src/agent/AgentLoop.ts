@@ -15,15 +15,17 @@ Available capabilities:
 - tool: Use external MCP tools (if available)
 - think: Analyze information and reason about next steps (also use this when you need to process data already available in the context)
 - gather: Read MULTIPLE pages in batches, extracting and summarizing key information from each. Use this ONLY when the goal requires processing more than 3 DIFFERENT PAGES or collecting data across many sources.
+- specialist: Execute a focused sub-task with ISOLATED context. The specialist receives ONLY the data from specific prior steps (via inputSteps) — not the full accumulated context. Use this for synthesis, comparison, or complex analysis tasks where accumulated context noise would degrade quality.
 
 Respond with ONLY valid JSON in this format:
-{"steps":[{"id":1,"description":"...","type":"read|write|search|tool|think|gather"}],"estimatedTokens":NUMBER}
+{"steps":[{"id":1,"description":"...","type":"read|write|search|tool|think|gather|specialist","specialistRole":"(optional) system instruction for the specialist","inputSteps":[1,2]}],"estimatedTokens":NUMBER}
 
 PLANNING RULES:
 - IMPORTANT: The "Current context" below already contains the current page's FULL block tree with UUIDs, AND the user's focused/selected block with its UUID. You do NOT need a "read" or "gather" step to access sub-blocks of the current block — they are ALREADY in the context. Use a "think" step to analyze them, then "write" steps to modify them.
 - Use "gather" ONLY when the goal involves reading/processing MULTIPLE DIFFERENT PAGES (e.g., "find all pages about X and extract Y", "summarize my notes on Z"). Do NOT use "gather" for reading sub-blocks of the current block.
 - Use "read" only when you need to read a DIFFERENT page than the one already in context.
 - Use "think" to process, analyze, or extract information from data already in context (including sub-blocks of the current block).
+- Use "specialist" for the FINAL synthesis/output step when the goal requires combining data from multiple prior steps (search + gather → specialist synthesizes). Also use specialist when you need high-quality output that would be degraded by large accumulated context. Specify "inputSteps" to tell the specialist which step outputs to use as input.
 - A gather step description should specify WHAT to look for and WHAT to extract. Example: "Gather all machine learning pages and extract key concepts, definitions, and relationships from each."
 - Use "search" first to find relevant pages, then "gather" to process them in bulk.
 - Keep steps atomic and sequential. Estimate total tokens needed for all LLM calls.`;
@@ -121,6 +123,8 @@ export class AgentLoop {
         description: s.description,
         type: s.type || 'think',
         tool: s.tool,
+        specialistRole: s.specialistRole,
+        inputSteps: s.inputSteps,
         status: 'pending' as const,
       }));
       return { goal, steps, estimatedTokens: parsed.estimatedTokens || 50000 };
@@ -204,6 +208,11 @@ export class AgentLoop {
           context.previousOutputs.push({ stepId: step.id, output: result.output });
           completedSteps++;
           this.emit('step_complete', step, result.output, completedSteps, plan.steps.length);
+
+          // Compress accumulated context if it's getting large (prevents attention degradation)
+          if (completedSteps < plan.steps.length) {
+            await this.compressContext(context);
+          }
 
           // Replan only when something unexpected happened
           const lastOutput = context.previousOutputs[context.previousOutputs.length - 1]?.output || '';
@@ -319,6 +328,11 @@ RULES:
     // Map-Reduce gather: batch-read pages and summarize each into scratchPad
     if (step.type === 'gather') {
       return await this.executeGatherStep(step, context);
+    }
+
+    // Specialist: isolated LLM call with focused context (no accumulated noise)
+    if (step.type === 'specialist') {
+      return await this.executeSpecialistStep(step, context);
     }
 
     // For tool and search steps, use the full ReAct loop for iterative chaining
@@ -716,6 +730,126 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
     } catch {
       // Parse failed, skip replanning
     }
+  }
+
+  /**
+   * Compress accumulated previous outputs into a concise working memory.
+   * Called when accumulated context tokens exceed a threshold, preventing
+   * attention degradation in subsequent steps.
+   */
+  private async compressContext(context: StepContext): Promise<void> {
+    const allOutputText = context.previousOutputs.map(o => o.output).join('\n');
+    const totalTokens = countTokens(allOutputText);
+
+    // Only compress if we have substantial accumulated context
+    const COMPRESSION_THRESHOLD = 4000; // tokens
+    if (totalTokens < COMPRESSION_THRESHOLD) return;
+
+    try {
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: `You are a context compression agent. Condense the following step outputs into a focused working memory.
+
+RULES:
+- Preserve ALL factual data: names, UUIDs, page names, block content, search results, numbers, dates
+- Preserve the logical sequence of what was done and discovered
+- Remove redundancy, verbose explanations, and repeated content
+- Use structured bullet points for clarity
+- Keep extracted data verbatim (don't paraphrase page names, UUIDs, or content)
+- Output should be 30-50% of the original length while retaining all key information
+- If a step produced a list of results, keep the list (compressed but complete)`,
+        },
+        {
+          role: 'user',
+          content: `Goal: ${context.goal}\n\nStep outputs to compress:\n${context.previousOutputs.map(o => `[Step ${o.stepId}]: ${o.output}`).join('\n\n---\n\n')}\n\nCompress into working memory:`,
+        },
+      ];
+
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+      const compressed = result.choices?.[0]?.message?.content?.trim() ?? '';
+      const compressionTokens = countTokens(JSON.stringify(messages)) + countTokens(compressed);
+      this.tokensUsed += compressionTokens;
+
+      if (compressed && countTokens(compressed) < totalTokens * 0.8) {
+        // Replace all previous outputs with the single compressed version
+        const lastStepId = context.previousOutputs[context.previousOutputs.length - 1]?.stepId ?? 0;
+        console.info(`[AgentLoop] Context compressed: ${totalTokens} → ${countTokens(compressed)} tokens (${context.previousOutputs.length} steps)`);
+        context.previousOutputs = [{ stepId: lastStepId, output: `[Compressed working memory from steps 1-${lastStepId}]\n${compressed}` }];
+      }
+    } catch (err) {
+      console.warn('[AgentLoop] Context compression failed, continuing with uncompressed context:', err);
+    }
+  }
+
+  /**
+   * Execute a specialist step — an isolated LLM call with its own focused system prompt
+   * and targeted input. The specialist receives only relevant data (from specified input steps
+   * or scratchPad) rather than the full accumulated context.
+   *
+   * This prevents the "lost in the middle" problem by giving the specialist a clean,
+   * focused context window to produce high-quality output.
+   */
+  private async executeSpecialistStep(step: AgentStep, context: StepContext): Promise<StepResult> {
+    // Determine the specialist's role/system prompt
+    const specialistRole = step.specialistRole || 'You are a specialist agent. Produce the output described in the task using ONLY the provided input data.';
+
+    // Gather targeted input — only from specified steps, not the full accumulation
+    let inputData = '';
+    if (step.inputSteps && step.inputSteps.length > 0) {
+      // Pull data from specific prior steps
+      const selectedOutputs = context.previousOutputs.filter(o => step.inputSteps!.includes(o.stepId));
+      inputData = selectedOutputs.map(o => `[From step ${o.stepId}]:\n${o.output}`).join('\n\n---\n\n');
+    }
+
+    // Also include relevant scratchPad data if available
+    if (context.scratchPad.size > 0) {
+      const contextLimit = getContextLimitForModel(this.settings.selectedModel);
+      const scratchBudget = Math.floor(contextLimit * 0.4);
+      const entries = Array.from(context.scratchPad.entries())
+        .map(([key, value]) => `[${key}]:\n${value}`)
+        .join('\n\n');
+      const scratchData = countTokens(entries) > scratchBudget
+        ? decode(encode(entries).slice(0, scratchBudget))
+        : entries;
+      if (scratchData) {
+        inputData += (inputData ? '\n\n---\n\n' : '') + '[Gathered data]:\n' + scratchData;
+      }
+    }
+
+    // If no specific inputs were selected, provide a brief summary of what's been done
+    if (!inputData) {
+      inputData = context.previousOutputs.length > 0
+        ? context.previousOutputs.map(o => `Step ${o.stepId}: ${o.output.slice(0, 200)}`).join('\n')
+        : '(No prior data available)';
+    }
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `${specialistRole}
+
+RULES:
+- Produce ONLY the output described in the task — not plans, outlines, or meta-commentary
+- Use the provided input data as your source material
+- Be thorough and complete — include all relevant information from the input
+- If the task asks for a specific format (table, list, summary), produce it exactly`,
+      },
+      {
+        role: 'user',
+        content: `Goal: ${context.goal}\n\nTask: ${step.description}\n\n--- Input Data ---\n${inputData}\n\n--- End Input ---\n\nProduce the output now:`,
+      },
+    ];
+
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+    const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
+    const tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
+
+    // Store specialist output in scratchPad for downstream use
+    const specialistKey = `specialist_step_${step.id}`;
+    context.scratchPad.set(specialistKey, raw);
+
+    return { success: !!raw, output: raw, tokensUsed: tokens };
   }
 
   private emit(type: AgentProgressEvent['type'], step: AgentStep | undefined, message: string, completedSteps: number, totalSteps: number) {

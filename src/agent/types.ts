@@ -1,4 +1,4 @@
-export type StepType = 'read' | 'write' | 'search' | 'tool' | 'think' | 'gather';
+export type StepType = 'read' | 'write' | 'search' | 'tool' | 'think' | 'gather' | 'specialist';
 export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
 export interface AgentStep {
@@ -6,6 +6,10 @@ export interface AgentStep {
   description: string;
   type: StepType;
   tool?: string;
+  /** For specialist steps: the focused role/instruction for the specialist LLM call */
+  specialistRole?: string;
+  /** For specialist steps: which prior step IDs to include as input (empty = none, uses description only) */
+  inputSteps?: number[];
   status: StepStatus;
   output?: string;
   error?: string;
