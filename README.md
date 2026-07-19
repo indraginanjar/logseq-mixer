@@ -147,17 +147,25 @@ Web search, browser automation, file system access, database queries — anythin
 
 ## Quick Start
 
-### 1. Install the plugin
+### 1. Install the Mixer
 
-**Marketplace:** Install "Logseq Mixer" from the Logseq Plugin Marketplace.
+The easiest way — install from the **Logseq Plugin Marketplace**:
 
-**From source:**
+1. Open Logseq → Plugins → Marketplace
+2. Search for **"Logseq Mixer"**
+3. Click Install — done.
+
+<details>
+<summary><strong>Alternative: Install from source</strong></summary>
+
 ```bash
 git clone https://github.com/indraginanjar/logseq-mixer.git
 cd logseq-mixer
 pnpm install && pnpm build && pnpm postbuild
 ```
 Then load as an unpacked plugin in Logseq (Settings → Advanced → Developer Mode → Load unpacked plugin).
+
+</details>
 
 ### 2. Choose your AI provider
 
