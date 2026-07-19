@@ -38,7 +38,7 @@ import { aiEditModeState, settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
 import type { ExecutionResult } from './types/editTypes';
-import { fetchLiteLLMModels } from './LLMManager';
+import { fetchModelsForProvider } from './LLMManager';
 
 function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return '0 Bytes';
@@ -155,17 +155,6 @@ const HeaderButton = styled('button', {
   gap: '4px',
   '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
 });
-
-const MODEL_CHOICES = [
-  'gpt-3.5-turbo',
-  'gpt-4',
-  'gpt-4o',
-  'claude-2',
-  'claude-3-opus',
-  'gemini-pro',
-  'codestral/codestral-latest',
-  'deepseek-chat',
-];
 
 const ModelSelect = styled('select', {
   background: 'transparent',
@@ -1303,27 +1292,76 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   };
 
   const currentModel = settings?.selectedModel || 'gpt-3.5-turbo';
-  const [fetchedModels, setFetchedModels] = useState<string[]>(MODEL_CHOICES);
+  const chatProvider = settings?.chatProvider || 'openai';
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+
+  // Per-provider model memory: remember the last selected model for each provider
+  const providerModelKey = 'logseq-mixer-provider-models';
+  const getProviderModels = (): Record<string, string> => {
+    try {
+      const stored = localStorage.getItem(providerModelKey);
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  };
+  const saveProviderModel = (provider: string, model: string) => {
+    const map = getProviderModels();
+    map[provider] = model;
+    localStorage.setItem(providerModelKey, JSON.stringify(map));
+  };
+
+  // When provider changes, restore the last model used with that provider
+  useEffect(() => {
+    const provider = settings?.chatProvider || 'openai';
+    const providerModels = getProviderModels();
+    const lastModelForProvider = providerModels[provider];
+    if (lastModelForProvider && lastModelForProvider !== settings?.selectedModel) {
+      logseq.updateSettings({ selectedModel: lastModelForProvider });
+    }
+  }, [settings?.chatProvider]);
+
+  // Save current model to per-provider memory when it changes
+  useEffect(() => {
+    const provider = settings?.chatProvider || 'openai';
+    if (settings?.selectedModel) {
+      saveProviderModel(provider, settings.selectedModel);
+    }
+  }, [settings?.selectedModel, settings?.chatProvider]);
 
   useEffect(() => {
+    const provider = settings?.chatProvider || 'openai';
+
     const loadModels = async () => {
-      if (settings?.chatEndpoint || settings?.LiteLLMLink) {
-        try {
-          const models = await fetchLiteLLMModels(settings.chatEndpoint || settings.LiteLLMLink, settings.apiKey || '');
-          if (models && models.length > 0) {
-            setFetchedModels(models);
-          }
-        } catch (err) {
-          console.warn('Failed to fetch models from LiteLLM, using default list:', err);
+      // Resolve the effective endpoint for this provider
+      const endpoint = settings?.chatEndpoint?.trim()
+        || (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : '')
+        || (provider === 'ollama' ? 'http://localhost:11434/api/chat' : '')
+        || settings?.LiteLLMLink
+        || 'http://127.0.0.1:4000/chat/completions';
+
+      if (!endpoint) {
+        setFetchedModels([]);
+        return;
+      }
+
+      try {
+        const models = await fetchModelsForProvider(provider, endpoint, settings?.apiKey || '');
+        if (models && models.length > 0) {
+          setFetchedModels(models);
+        } else {
+          setFetchedModels([]);
         }
+      } catch (err) {
+        console.warn(`Failed to fetch models for ${provider}:`, err);
+        setFetchedModels([]);
       }
     };
     loadModels();
-  }, [settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey]);
+  }, [settings?.chatProvider, settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey]);
 
-  const modelChoices = fetchedModels.includes(currentModel)
-    ? fetchedModels
-    : [currentModel, ...fetchedModels];
+  // Model choices: fetched list if available, otherwise just the current model
+  const modelChoices = fetchedModels.length > 0
+    ? (fetchedModels.includes(currentModel) ? fetchedModels : [currentModel, ...fetchedModels])
+    : [currentModel];
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newModel = e.target.value;

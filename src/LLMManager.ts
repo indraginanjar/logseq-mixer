@@ -225,3 +225,123 @@ export async function fetchLiteLLMModels(endpoint: string, apiKey: string): Prom
   }
   throw new Error('Invalid response format from LiteLLM models endpoint');
 }
+
+/** Default model lists per provider, used as fallback when dynamic fetching fails. */
+export const PROVIDER_DEFAULT_MODELS: Record<string, string[]> = {
+  openai: [
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-3.5-turbo',
+    'o1',
+    'o1-mini',
+    'o3',
+    'o3-mini',
+    'o4-mini',
+  ],
+  ollama: [
+    'llama3.2',
+    'llama3.1',
+    'llama3',
+    'mistral',
+    'mixtral',
+    'qwen2.5',
+    'qwen2',
+    'deepseek-r1',
+    'gemma2',
+    'phi3',
+    'codellama',
+  ],
+  litellm: [
+    'gpt-4o',
+    'gpt-4',
+    'gpt-3.5-turbo',
+    'claude-3-5-sonnet',
+    'claude-3-opus',
+    'gemini-pro',
+    'deepseek-chat',
+    'codestral/codestral-latest',
+  ],
+};
+
+/**
+ * Fetch available models from the appropriate endpoint based on provider.
+ * - OpenAI: GET /v1/models (filters to chat-capable models)
+ * - Ollama: GET /api/tags (local model list)
+ * - LiteLLM: GET /models (proxy-registered models)
+ *
+ * Returns the model list, or throws on failure.
+ */
+export async function fetchModelsForProvider(
+  provider: string,
+  endpoint: string,
+  apiKey: string
+): Promise<string[]> {
+  if (provider === 'ollama') {
+    return fetchOllamaModels(endpoint);
+  }
+  if (provider === 'openai') {
+    return fetchOpenAIModels(endpoint, apiKey);
+  }
+  // LiteLLM and any other provider: use the existing OpenAI-compatible /models endpoint
+  return fetchLiteLLMModels(endpoint, apiKey);
+}
+
+/** Fetch models from an Ollama instance via /api/tags. */
+async function fetchOllamaModels(endpoint: string): Promise<string[]> {
+  // Derive the tags endpoint from the chat endpoint
+  let tagsEndpoint: string;
+  try {
+    const url = new URL(endpoint);
+    url.pathname = '/api/tags';
+    tagsEndpoint = url.toString();
+  } catch {
+    tagsEndpoint = 'http://localhost:11434/api/tags';
+  }
+
+  const response = await fetch(tagsEndpoint, { method: 'GET' });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch models from Ollama: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (data && Array.isArray(data.models)) {
+    return data.models.map((m: any) => m.name?.replace(/:latest$/, '') || m.name);
+  }
+  throw new Error('Invalid response format from Ollama /api/tags');
+}
+
+/** Fetch models from an OpenAI-compatible /v1/models endpoint, filtering to GPT/chat models. */
+async function fetchOpenAIModels(endpoint: string, apiKey: string): Promise<string[]> {
+  let modelsEndpoint: string;
+  try {
+    const url = new URL(endpoint);
+    url.pathname = '/v1/models';
+    modelsEndpoint = url.toString();
+  } catch {
+    modelsEndpoint = 'https://api.openai.com/v1/models';
+  }
+
+  const response = await fetch(modelsEndpoint, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch models from OpenAI: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (data && Array.isArray(data.data)) {
+    // Filter to chat-capable models (gpt-*, o1-*, o3-*, o4-*, chatgpt-*)
+    const chatModels = data.data
+      .map((m: any) => m.id as string)
+      .filter((id: string) => /^(gpt-|o[0-9]|chatgpt-)/.test(id))
+      .sort();
+    return chatModels.length > 0 ? chatModels : data.data.map((m: any) => m.id);
+  }
+  throw new Error('Invalid response format from OpenAI /v1/models');
+}
