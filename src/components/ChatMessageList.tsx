@@ -21,6 +21,7 @@ export type ChatMessage = {
   content: string;
   sender: 'user' | 'assistant';
   model?: string;
+  timestamp?: string;
   image?: { name: string; content: string }[];
   file?: { name: string; content: string }[];
 };
@@ -1312,60 +1313,74 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
   onFileReattach?: ChatMessageListProps['onFileReattach'];
   onImageReattach?: ChatMessageListProps['onImageReattach'];
 }) {
+  // Build the header label: [timestamp role model]
+  const roleLabel = msg.sender === 'assistant'
+    ? `AI${msg.model ? ` ${msg.model}` : ''}`
+    : 'U';
+  const headerText = msg.timestamp
+    ? `[${msg.timestamp} ${roleLabel}]`
+    : `[${roleLabel}]`;
+
   return (
     <React.Fragment>
       <MessageRow align={msg.sender}>
-        {msg.sender === 'assistant' && <Avatar role="assistant">AI</Avatar>}
-        <Bubble role={msg.sender}>
-          {msg.image && msg.image.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {msg.image.map((img, imgIdx) => (
-                  <span key={imgIdx} style={{ display: 'inline-block', position: 'relative' }}>
-                    <img src={img.content} alt={img.name} style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
-                  </span>
-                ))}
+        {msg.sender === 'user' && <div style={{ order: 1, width: '28px', flexShrink: 0 }} />}
+        <div style={{ maxWidth: '80%' }}>
+          {/* Header line: styled for aesthetics, copies as plain bracket text */}
+          <div style={{
+            fontSize: '10px',
+            color: msg.sender === 'assistant' ? '#8b5cf6' : '#6b7280',
+            marginBottom: '3px',
+            fontFamily: 'monospace',
+            letterSpacing: '0.02em',
+            opacity: 0.8,
+            textAlign: msg.sender === 'user' ? 'right' : undefined,
+          }}>
+            {headerText}
+          </div>
+          <Bubble role={msg.sender}>
+            {msg.image && msg.image.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {msg.image.map((img, imgIdx) => (
+                    <span key={imgIdx} style={{ display: 'inline-block', position: 'relative' }}>
+                      <img src={img.content} alt={img.name} style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }} />
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {msg.image.map((img, i) => (
+                    <span
+                      key={i}
+                      onClick={() => onImageReattach?.(img)}
+                      style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                      title="Click to re-attach this image"
+                    >📷 {img.name}</span>
+                  ))}
+                </div>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {msg.image.map((img, i) => (
+            )}
+            {msg.file && msg.file.length > 0 && (
+              <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                {msg.file.map((f, i) => (
                   <span
                     key={i}
-                    onClick={() => onImageReattach?.(img)}
+                    onClick={() => onFileReattach?.(f)}
                     style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
-                    title="Click to re-attach this image"
-                  >📷 {img.name}</span>
+                    title="Click to re-attach this file"
+                  >📎 {f.name}</span>
                 ))}
-              </div>
-            </div>
-          )}
-          {msg.file && msg.file.length > 0 && (
-            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-              {msg.file.map((f, i) => (
-                <span
-                  key={i}
-                  onClick={() => onFileReattach?.(f)}
-                  style={{ display: 'inline-block', padding: '2px 8px', fontSize: 12, borderRadius: 4, background: 'rgba(0,0,0,0.05)', cursor: 'pointer' }}
-                  title="Click to re-attach this file"
-                >📎 {f.name}</span>
-              ))}
-            </span>
-          )}
-          {renderMarkdownWithProperties(
-            msg.content,
-            msg.sender === 'assistant',
-            getBlockMetadata,
-            msg.sender === 'assistant'
-          )}
-        </Bubble>
-        {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
-      </MessageRow>
-      {msg.sender === 'assistant' && msg.model && (
-        <div style={{ paddingLeft: '36px', marginTop: '-6px', marginBottom: '2px' }}>
-          <span style={{ fontSize: '10px', color: '#9ca3af', fontStyle: 'italic', userSelect: 'none' }}>
-            {msg.model}
-          </span>
+              </span>
+            )}
+            {renderMarkdownWithProperties(
+              msg.content,
+              msg.sender === 'assistant',
+              getBlockMetadata,
+              msg.sender === 'assistant'
+            )}
+          </Bubble>
         </div>
-      )}
+      </MessageRow>
       {result && (
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '4px', marginBottom: '12px' }}>
           <div style={{ width: '28px', flexShrink: 0 }} />

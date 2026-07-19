@@ -527,6 +527,13 @@ type Props = {
   storageProvider: StorageProvider;
 };
 
+/** Format current time as ISO-like timestamp without seconds for chat message headers. */
+function chatTimestamp(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
 export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -844,6 +851,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         id: Date.now() + '_user',
         content: messageToSend,
         sender: 'user',
+        timestamp: chatTimestamp(),
         image: imageDataUrls.length > 0 ? imageDataUrls : undefined,
         file: attachedFiles.length > 0 ? attachedFiles : undefined,
       };
@@ -858,7 +866,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     if (isHelpCommand(messageToSend)) {
       try {
         const helpResponse = await answerHelpQuestion(messageToSend, settings);
-        setMessages(prev => [...prev, { id: Date.now() + '_help', content: helpResponse, sender: 'assistant', model: settings?.selectedModel }]);
+        setMessages(prev => [...prev, { id: Date.now() + '_help', content: helpResponse, sender: 'assistant', model: settings?.selectedModel, timestamp: chatTimestamp() }]);
       } catch (err: any) {
         setError(err.message || 'Help system error');
       } finally {
@@ -871,7 +879,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     // Handle /tools command — list built-in Logseq tools
     if (isToolsCommand(messageToSend)) {
       const toolsResponse = listBuiltInTools();
-      setMessages(prev => [...prev, { id: Date.now() + '_tools', content: toolsResponse, sender: 'assistant' }]);
+      setMessages(prev => [...prev, { id: Date.now() + '_tools', content: toolsResponse, sender: 'assistant', timestamp: chatTimestamp() }]);
       setLoading(false);
       setThinkingText(null);
       return;
@@ -885,7 +893,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         abortControllerRef.current = controller;
         const rawResponse = await sendRawPrompt(rawPrompt, settings, controller.signal);
         abortControllerRef.current = null;
-        setMessages(prev => [...prev, { id: Date.now() + '_raw', content: rawResponse, sender: 'assistant', model: settings?.selectedModel }]);
+        setMessages(prev => [...prev, { id: Date.now() + '_raw', content: rawResponse, sender: 'assistant', model: settings?.selectedModel, timestamp: chatTimestamp() }]);
       } catch (err: any) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Raw command error');
@@ -911,6 +919,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             id: Date.now() + '_warning',
             content: '⚠️ No active page is open. Edit mode requires an open page to work. Sending query without edit context.',
             sender: 'assistant',
+            timestamp: chatTimestamp(),
           }]);
         }
       }
@@ -958,6 +967,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 id: `agent_step_${event.step!.id}_${Date.now()}`,
                 content: stepMsg,
                 sender: 'assistant',
+                model: settings?.selectedModel,
+                timestamp: chatTimestamp(),
               }]);
             }
             if (persistVerbose && event.type === 'step_failed' && event.step?.error) {
@@ -966,6 +977,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 id: `agent_step_${event.step!.id}_fail_${Date.now()}`,
                 content: failMsg,
                 sender: 'assistant',
+                timestamp: chatTimestamp(),
               }]);
             }
             if (persistVerbose && event.type === 'self_correcting' && event.step) {
@@ -974,6 +986,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                 id: `agent_correct_${event.step!.id}_${Date.now()}`,
                 content: correctMsg,
                 sender: 'assistant',
+                timestamp: chatTimestamp(),
               }]);
             }
 
@@ -1024,6 +1037,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                   content: messageContent,
                   sender: 'assistant',
                   model: settings?.selectedModel,
+                  timestamp: chatTimestamp(),
                 }]);
                 // Add to conversation history so follow-up questions have context
                 const historyContent = persistVerbose
@@ -1100,6 +1114,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           content: displayText,
           sender: 'assistant',
           model: settings?.selectedModel,
+          timestamp: chatTimestamp(),
         }]);
 
         if (commands.length > 0) {
@@ -1118,6 +1133,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               id: Date.now() + '_verify',
               content: `⚠️ Verification found ${failures.length} issue(s):\n${lines.join('\n')}`,
               sender: 'assistant',
+              timestamp: chatTimestamp(),
             }]);
           }
           setEditResults(prev => new Map(prev).set(assistantMsgId, result));
@@ -1129,6 +1145,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             id: Date.now() + '_imgpaste',
             content: `📷 To insert the image into your page:\n1. Click **"📋 Copy Image"** below\n2. Click the target block in Logseq\n3. Press **Ctrl+V**\n\n` + attachedImages.map(img => `![attached image](${img.content})`).join('\n\n'),
             sender: 'assistant',
+            timestamp: chatTimestamp(),
           }]);
         }
       } else {
@@ -1139,6 +1156,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           content: responseText,
           sender: 'assistant',
           model: settings?.selectedModel,
+          timestamp: chatTimestamp(),
         }]);
       }
 
@@ -1146,7 +1164,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
       if (getLastMemorySaved()) {
         setMemoryCount(prev => prev + 1);
         const memMsgId = `memory_saved_${Date.now()}`;
-        setMessages(prev => [...prev, { id: memMsgId, content: '💾 Remembered', sender: 'assistant' }]);
+        setMessages(prev => [...prev, { id: memMsgId, content: '💾 Remembered', sender: 'assistant', timestamp: chatTimestamp() }]);
         setTimeout(() => setMessages(prev => prev.filter(m => m.id !== memMsgId)), 3000);
       }
     } catch (err: any) {
