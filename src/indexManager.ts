@@ -178,6 +178,97 @@ const isInternalPage = (name: string) => {
          lower === 'favorites';
 };
 
+/**
+ * Garbage collection: detect indexed pages that no longer exist in the graph
+ * and purge their chunks, block metadata, BM25 entries, and accelerator vectors.
+ *
+ * Runs synchronously on in-memory SQLite — no async I/O needed.
+ * Called at the beginning of each incremental indexing run.
+ */
+export function purgeDeletedPages(
+  existingPages: Array<{ id: number | string; name: string }>,
+  storageProvider: PerDocumentStorageProvider,
+  accelerator?: VectorSearchAccelerator
+): number {
+  // Build set of page IDs that currently exist in the graph
+  const existingPageIds = new Set(existingPages.map(p => p.id.toString()));
+
+  // Get all page IDs present in the index
+  const getIndexedPageIds = (storageProvider as any).getIndexedPageIds;
+  if (typeof getIndexedPageIds !== 'function') return 0;
+
+  const indexedPageIds: Set<string> = getIndexedPageIds.call(storageProvider);
+
+  // Find stale page IDs (indexed but no longer in graph)
+  const stalePageIds: string[] = [];
+  for (const indexedId of indexedPageIds) {
+    if (!existingPageIds.has(indexedId)) {
+      stalePageIds.push(indexedId);
+    }
+  }
+
+  if (stalePageIds.length === 0) return 0;
+
+  console.info(`[indexManager] GC: purging ${stalePageIds.length} deleted page(s) from index.`);
+
+  // Collect page names (for block_metadata cleanup) and chunk IDs (for document deletion)
+  const getDocumentIdsForPage = (storageProvider as any).getDocumentIdsForPage;
+  const getPageNameForPageId = (storageProvider as any).getPageNameForPageId;
+
+  const allChunkIds: string[] = [];
+  const pageNames: string[] = [];
+
+  for (const pageId of stalePageIds) {
+    // Get chunk IDs for this page
+    if (typeof getDocumentIdsForPage === 'function') {
+      const chunkIds: string[] = getDocumentIdsForPage.call(storageProvider, pageId);
+      allChunkIds.push(...chunkIds);
+    } else {
+      // Fallback: construct expected IDs
+      allChunkIds.push(pageId);
+      for (let c = 0; c < 100; c++) {
+        allChunkIds.push(`${pageId}_chunk_${c}`);
+      }
+    }
+
+    // Extract page name from stored content for block_metadata cleanup
+    if (typeof getPageNameForPageId === 'function') {
+      const name = getPageNameForPageId.call(storageProvider, pageId);
+      if (name) pageNames.push(name);
+    }
+  }
+
+  // Delete document chunks
+  if (allChunkIds.length > 0) {
+    // deleteDocuments is async in signature but synchronous for in-memory SQLite
+    storageProvider.deleteDocuments(allChunkIds);
+
+    // Remove from HNSW accelerator
+    accelerator?.removeVectors(allChunkIds);
+
+    // Remove from BM25 index
+    if (_bm25Index) {
+      _bm25Index.removeDocuments(allChunkIds);
+    }
+  }
+
+  // Delete block metadata for purged pages
+  if (pageNames.length > 0) {
+    const deleteBlockMetadataForPages = (storageProvider as any).deleteBlockMetadataForPages;
+    if (typeof deleteBlockMetadataForPages === 'function') {
+      deleteBlockMetadataForPages.call(storageProvider, pageNames);
+    } else {
+      // Fallback: delete one at a time
+      for (const name of pageNames) {
+        storageProvider.deleteBlockMetadataForPage?.(name);
+      }
+    }
+  }
+
+  console.info(`[indexManager] GC: removed ${allChunkIds.length} chunk(s) and metadata for ${pageNames.length} page(s).`);
+  return stalePageIds.length;
+}
+
 export async function checkAndIndexUpdatedPages(
   apiKey: string,
   oramaInstance: any,
@@ -203,6 +294,11 @@ export async function checkAndIndexUpdatedPages(
     const supportsBulk = isPerDoc && typeof storageProvider.beginBulk === 'function';
     if (supportsBulk) {
       storageProvider.beginBulk!();
+    }
+
+    // --- Garbage Collection: purge stale entries from deleted pages ---
+    if (isPerDoc) {
+      purgeDeletedPages(pages, storageProvider, accelerator);
     }
 
     let pagesInBatch = 0;

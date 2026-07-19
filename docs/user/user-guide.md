@@ -57,7 +57,7 @@ These control what the AI *can do* in response to your messages.
 | **🗄️** | **Database Center** — Index stats (pages, chunks, DB size), export/import/clear actions |
 | **🔌** | **MCP Servers** — Manage external tool connections (web search, file system, browser) |
 | **🧠** | **Memory Manager** — View, edit, and delete stored memories. Badge shows memory count. |
-| **Re-Index** | Triggers incremental re-indexing. Only processes new/changed pages. Becomes "Stop" during active indexing. |
+| **Re-Index** | Triggers incremental re-indexing. Only processes new/changed pages; automatically purges stale entries from deleted pages. Becomes "Stop" during active indexing. |
 
 ---
 
@@ -400,6 +400,11 @@ Open **Settings → Plugin Settings → Mixer**.
 
 **Cause:** First-time indexing processes your entire graph.
 **Fix:** Normal for large graphs. Click "Stop" to pause — progress is saved. Subsequent runs are fast (incremental).
+
+### Stale block references in chat responses
+
+**Cause:** Pages were deleted from your graph but their old index entries hadn't been cleaned up yet.
+**Fix:** Click **Re-Index**. The incremental indexer now automatically detects and purges entries from deleted pages before processing updates. No full re-index or database clear is needed — the garbage collection step runs in under a second.
 
 ### Chat input unresponsive
 

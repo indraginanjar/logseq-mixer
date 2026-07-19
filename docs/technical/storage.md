@@ -296,6 +296,20 @@ Each page contains a block-based summary of a conversation session, written by t
 6. Rebuild HNSW from fresh embeddings
 ```
 
+### On Re-Index (Incremental)
+
+```
+1. Garbage Collection:
+   a. Query DISTINCT page IDs from documents table
+   b. Compare against logseq.Editor.getAllPages()
+   c. Delete chunks, HNSW vectors, BM25 entries, and block_metadata
+      for pages that no longer exist
+2. Iterate all Logseq pages (excluding internal + Mixer/*)
+3. Compare page.updatedAt vs stored lastUpdated — skip unchanged
+4. For changed pages: delete old chunks → re-chunk → embed → upsert
+5. Flush SQLite to IndexedDB every 5 pages (batch mode)
+```
+
 ### On Clear Index
 
 ```

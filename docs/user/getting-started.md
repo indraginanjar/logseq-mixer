@@ -141,7 +141,7 @@ Open **Settings → Plugin Settings → Mixer** and configure:
 2. Click the **Re-Index** button (bottom-right of the toolbar)
 3. Wait for indexing to complete — only new/changed pages are processed
 
-The first index takes longer (it processes your entire graph). Subsequent runs are incremental — typically a few seconds.
+The first index takes longer (it processes your entire graph). Subsequent runs are incremental — typically a few seconds. Deleted pages are automatically detected and purged from the index.
 
 **What gets indexed:**
 - All your pages (including journal entries)

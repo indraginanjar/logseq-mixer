@@ -362,6 +362,80 @@ export class SQLiteVectorStore implements StorageProvider {
     return 0;
   }
 
+  /**
+   * Return the set of distinct page IDs that have indexed documents.
+   * Strips the `_chunk_N` suffix from chunk IDs to recover the original page ID.
+   * Used by the garbage collection step to detect stale entries from deleted pages.
+   */
+  getIndexedPageIds(): Set<string> {
+    if (!this._db) return new Set();
+    const result = this._db.exec(
+      "SELECT DISTINCT CASE WHEN INSTR(id, '_chunk_') > 0 THEN SUBSTR(id, 1, INSTR(id, '_chunk_') - 1) ELSE id END AS page_id FROM documents"
+    );
+    const ids = new Set<string>();
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        ids.add(row[0] as string);
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * Return all document IDs (chunk IDs) belonging to a given page ID.
+   * Matches both the bare page ID and any `{pageId}_chunk_N` entries.
+   */
+  getDocumentIdsForPage(pageId: string): string[] {
+    if (!this._db) return [];
+    const stmt = this._db.prepare(
+      "SELECT id FROM documents WHERE id = ? OR id LIKE ? || '_chunk_%'"
+    );
+    const ids: string[] = [];
+    try {
+      stmt.bind([pageId, pageId]);
+      while (stmt.step()) {
+        ids.push(stmt.get()[0] as string);
+      }
+    } finally {
+      stmt.free();
+    }
+    return ids;
+  }
+
+  /**
+   * Extract the page name from the first document chunk for a given page ID.
+   * Parses the `note_name:` header line from the chunk content.
+   * Returns null if no document is found or the header is missing.
+   */
+  getPageNameForPageId(pageId: string): string | null {
+    if (!this._db) return null;
+    const stmt = this._db.prepare('SELECT content FROM documents WHERE id = ? LIMIT 1');
+    try {
+      stmt.bind([pageId]);
+      if (stmt.step()) {
+        const content = stmt.get()[0] as string;
+        const match = content.match(/note_name:\s*(.+)/);
+        return match ? match[1].trim() : null;
+      }
+      // Try the first chunk variant
+      stmt.free();
+      const chunkStmt = this._db.prepare("SELECT content FROM documents WHERE id LIKE ? || '_chunk_%' LIMIT 1");
+      try {
+        chunkStmt.bind([pageId]);
+        if (chunkStmt.step()) {
+          const content = chunkStmt.get()[0] as string;
+          const match = content.match(/note_name:\s*(.+)/);
+          return match ? match[1].trim() : null;
+        }
+      } finally {
+        chunkStmt.free();
+      }
+      return null;
+    } finally {
+      stmt.free();
+    }
+  }
+
   async clear(): Promise<void> {
     if (!this._db) throw new Error('SQLite database not initialized');
     this._db.run('DELETE FROM documents');
@@ -390,6 +464,14 @@ export class SQLiteVectorStore implements StorageProvider {
   deleteBlockMetadataForPage(pageName: string): void {
     if (!this._db) throw new Error('SQLite database not initialized');
     this._db.run('DELETE FROM block_metadata WHERE pageName = ?', [pageName]);
+  }
+
+  /** Delete block metadata for multiple pages at once (called during GC purge). */
+  deleteBlockMetadataForPages(pageNames: string[]): void {
+    if (!this._db) throw new Error('SQLite database not initialized');
+    if (pageNames.length === 0) return;
+    const placeholders = pageNames.map(() => '?').join(', ');
+    this._db.run(`DELETE FROM block_metadata WHERE pageName IN (${placeholders})`, pageNames);
   }
 
   /** Clear all block metadata (called on full re-index). */

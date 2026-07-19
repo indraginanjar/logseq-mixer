@@ -80,11 +80,30 @@ When the embedding model is changed in settings:
 
 ### Incremental Indexing (Default)
 
-1. Load existing database
-2. Iterate all pages, compare `updatedAt` vs stored `lastUpdated`
-3. Skip unchanged pages
-4. For changed pages: delete old chunks, generate new embeddings, insert
-5. Skip internal pages: cards, contents, favorites, `__*` prefixed, journals index
+1. **Garbage collection:** Compare indexed page IDs against `getAllPages()`, purge stale entries from deleted pages
+2. Load existing database
+3. Iterate all pages, compare `updatedAt` vs stored `lastUpdated`
+4. Skip unchanged pages
+5. For changed pages: delete old chunks, generate new embeddings, insert
+6. Skip internal pages: cards, contents, favorites, `__*` prefixed, journals index
+
+### Garbage Collection (Automatic)
+
+Runs at the start of every incremental indexing run (both manual Re-Index and auto-indexing). Detects and removes index entries for pages that no longer exist in the graph.
+
+**Algorithm:**
+1. Query distinct page IDs from the `documents` table (stripping `_chunk_N` suffixes)
+2. Get all currently existing page IDs from `logseq.Editor.getAllPages()`
+3. Compute the set difference (indexed but no longer existing = stale)
+4. For each stale page:
+   - Delete all document chunks (`{pageId}` and `{pageId}_chunk_*`)
+   - Remove vectors from HNSW accelerator
+   - Remove entries from BM25 inverted index
+   - Delete associated `block_metadata` rows (by page name extracted from chunk content)
+
+**Performance:** ~200–500ms for a 100MB database. All operations are on the in-memory SQLite instance — no embedding API calls required.
+
+**Why this matters:** Without GC, deleted pages leave orphaned chunks in the index. These produce stale `((uuid))` block references in RAG results that point to blocks that no longer exist.
 
 ### Full Indexing
 
@@ -395,7 +414,7 @@ LLM responses containing Logseq notation are transformed:
 |---|---|
 | `src/embedManager.ts` | Block flattening, reference resolution, chunking orchestration, embedding generation |
 | `src/hierarchyChunker.ts` | `buildSubtreeChunks()`, `buildAncestorContext()`, depth weighting |
-| `src/indexManager.ts` | Incremental indexing, auto-index, re-index guard |
+| `src/indexManager.ts` | Incremental indexing, auto-index, re-index guard, garbage collection of deleted pages |
 | `src/storage/SQLiteVectorStore.ts` | Document CRUD, cosine search (fallback), block metadata, IndexedDB persistence |
 | `src/storage/VectorSearchAccelerator.ts` | HNSW index wrapper with auto-fallback |
 | `src/storage/cosineSimilarity.ts` | Embedding BLOB encode/decode, cosine computation |

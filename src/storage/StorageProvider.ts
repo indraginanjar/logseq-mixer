@@ -68,4 +68,11 @@ export interface PerDocumentStorageProvider extends StorageProvider {
   clearBlockMetadata?(): void;
   /** Look up block metadata by UUID. */
   getBlockMetadata?(uuid: string): { pageName: string; contentPreview: string } | null;
+
+  /** Return the set of distinct page IDs that have indexed documents. */
+  getIndexedPageIds?(): Set<string>;
+  /** Return all document (chunk) IDs belonging to a given page ID. */
+  getDocumentIdsForPage?(pageId: string): string[];
+  /** Delete block_metadata entries whose pageName matches any of the given names. */
+  deleteBlockMetadataForPages?(pageNames: string[]): void;
 }
