@@ -267,6 +267,144 @@ The LLM receives the goal + available capabilities and returns structured JSON:
 | `tool` | ReAct loop (iterative, max 10) | External MCP tool calls with chaining |
 | `think` | Single LLM call | Analysis, reasoning, synthesis |
 | `gather` | Map-Reduce pipeline | Batch-read multiple pages with per-batch summarization |
+| `specialist` | Isolated LLM call | Focused sub-task with targeted input — no accumulated context noise |
+
+### Context Compression Layer
+
+#### Problem
+
+As the agent executes steps sequentially, `previousOutputs` accumulates all step outputs. By step 5+, the context injected into the next step can be 10K–20K tokens of raw accumulated output. This causes:
+
+- **Attention degradation** — "lost in the middle" where the LLM ignores information buried in long context
+- **Wasted tokens** — redundant information repeated across steps
+- **Poor output quality** — later steps (especially synthesis/write) produce worse results
+
+#### Solution: Adaptive Compression
+
+After each successful step, `compressContext()` checks if accumulated context exceeds a threshold (4000 tokens). If exceeded, a lightweight LLM call compresses all `previousOutputs` into a concise "working memory":
+
+```
+Step 1 output: "Found 7 pages matching 'machine learning': ML Basics, Neural Nets, ..."  (800 tokens)
+Step 2 output: "Gathered data from ML Basics: ...definitions, ...concepts, ..."          (2000 tokens)
+Step 3 output: "Gathered data from Neural Nets: ...architectures, ...training, ..."      (2500 tokens)
+                                                                              Total: 5300 tokens
+                                                                                    ↓
+                                                                         COMPRESSION TRIGGERED
+                                                                                    ↓
+Compressed working memory: "7 ML pages found. Key data extracted:                   (1800 tokens)
+  - ML Basics: supervised/unsupervised learning, regression, classification
+  - Neural Nets: CNN, RNN, Transformer architectures, backprop, SGD
+  Pages: ML Basics, Neural Nets, Transformers, Deep Learning, ..."
+```
+
+#### Compression Rules
+
+The compression prompt instructs the LLM to:
+- **Preserve** all factual data: names, UUIDs, page names, block content, search results, numbers, dates
+- **Preserve** the logical sequence of what was done and discovered
+- **Remove** redundancy, verbose explanations, repeated content
+- **Keep** extracted data verbatim (never paraphrase page names, UUIDs, or content)
+- **Target** 30-50% of original length while retaining all key information
+
+#### When Compression Fires
+
+| Condition | Behavior |
+|---|---|
+| Accumulated tokens < 4000 | No compression (overhead not worth it) |
+| Accumulated tokens ≥ 4000 | Compress and replace `previousOutputs` |
+| Compressed result > 80% of original | Reject compression (not effective enough) |
+| Compression LLM call fails | Continue with uncompressed context (graceful fallback) |
+| Last step in plan | Skip compression (final synthesis handles its own context) |
+
+#### Cost
+
+One additional LLM call per compression event (typically 1-2 per goal run). The tokens saved downstream far exceed the compression cost because every subsequent step receives a smaller, focused context.
+
+### Specialist Step Type
+
+#### Problem
+
+Even with compression, some tasks inherently need high-quality output from a clean slate — particularly final synthesis, comparison, and complex analysis. A "think" step still receives the accumulated (possibly compressed) context, which may include irrelevant data from prior steps.
+
+#### Solution: Isolated Execution
+
+The `specialist` step executes with its own fresh LLM call that receives **only targeted input** — not the full accumulated context. This gives the specialist the full attention span of the model on just the relevant data.
+
+#### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     SPECIALIST STEP EXECUTION                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Step definition:                                                │
+│    { "type": "specialist",                                       │
+│      "description": "Create comparison table of ML algorithms",  │
+│      "specialistRole": "You are a technical writer...",          │
+│      "inputSteps": [2, 3] }                                     │
+│                                                                  │
+│  Execution:                                                      │
+│    1. Collect outputs ONLY from inputSteps [2, 3]               │
+│    2. Include scratchPad data (from gather steps)                │
+│    3. Build fresh messages:                                      │
+│       - system: specialistRole + production rules               │
+│       - user: goal + task description + targeted input only     │
+│    4. Single LLM call (no accumulated context noise)            │
+│    5. Store output in scratchPad["specialist_step_{id}"]        │
+│    6. Return output for step completion                         │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Plan JSON Format
+
+```json
+{
+  "steps": [
+    { "id": 1, "type": "search", "description": "Find React and Vue pages" },
+    { "id": 2, "type": "gather", "description": "Extract React concepts and patterns" },
+    { "id": 3, "type": "gather", "description": "Extract Vue concepts and patterns" },
+    { "id": 4, "type": "specialist",
+      "description": "Create a detailed comparison table: React vs Vue",
+      "specialistRole": "You are a frontend framework expert. Create comprehensive, well-structured markdown comparison tables.",
+      "inputSteps": [2, 3] }
+  ]
+}
+```
+
+Step 4 receives **only** the gather outputs from steps 2 and 3 — not the search results from step 1, not any accumulated noise.
+
+#### Fields
+
+| Field | Required | Description |
+|---|---|---|
+| `specialistRole` | Optional | Custom system prompt for the specialist. Defaults to a generic production prompt. |
+| `inputSteps` | Optional | Array of step IDs whose outputs to include as input. If empty, includes scratchPad data and a brief summary of prior steps. |
+
+#### Input Data Assembly
+
+Priority order for specialist input:
+1. **Specified step outputs** — full text from `inputSteps` IDs
+2. **ScratchPad data** — all gathered/specialist data (up to 40% of context window)
+3. **Fallback** — if nothing specified, brief summaries of all prior steps (200 chars each)
+
+#### When the Planner Uses Specialist
+
+The planning prompt instructs the LLM to use `specialist` when:
+- Final synthesis/output step that combines data from multiple prior steps
+- Task requires high-quality output that would be degraded by large accumulated context
+- Complex analysis, comparison, or writing where focused attention matters
+- Pattern: `search` → `gather` → **`specialist`** (find, process, synthesize with clean context)
+
+#### Specialist vs Think
+
+| Aspect | `think` | `specialist` |
+|---|---|---|
+| Context | Receives accumulated `previousOutputs` + `scratchPad` | Receives **only** specified `inputSteps` + `scratchPad` |
+| System prompt | Generic step execution prompt | Custom `specialistRole` prompt |
+| Best for | Quick reasoning, intermediate analysis | Final synthesis, comparison, complex writing |
+| Context noise | High (grows with each step) | Minimal (only what's needed) |
+| Output storage | `previousOutputs` | `previousOutputs` + `scratchPad` |
 
 ### Execution Flow
 
@@ -536,10 +674,12 @@ User types message
 │  3. For each step:                                      │
 │     a. Execute:                                         │
 │        - gather → Map-Reduce → scratchPad               │
+│        - specialist → isolated LLM call → scratchPad    │
 │        - tool/search → ReAct loop                       │
 │        - read/write/think → single LLM + action         │
 │     b. Self-correct if output inadequate                │
-│     c. Replan every 2 steps if needed                   │
+│     c. Compress context if threshold exceeded           │
+│     d. Replan every 2 steps if needed                   │
 │  4. synthesizeFinalAnswer() using scratchPad + outputs  │
 │  5. Store task_outcome in memory                        │
 └─────────────────────────────────────────────────────────┘
@@ -556,8 +696,10 @@ User types message
 | Agent: plan generation | 1 | 2K–5K |
 | Agent: per step (read/write/think) | 1 | 1K–3K |
 | Agent: per step (tool/search via ReAct) | 2–10 | 5K–30K |
+| Agent: per step (specialist) | 1 | 2K–8K |
 | Agent: gather step (per batch of 3 pages) | 1 | 2K–5K |
 | Agent: gather step (10 pages total) | 5 (1 extract + 4 batches) | 15K–30K |
+| Agent: context compression | 1 (per trigger) | 1K–3K |
 | Agent: self-correction evaluation | 1 per step | 500–1K |
 | Agent: replan check | 1 per 2 steps | 1K–3K |
 | Agent: final synthesis | 1 | 3K–10K |

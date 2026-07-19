@@ -320,7 +320,32 @@ When the agent is running, you'll see a live progress panel:
 
 **On failure:** "↻ Retry" and "⏭ Skip" buttons appear.
 
-**Verbose mode (default ON):** Shows color-coded step type badges (`read`, `write`, `search`, `tool`, `think`), per-step token usage, ↩ correction badges with reasoning, and detailed error messages for failed steps. Toggle it on/off directly from the chat toolbar using the 📋 button — no need to open settings.
+**Verbose mode (default ON):** Shows color-coded step type badges (`read`, `write`, `search`, `tool`, `think`, `gather`, `specialist`), per-step token usage, ↩ correction badges with reasoning, and detailed error messages for failed steps. Toggle it on/off directly from the chat toolbar using the 📋 button — no need to open settings.
+
+---
+
+## Context Quality Management
+
+Mixer uses two techniques to ensure high-quality output even on complex, multi-step goals:
+
+### Automatic Context Compression
+
+As the agent executes steps, it accumulates outputs from each step. If this accumulated context grows too large, the agent automatically compresses it into a focused "working memory" — preserving all factual data (page names, UUIDs, search results) while removing redundancy and verbosity.
+
+**You won't see this happen** — it's automatic and transparent. The effect is that later steps (especially the final synthesis) receive cleaner, more focused context and produce better results.
+
+### Specialist Steps
+
+For tasks that require high-quality synthesis or complex analysis, the agent uses **specialist steps** — isolated sub-tasks that receive only the specific data they need, rather than everything that happened before.
+
+Example: if you ask "Compare my React and Vue notes and create a comparison table," the agent might:
+1. 🔍 Search for React pages
+2. 📥 Gather data from React pages
+3. 🔍 Search for Vue pages
+4. 📥 Gather data from Vue pages
+5. 🎯 **Specialist**: Create comparison table (receives *only* the gathered data from steps 2 and 4)
+
+The specialist step produces higher-quality output because it's not distracted by search results, intermediate reasoning, or other noise — it sees only the relevant extracted data.
 
 ---
 
