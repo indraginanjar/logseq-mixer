@@ -17,6 +17,26 @@
 
 ---
 
+## Why Logseq?
+
+**Logseq changed how we think.** It gave us a frictionless way to capture ideas as they come — no folders, no hierarchy to plan upfront, just write. The outliner structure, bidirectional links, and graph view let knowledge organize itself naturally over time. Daily journals become a habit. Scattered thoughts become connected insights. What used to take deliberate filing systems now happens effortlessly.
+
+Logseq makes you **faster** (capture → link → find in seconds), **more organized** (everything connects without maintenance), and **more productive** (your past notes compound into a knowledge base that grows with you, not against you).
+
+## Why Mixer?
+
+Now imagine your graph has a **collaborator** that reads everything you've written, understands the connections, and actively helps you build on them.
+
+Logseq Mixer takes everything that makes Logseq great and amplifies it:
+
+- **Faster** — Ask a question, get answers synthesized from across hundreds of pages instantly. No more manual searching.
+- **More organized** — The agent creates, links, and structures pages for you. Tell it what you want; it handles the block-level details.
+- **More productive** — Complex research tasks that took hours of reading and cross-referencing now happen in one conversation. The AI remembers your preferences and context across sessions — it gets better the more you use it.
+
+Logseq gave you a second brain. Mixer gives that brain a voice — and hands.
+
+---
+
 Logseq Mixer isn't a chatbot bolted onto your notes. It's an **autonomous agent** with persistent memory, hybrid RAG retrieval, and direct graph editing — powered by any model from any provider. Give it a goal, and it plans, executes, self-corrects, and learns.
 
 <p align="center">
