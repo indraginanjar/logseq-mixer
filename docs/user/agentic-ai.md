@@ -101,6 +101,10 @@ These pages participate in RAG — so your AI can retrieve its own memories thro
 
 The agent activates when your message looks like a multi-step task rather than a simple question.
 
+**Primary method:** The plugin sends a classification prompt to the LLM asking whether the user's message represents a multi-step goal. This provides nuanced understanding of intent. If the LLM classification is unavailable or fails, regex-based heuristics are used as a fallback.
+
+**Filtering:** Single-step write/edit requests (e.g., "write a block", "add a note", "insert a TODO") are filtered out — they go to Direct Page Edit instead of the agent, even if they match goal patterns.
+
 ### What triggers goal detection:
 
 - **Action verbs:** "organize", "restructure", "consolidate", "create X from Y", "find all X and Y"
@@ -258,6 +262,8 @@ The AI chains up to 25 tool calls per query (configurable), reasoning between ea
 | `logseq_insert_block` | Create new blocks |
 | `logseq_update_block` | Modify existing blocks |
 | `logseq_create_page` | Create new pages |
+
+> **Note:** Write tools (insert, update, create page) are only available when Direct Page Edit (✏️) is ON. Read-only tools (search, get page, get blocks) are always available.
 
 Plus any [MCP tools](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/mcp-tools.md) you connect — web search, file system, browser automation, databases, etc.
 

@@ -8,7 +8,7 @@ Get Logseq Mixer running in under 5 minutes. By the end of this guide, you'll ha
 
 - **Logseq** desktop app (latest version recommended)
 - **Node.js 18+** (only needed if building from source)
-- **Python 3.8+** (for the LiteLLM proxy)
+- **Python 3.8+** (only if using the LiteLLM proxy)
 
 ---
 
@@ -184,9 +184,9 @@ If Mixer returns relevant content with `((block-uuid))` citations you can click 
 
 ### Models not showing in dropdown
 
-**Cause:** LiteLLM proxy isn't running or the endpoint is wrong.
+**Cause:** The configured provider isn't reachable or the endpoint is wrong.
 
-**Fix:** Start your LiteLLM proxy and verify the endpoint matches in plugin settings. The default is `http://127.0.0.1:4000/chat/completions`.
+**Fix:** Check that your provider is running and the endpoint in settings is correct. The model dropdown fetches from whichever provider is configured: OpenAI (`/v1/models`), Ollama (`/api/tags`), or LiteLLM (`/models`).
 
 ### Re-Index takes very long
 

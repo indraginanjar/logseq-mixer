@@ -52,12 +52,12 @@ src/
 ├── main.tsx                    Plugin entry point, lazy initialization
 ├── App.tsx                     React root, state management, UI orchestration
 ├── manager.ts                  Query orchestrator (handleQuery, indexing, auto-embed)
-├── LLMManager.ts               LiteLLM communication, model token limits
+├── LLMManager.ts               LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation
 │
 ├── agent/
 │   ├── AgentLoop.ts            Multi-step goal execution with self-correction
 │   ├── ReActLoop.ts            Iterative tool chaining (Reason → Act → Observe)
-│   ├── goalDetector.ts         Pattern-based goal classification
+│   ├── goalDetector.ts         LLM-based goal classification with regex fallback
 │   ├── logseqTools.ts          Built-in Logseq tools as OpenAI function schemas
 │   └── types.ts                AgentPlan, AgentStep, StepResult types
 │
@@ -189,6 +189,8 @@ sequenceDiagram
 | **Memory Pages** | Logseq graph | Long-term knowledge in RAG pipeline | Logseq's storage |
 | **Input History** | localStorage | Persistent chat input history (max 100) | Browser storage |
 | **MCP Preferences** | localStorage | Tool enable/disable state | Browser storage |
+| **Panel Width** | localStorage | Persisted panel width (320–85% viewport) | Browser storage |
+| **Provider Models** | localStorage | Per-provider model selections | Browser storage |
 | **Legacy (Orama)** | Orama in-memory | Vector search for `settings` backend | Logseq plugin settings (JSON blob) |
 
 > 📖 [Full storage & database reference →](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/storage.md)

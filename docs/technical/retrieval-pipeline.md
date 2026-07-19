@@ -330,10 +330,16 @@ The LLM prompt is assembled in message order:
 
 | Model | Max Output Tokens |
 |---|---|
+| GPT-5 | 128,000 |
+| o3/o3-mini | 100,000 |
+| o1/o1-mini | 65,536 |
+| o4-mini | 65,536 |
 | GPT-4o | 16,384 |
 | GPT-4 | 8,192 |
 | GPT-3.5-turbo | 4,096 |
 | Unknown models | 4,096 (fallback) |
+
+> **Note:** For reasoning models (o-series, GPT-5+), `max_completion_tokens` is used instead of `max_tokens`. If a model rejects `max_tokens`, the request auto-retries with `max_completion_tokens` and the model is remembered for the session.
 
 ---
 
@@ -422,7 +428,7 @@ LLM responses containing Logseq notation are transformed:
 | `src/queryClassifier.ts` | Heuristic query classification |
 | `src/hybridSearch.ts` | Hybrid search pipeline orchestration |
 | `src/reranker.ts` | `mergeWithRRF()` (dual-list) and `rerankWithRRF()` (legacy single-list) |
-| `src/LLMManager.ts` | LiteLLM communication, model token limits |
+| `src/LLMManager.ts` | LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation |
 | `src/manager.ts` | `handleQuery()` — full pipeline orchestration |
 | `src/editPromptBuilder.ts` | Direct Page Edit system prompt and page context |
 | `src/editCommandParser.ts` | Extract/validate edit commands from json-edit blocks |

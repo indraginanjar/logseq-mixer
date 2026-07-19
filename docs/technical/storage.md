@@ -24,6 +24,8 @@ Logseq Mixer uses a layered storage architecture:
 │                       localStorage                               │
 │   - input history (logseq-mixer-input-history)                  │
 │   - MCP tool states (logseq-mixer:mcp-tools)                    │
+│   - panel width (logseq-mixer-panel-width)                      │
+│   - provider models (logseq-mixer-provider-models)              │
 ├─────────────────────────────────────────────────────────────────┤
 │                    Logseq Plugin Settings                         │
 │   - LLM config, embedding config, agent settings                │
@@ -231,6 +233,30 @@ Stores per-tool enable/disable state for MCP tools.
 | **Written** | When user toggles a tool on/off in the MCP panel |
 | **Read** | On MCPManager initialization |
 
+### `logseq-mixer-panel-width`
+
+Persists the chat panel width across sessions.
+
+| Property | Value |
+|---|---|
+| **Type** | Number (320 to ~85% of viewport width) |
+| **Written** | On resize mouseup (when user finishes dragging the panel edge) |
+| **Read** | On component mount to restore the saved panel size |
+
+### `logseq-mixer-provider-models`
+
+Stores the last-selected model for each LLM provider, so switching providers restores the previous model choice.
+
+```json
+{"openai": "gpt-4o", "ollama": "llama3.2", "litellm": "claude-sonnet-4-20250514"}
+```
+
+| Property | Value |
+|---|---|
+| **Type** | JSON object mapping provider names to last-selected model |
+| **Written** | On provider or model change |
+| **Read** | On provider change (to restore the previous model selection for that provider) |
+
 ---
 
 ## Logseq Plugin Settings
@@ -281,7 +307,7 @@ Each page contains a block-based summary of a conversation session, written by t
 1. SQLite restored from IndexedDB → all tables available
 2. HNSW index rebuilt from documents.embedding column
 3. BM25 index: deferred until first search query
-4. localStorage read: input history, MCP tool states
+4. localStorage read: input history, MCP tool states, panel width, provider models
 5. Plugin settings read from Logseq
 ```
 

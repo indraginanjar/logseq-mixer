@@ -123,6 +123,8 @@ created:: 2026-06-29
 - Decision: use hybrid approach with SQLite + Logseq pages
 ```
 
+The `logseqMemoryWriter.ts` uses `splitIntoBlocks()` to split LLM-generated summaries into separate Logseq blocks. This function strips bullet markers (`- `, `* `, etc.) from the text since Logseq natively renders blocks as bullets — adding explicit markers would result in double-bulleted display.
+
 ### Configuration
 
 | Setting | Default | Description |
@@ -137,10 +139,18 @@ created:: 2026-06-29
 
 ### Algorithm
 
-`goalDetector.ts` uses pattern-based scoring:
+`goalDetector.ts` uses a two-tier classification strategy:
+
+**Primary: LLM-based classification**
+
+The primary method sends a `CLASSIFICATION_PROMPT` to the model asking it to classify the user's message as either `'goal'` or `'query'`. Response parsing uses `\bgoal\b` and `\bquery\b` regex word-boundary matching to extract the classification — this handles verbose models that include explanation alongside their answer.
+
+**Fallback: Regex-based detection (`detectGoalRegex`)**
+
+When the LLM is unavailable (network error, timeout, etc.), the detector falls back to pattern-based scoring:
 
 ```typescript
-detectGoal(message: string, threshold = 0.6): { isGoal: boolean; confidence: number }
+detectGoalRegex(message: string, threshold = 0.6): { isGoal: boolean; confidence: number }
 ```
 
 **Confidence boosters:**
@@ -153,6 +163,10 @@ detectGoal(message: string, threshold = 0.6): { isGoal: boolean; confidence: num
 - Starts with: "what", "who", "how", "explain", "is", "are"
 - Ends with `?`
 - Short messages (<100 chars)
+
+### SINGLE_ACTION_PATTERNS
+
+Before classification runs, the message is checked against `SINGLE_ACTION_PATTERNS` — a set of regex patterns that match simple write/edit requests (e.g., "write X", "edit Y", "add a block"). These are filtered out from triggering the agent, since they are better served by the direct edit pipeline or a single ReAct tool call rather than a multi-step plan.
 
 ### Routing Logic
 
@@ -211,14 +225,16 @@ You may chain multiple tool calls iteratively until you have enough information 
 
 **Built-in Logseq tools** (from `logseqTools.ts`):
 
-| Tool | Description |
-|---|---|
-| `logseq_get_page` | Get page metadata by name |
-| `logseq_get_blocks` | Get hierarchical block tree of a page |
-| `logseq_search_pages` | Search pages by name substring |
-| `logseq_insert_block` | Insert a block under a parent |
-| `logseq_update_block` | Update block content |
-| `logseq_create_page` | Create a new page |
+| Tool | Description | Requires Write |
+|---|---|---|
+| `logseq_get_page` | Get page metadata by name | No |
+| `logseq_get_blocks` | Get hierarchical block tree of a page | No |
+| `logseq_search_pages` | Search pages by name substring | No |
+| `logseq_insert_block` | Insert a block under a parent | Yes |
+| `logseq_update_block` | Update block content | Yes |
+| `logseq_create_page` | Create a new page | Yes |
+
+**Write tool gating:** Write tools (`logseq_insert_block`, `logseq_update_block`, `logseq_create_page`) are only included when `includeLogseqWriteTools` is `true`. In normal chat mode with Direct Page Edit off, only read-only Logseq tools are available to the ReAct loop. The agent loop always gets full write access regardless of the edit toggle.
 
 **MCP tools** (external): Whatever SSE servers the user has configured — dynamically discovered at connection time.
 
@@ -636,7 +652,7 @@ src/agent/
 ├── types.ts           AgentPlan, AgentStep, StepResult, StepType
 ├── AgentLoop.ts       Plan generation, step execution, self-correction, replanning
 ├── ReActLoop.ts       Iterative tool chaining engine
-├── goalDetector.ts    Pattern-based goal detection with confidence scoring
+├── goalDetector.ts    LLM-based goal classification with regex fallback
 └── logseqTools.ts     Logseq APIs as OpenAI-compatible function tool schemas
 
 src/memory/

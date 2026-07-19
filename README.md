@@ -31,7 +31,7 @@ Three built-in providers — **no proxy required** for the simplest setups:
 
 | Provider | Setup | Models |
 |---|---|---|
-| **OpenAI** (direct) | Just add your API key | GPT-4o, GPT-4, GPT-3.5 Turbo |
+| **OpenAI** (direct) | Just add your API key | GPT-4o, GPT-4, GPT-3.5 Turbo, o1, o3, o4-mini |
 | **Ollama** (local) | Run Ollama locally — no API key needed | Llama, Mistral, Qwen, any GGUF |
 | **LiteLLM** (proxy) | Route through a local proxy to access 100+ providers | Anthropic, Google, DeepSeek, Cohere, Azure, Bedrock... |
 

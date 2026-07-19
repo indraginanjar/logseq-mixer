@@ -23,13 +23,15 @@ Click the Mixer toolbar icon in Logseq to open the chat panel:
 └──────────────────────────────────────────────────────┘
 ```
 
+The panel can be resized by dragging its left edge. Width persists across sessions (min 320px, max 85%, default 520px).
+
 ---
 
 ## Header Bar
 
 | Element | What it does |
 |---|---|
-| **Model Selector** | Switch between LLM models on the fly. Fetches available models from your LiteLLM server automatically. |
+| **Model Selector** | Switch between LLM models on the fly. Dynamically fetches available models from your configured provider (OpenAI, Ollama, or LiteLLM). Remembers your last selected model per provider. |
 | **✨ New** | Start a fresh conversation. If auto-summarize is enabled, the current session is saved to memory first. |
 | **✕** | Close the chat panel. |
 
@@ -79,6 +81,12 @@ Your chat inputs are automatically saved and persist across sessions — even af
 - **Navigation:** Arrow Up (at cursor position 0) goes back, Arrow Down goes forward
 - **Clear:** Click the tiny 🗑️ button next to the attach icon to erase all history
 - **Tooltip:** Hover over the clear button to see how many entries are stored
+
+---
+
+## Chat Messages
+
+Each message displays a header showing timestamp, role, and model in bracket format: `[2026-07-19T14:32:05 AI gpt-4o]` or `[2026-07-19T14:31:21 U]`.
 
 ---
 
@@ -300,6 +308,7 @@ Open **Settings → Plugin Settings → Mixer**.
 
 | Setting | Default | Description |
 |---|---|---|
+| **Chat Provider** | `openai` | `openai` \| `ollama` \| `litellm` — controls request format, endpoint default, and model fetching. |
 | **Selected Model** | `gpt-4o` | Model name passed to LiteLLM |
 | **API Key** | — | Your LLM provider API key |
 | **LiteLLM api link** | `http://127.0.0.1:4000/chat/completions` | LiteLLM proxy endpoint |
@@ -393,8 +402,8 @@ Open **Settings → Plugin Settings → Mixer**.
 
 ### Models not showing in dropdown
 
-**Cause:** LiteLLM proxy isn't running or the endpoint is wrong.
-**Fix:** Start your LiteLLM proxy and verify the endpoint in settings.
+**Cause:** The configured provider isn't reachable or the endpoint is wrong.
+**Fix:** Check that your provider is running and the endpoint in settings is correct. The model dropdown fetches from whichever provider is configured: OpenAI (`/v1/models`), Ollama (`/api/tags`), or LiteLLM (`/models`).
 
 ### Re-Index takes too long
 
