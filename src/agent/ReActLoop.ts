@@ -10,6 +10,7 @@ export interface ReActOptions {
   tokenBudget: number;
   tools?: any[];
   includeLogseqTools?: boolean;
+  includeLogseqWriteTools?: boolean;
   onThought?: (thought: string, iteration: number) => void;
   onToolCall?: (tool: string, args: any, result: string, iteration: number) => void;
 }
@@ -45,9 +46,13 @@ export async function runReActLoop(
 
   // Merge MCP tools + optional Logseq tools
   const mcpTools = opts.tools ?? MCPManager.getInstance().getEnabledTools();
-  const allTools = opts.includeLogseqTools !== false
-    ? [...mcpTools, ...LOGSEQ_TOOLS]
-    : mcpTools;
+  const LOGSEQ_WRITE_TOOL_NAMES = ['logseq_insert_block', 'logseq_update_block', 'logseq_create_page'];
+  const logseqToolsFiltered = opts.includeLogseqTools !== false
+    ? LOGSEQ_TOOLS.filter(t =>
+        opts.includeLogseqWriteTools !== false || !LOGSEQ_WRITE_TOOL_NAMES.includes(t.function.name)
+      )
+    : [];
+  const allTools = [...mcpTools, ...logseqToolsFiltered];
 
   // Inject ReAct instruction into the system message if tools are available
   if (allTools.length > 0 && messages.length > 0 && messages[0].role === 'system') {

@@ -48,10 +48,27 @@ export async function detectGoal(
     ];
     const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider);
     const response = result.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
-    if (response.startsWith('goal')) {
+    // Robust parsing: look for "goal" anywhere in the response (handles verbose models
+    // that may add reasoning, punctuation, or extra text around the classification)
+    const containsGoal = /\bgoal\b/.test(response);
+    const containsQuery = /\bquery\b/.test(response);
+    if (containsGoal && !containsQuery) {
       return { isGoal: threshold <= 0.8, confidence: 0.85 };
     }
-    return { isGoal: false, confidence: 0.15 };
+    if (containsQuery && !containsGoal) {
+      return { isGoal: false, confidence: 0.15 };
+    }
+    // If both or neither found, check which appears first
+    if (containsGoal && containsQuery) {
+      const goalIdx = response.indexOf('goal');
+      const queryIdx = response.indexOf('query');
+      if (goalIdx < queryIdx) {
+        return { isGoal: threshold <= 0.8, confidence: 0.7 };
+      }
+      return { isGoal: false, confidence: 0.3 };
+    }
+    // Neither found — fall back to regex
+    return detectGoalRegex(message, threshold);
   } catch {
     return detectGoalRegex(message, threshold);
   }

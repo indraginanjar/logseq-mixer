@@ -592,6 +592,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     tokenBudget: 0,
     tools,
     includeLogseqTools: true,
+    includeLogseqWriteTools: !!editMode,
     onThought: onThoughtCallback || undefined,
   });
 
