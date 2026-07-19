@@ -20,6 +20,7 @@ export type ChatMessage = {
   id: string | number;
   content: string;
   sender: 'user' | 'assistant';
+  model?: string;
   image?: { name: string; content: string }[];
   file?: { name: string; content: string }[];
 };
@@ -1358,6 +1359,13 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
         </Bubble>
         {msg.sender === 'user' && <Avatar role="user">U</Avatar>}
       </MessageRow>
+      {msg.sender === 'assistant' && msg.model && (
+        <div style={{ paddingLeft: '36px', marginTop: '-6px', marginBottom: '2px' }}>
+          <span style={{ fontSize: '10px', color: '#9ca3af', fontStyle: 'italic', userSelect: 'none' }}>
+            {msg.model}
+          </span>
+        </div>
+      )}
       {result && (
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '4px', marginBottom: '12px' }}>
           <div style={{ width: '28px', flexShrink: 0 }} />

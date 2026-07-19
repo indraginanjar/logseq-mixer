@@ -858,7 +858,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     if (isHelpCommand(messageToSend)) {
       try {
         const helpResponse = await answerHelpQuestion(messageToSend, settings);
-        setMessages(prev => [...prev, { id: Date.now() + '_help', content: helpResponse, sender: 'assistant' }]);
+        setMessages(prev => [...prev, { id: Date.now() + '_help', content: helpResponse, sender: 'assistant', model: settings?.selectedModel }]);
       } catch (err: any) {
         setError(err.message || 'Help system error');
       } finally {
@@ -885,7 +885,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         abortControllerRef.current = controller;
         const rawResponse = await sendRawPrompt(rawPrompt, settings, controller.signal);
         abortControllerRef.current = null;
-        setMessages(prev => [...prev, { id: Date.now() + '_raw', content: rawResponse, sender: 'assistant' }]);
+        setMessages(prev => [...prev, { id: Date.now() + '_raw', content: rawResponse, sender: 'assistant', model: settings?.selectedModel }]);
       } catch (err: any) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Raw command error');
@@ -1023,6 +1023,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
                   id: `agent_${Date.now()}`,
                   content: messageContent,
                   sender: 'assistant',
+                  model: settings?.selectedModel,
                 }]);
                 // Add to conversation history so follow-up questions have context
                 const historyContent = persistVerbose
@@ -1098,6 +1099,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           id: assistantMsgId,
           content: displayText,
           sender: 'assistant',
+          model: settings?.selectedModel,
         }]);
 
         if (commands.length > 0) {
@@ -1136,6 +1138,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           id: assistantMsgId,
           content: responseText,
           sender: 'assistant',
+          model: settings?.selectedModel,
         }]);
       }
 
