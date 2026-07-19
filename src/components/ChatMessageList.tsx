@@ -1325,7 +1325,12 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
     <React.Fragment>
       <MessageRow align={msg.sender}>
         {msg.sender === 'user' && <div style={{ order: 1, width: '28px', flexShrink: 0 }} />}
-        <div style={{ maxWidth: '80%' }}>
+        <div style={{
+          maxWidth: '80%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+        }}>
           {/* Header line: styled for aesthetics, copies as plain bracket text */}
           <div style={{
             fontSize: '10px',
