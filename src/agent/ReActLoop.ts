@@ -1,4 +1,4 @@
-import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, queryLiteLLMStreaming, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
 import { countTokens } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import { executeLogseqTool, LOGSEQ_TOOLS } from './logseqTools';
@@ -13,6 +13,8 @@ export interface ReActOptions {
   includeLogseqWriteTools?: boolean;
   onThought?: (thought: string, iteration: number) => void;
   onToolCall?: (tool: string, args: any, result: string, iteration: number) => void;
+  onChunk?: (chunk: string) => void;
+  streamingEnabled?: boolean;
 }
 
 export interface ReActResult {
@@ -54,14 +56,33 @@ export async function runReActLoop(
     : [];
   const allTools = [...mcpTools, ...logseqToolsFiltered];
 
+  // Determine whether to use streaming.
+  // Stream the final answer only (when no tool_calls are returned).
+  const useStreaming = opts.streamingEnabled && !!opts.onChunk;
+
   // Inject ReAct instruction into the system message if tools are available
   if (allTools.length > 0 && messages.length > 0 && messages[0].role === 'system') {
     messages = [...messages];
     messages[0] = { ...messages[0], content: (messages[0].content as string) + REACT_INSTRUCTION };
   }
 
+  // Helper: call LLM with or without streaming.
+  // When streaming, onChunk is only forwarded if isFinalCandidate is true.
+  // Since we can't know ahead of time if a call will have tool_calls, we
+  // use a two-pass strategy:
+  //   - If no tools are available (simple Q&A), stream the first call directly.
+  //   - If tools are available, use non-streaming for reliability during tool iterations,
+  //     then stream the final answer once we detect no more tool calls.
+  const hasTools = allTools.length > 0;
+
   // Initial LLM call
-  let llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider);
+  let llmOutput: any;
+  if (useStreaming && !hasTools) {
+    // Simple Q&A with no tools: stream directly
+    llmOutput = await queryLiteLLMStreaming(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), opts.onChunk!, signal, undefined, settings.chatProvider);
+  } else {
+    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider);
+  }
   let assistantMessage = llmOutput.choices?.[0]?.message;
   tokensUsed += estimateTokens(messages, assistantMessage?.content || '', allTools);
 
@@ -139,9 +160,26 @@ export async function runReActLoop(
       }
     }
 
-    // Query LLM again with updated context
-    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools, settings.chatProvider);
-    assistantMessage = llmOutput.choices?.[0]?.message;
+    // Query LLM again with updated context.
+    // Use streaming for the next call: if the response has no tool_calls, it's the final answer.
+    // We use a conditional chunk collector — stream chunks, but only forward to UI
+    // if no tool_calls are detected (which we know after the stream finishes).
+    if (useStreaming) {
+      let pendingChunks: string[] = [];
+      llmOutput = await queryLiteLLMStreaming(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), (chunk) => {
+        pendingChunks.push(chunk);
+      }, signal, allTools, settings.chatProvider);
+      assistantMessage = llmOutput.choices?.[0]?.message;
+      // If this was the final answer (no tool_calls), flush accumulated chunks to the UI
+      if (!assistantMessage?.tool_calls || assistantMessage.tool_calls.length === 0) {
+        for (const chunk of pendingChunks) {
+          opts.onChunk!(chunk);
+        }
+      }
+    } else {
+      llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools, settings.chatProvider);
+      assistantMessage = llmOutput.choices?.[0]?.message;
+    }
     tokensUsed += estimateTokens([], assistantMessage?.content || '');
 
     if (!assistantMessage) {

@@ -313,6 +313,26 @@ Open **Settings → Plugin Settings → Mixer**.
 | **API Key** | — | Your LLM provider API key |
 | **LiteLLM api link** | `http://127.0.0.1:4000/chat/completions` | LiteLLM proxy endpoint |
 | **AI prompt** | (default template) | System prompt — customize AI behavior |
+| **Streaming Responses** | `true` | Stream AI responses token-by-token as they are generated. See [Streaming Responses](#streaming-responses) below. |
+
+### Streaming Responses
+
+When **Streaming Responses** is enabled (the default), the AI's reply appears progressively in the chat — word by word as it's generated — rather than waiting for the entire response to complete before displaying anything.
+
+**Benefits:**
+- **Faster perceived response time** — you see the first words within ~200ms instead of waiting 5–30 seconds for the full answer.
+- **Early cancellation** — if the response is clearly off-track, hit Cancel immediately without waiting for it to finish.
+- **Natural reading pace** — text appears at roughly reading speed, making long responses easier to follow.
+
+**When to disable:**
+- Your provider doesn't support streaming (rare — OpenAI, Ollama, and LiteLLM all support it).
+- You're behind a proxy that buffers Server-Sent Events (some corporate proxies do this).
+- You prefer responses to appear all at once for copy-paste workflows.
+
+**Technical notes:**
+- Streaming is automatically disabled during **Direct Page Edit** mode (✏️) because edit commands need to be parsed as a complete response before execution.
+- When tools are being used (ReAct loop), intermediate tool-calling steps are not streamed. Only the final answer is streamed to the chat.
+- If your provider returns a non-streaming response despite the streaming request (unsupported endpoint), the plugin gracefully falls back to displaying the complete response at once.
 
 ### Embedding (RAG Search)
 

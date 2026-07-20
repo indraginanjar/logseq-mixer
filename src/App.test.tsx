@@ -949,6 +949,7 @@ describe('Edit mode handleSubmit flow', () => {
       expect.anything(),
       expect.anything(),
       true,
+      undefined,
       undefined
     );
 
@@ -1038,7 +1039,8 @@ describe('Edit mode handleSubmit flow', () => {
       expect.anything(),
       expect.anything(),
       undefined,
-      undefined
+      undefined,
+      expect.any(Function)
     );
 
     // No ChangeSummary should be rendered
@@ -1117,7 +1119,8 @@ describe('No active page warning in edit mode', () => {
       expect.anything(),
       expect.anything(),
       undefined,
-      undefined
+      undefined,
+      expect.any(Function)
     );
   });
 
@@ -1161,6 +1164,7 @@ describe('No active page warning in edit mode', () => {
       expect.anything(),
       expect.anything(),
       true,
+      undefined,
       undefined
     );
 

@@ -245,6 +245,19 @@ You may chain multiple tool calls iteratively until you have enough information 
 | Normal chat (`handleQuery`) | `agentMaxIterations` (default 25) | Unlimited |
 | Agent step execution (tool/search type) | 10 | Remaining step budget |
 
+### Streaming Support
+
+When `streamingEnabled` is `true` (plugin setting: **Streaming Responses**), the ReAct loop uses `queryLiteLLMStreaming()` to progressively deliver the final answer:
+
+- **No tools available** (simple Q&A): The initial LLM call streams directly to the UI via `onChunk`.
+- **Tools available** (iterative loop): Intermediate tool-calling iterations use streaming internally but buffer chunks. Only when the final response arrives (no more `tool_calls`), the buffered chunks are flushed to the UI, providing a streaming UX for the final answer.
+- **Edit mode**: Streaming is always disabled because edit commands require complete parsing before execution.
+
+The `queryLiteLLMStreaming()` function handles all three providers:
+- **OpenAI / LiteLLM**: SSE format (`text/event-stream`) with `data: {...}` lines containing `choices[0].delta.content` chunks and optional `tool_calls` accumulation.
+- **Ollama**: NDJSON format with `message.content` chunks per line.
+- **Fallback**: If the provider ignores `stream: true` and returns a plain JSON body, the function detects this from the `Content-Type` header and delivers the full content as a single chunk.
+
 ---
 
 ## 4. Agent Loop

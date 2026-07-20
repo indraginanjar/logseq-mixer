@@ -247,6 +247,187 @@ export async function queryLiteLLM(
   return data;
 }
 
+/**
+ * Stream a chat completion response, invoking onChunk for each text delta.
+ * Returns the same normalized response format as queryLiteLLM (with the full
+ * assembled message) so callers can process it uniformly.
+ *
+ * If streaming is not supported (e.g., the response isn't an SSE stream),
+ * falls back to reading the response as a non-streaming JSON body.
+ */
+export async function queryLiteLLMStreaming(
+  messages: ChatMessage[],
+  model: string,
+  apiKey: string,
+  endpoint: string,
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal,
+  tools?: any[],
+  provider?: string
+): Promise<any> {
+  const chatProvider = provider || 'litellm';
+  const useMaxCompletionTokens = shouldUseMaxCompletionTokens(model);
+
+  let requestBody: Record<string, any>;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  if (chatProvider === 'ollama') {
+    const ollamaMessages = messages.map(m => {
+      if (Array.isArray(m.content)) {
+        const textParts = m.content.filter((p: any) => p.type === 'text').map((p: any) => p.text);
+        const imageParts = m.content.filter((p: any) => p.type === 'image_url').map((p: any) => {
+          const url: string = p.image_url.url;
+          return url.includes(',') ? url.split(',')[1] : url;
+        });
+        return {
+          role: m.role,
+          content: textParts.join('\n'),
+          ...(imageParts.length > 0 ? { images: imageParts } : {}),
+        };
+      }
+      return m;
+    });
+    requestBody = {
+      model: model,
+      messages: ollamaMessages,
+      stream: true,
+      options: {
+        num_predict: getMaxTokensForModel(model),
+      },
+    };
+    if (tools && tools.length > 0) {
+      requestBody.tools = tools;
+    }
+  } else {
+    requestBody = {
+      model: model,
+      messages: messages,
+      stream: true,
+    };
+    if (chatProvider === 'litellm') {
+      requestBody.api_key = apiKey;
+    }
+    if (tools && tools.length > 0) {
+      requestBody.tools = tools;
+    }
+    if (useMaxCompletionTokens) {
+      requestBody.max_completion_tokens = getMaxTokensForModel(model);
+    } else {
+      requestBody.max_tokens = getMaxTokensForModel(model);
+    }
+    if (apiKey?.trim()) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(requestBody),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`LLM streaming request failed: ${response.status} ${response.statusText}`);
+  }
+
+  // Check if the response is actually a stream (SSE) or a plain JSON response
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream') && !contentType.includes('application/x-ndjson') && !contentType.includes('ndjson')) {
+    // Fallback: provider returned non-streaming JSON despite stream:true
+    const data = await response.json();
+    if (chatProvider === 'ollama' && data.message && !data.choices) {
+      const content = data.message.content || '';
+      if (content) onChunk(content);
+      return { choices: [{ message: data.message }] };
+    }
+    const content = data.choices?.[0]?.message?.content || '';
+    if (content) onChunk(content);
+    return data;
+  }
+
+  // Parse the SSE/NDJSON stream
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Response body is not readable');
+  }
+
+  const decoder = new TextDecoder();
+  let fullContent = '';
+  let toolCallsAccumulator: any[] = [];
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      // Keep incomplete last line in buffer
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (trimmed === 'data: [DONE]') continue;
+
+        let jsonStr = trimmed;
+        if (trimmed.startsWith('data: ')) {
+          jsonStr = trimmed.slice(6);
+        }
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+
+          if (chatProvider === 'ollama') {
+            // Ollama streaming format: { message: { content: "..." }, done: bool }
+            const content = parsed.message?.content || '';
+            if (content) {
+              fullContent += content;
+              onChunk(content);
+            }
+          } else {
+            // OpenAI/LiteLLM streaming format: { choices: [{ delta: { content, tool_calls } }] }
+            const delta = parsed.choices?.[0]?.delta;
+            if (delta?.content) {
+              fullContent += delta.content;
+              onChunk(delta.content);
+            }
+            // Accumulate tool calls from stream
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                if (!toolCallsAccumulator[idx]) {
+                  toolCallsAccumulator[idx] = {
+                    id: tc.id || '',
+                    type: 'function',
+                    function: { name: '', arguments: '' },
+                  };
+                }
+                if (tc.id) toolCallsAccumulator[idx].id = tc.id;
+                if (tc.function?.name) toolCallsAccumulator[idx].function.name += tc.function.name;
+                if (tc.function?.arguments) toolCallsAccumulator[idx].function.arguments += tc.function.arguments;
+              }
+            }
+          }
+        } catch {
+          // Skip unparseable lines (heartbeats, comments, etc.)
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Build normalized response matching queryLiteLLM's return format
+  const message: any = { role: 'assistant', content: fullContent };
+  if (toolCallsAccumulator.length > 0) {
+    message.tool_calls = toolCallsAccumulator;
+  }
+  return { choices: [{ message }] };
+}
+
 export async function fetchLiteLLMModels(endpoint: string, apiKey: string): Promise<string[]> {
   let modelsEndpoint = endpoint;
   if (endpoint.endsWith('/chat/completions')) {

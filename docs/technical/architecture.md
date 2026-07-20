@@ -52,7 +52,7 @@ src/
 ├── main.tsx                    Plugin entry point, lazy initialization
 ├── App.tsx                     React root, state management, UI orchestration
 ├── manager.ts                  Query orchestrator (handleQuery, indexing, auto-embed)
-├── LLMManager.ts               LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation
+├── LLMManager.ts               LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation, streaming SSE support
 │
 ├── agent/
 │   ├── AgentLoop.ts            Multi-step goal execution with self-correction
