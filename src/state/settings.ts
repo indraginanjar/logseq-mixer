@@ -27,6 +27,8 @@ interface IPluginSettings {
   agentMaxIterations?: number;
   agentVerboseMode?: boolean;
   agentPersistVerboseToChat?: boolean;
+  agentMemoryEnabled?: boolean;
+  agentFastModel?: string;
   plantumlServer?: string;
 }
 

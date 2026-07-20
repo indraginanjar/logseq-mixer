@@ -16,9 +16,11 @@ Available capabilities:
 - think: Analyze information and reason about next steps (also use this when you need to process data already available in the context)
 - gather: Read MULTIPLE pages in batches, extracting and summarizing key information from each. Use this ONLY when the goal requires processing more than 3 DIFFERENT PAGES or collecting data across many sources.
 - specialist: Execute a focused sub-task with ISOLATED context. The specialist receives ONLY the data from specific prior steps (via inputSteps) — not the full accumulated context. Use this for synthesis, comparison, or complex analysis tasks where accumulated context noise would degrade quality.
+- subgoal: Spawn an independent sub-agent with its own plan/execute cycle. Use for complex sub-tasks that need autonomous multi-step reasoning. The sub-agent has read-only access by default.
+- recall: Retrieve relevant observations and facts from the agent's persistent memory. Use when prior knowledge about the user's preferences or past interactions would help.
 
 Respond with ONLY valid JSON in this format:
-{"steps":[{"id":1,"description":"...","type":"read|write|search|tool|think|gather|specialist","specialistRole":"(optional) system instruction for the specialist","inputSteps":[1,2]}],"estimatedTokens":NUMBER}
+{"steps":[{"id":1,"description":"...","type":"read|write|search|tool|think|gather|specialist|subgoal|recall","specialistRole":"(optional) system instruction for the specialist","inputSteps":[1,2]}],"estimatedTokens":NUMBER}
 
 PLANNING RULES:
 - IMPORTANT: The "Current context" below already contains the current page's FULL block tree with UUIDs, AND the user's focused/selected block with its UUID. You do NOT need a "read" or "gather" step to access sub-blocks of the current block — they are ALREADY in the context. Use a "think" step to analyze them, then "write" steps to modify them.
@@ -78,6 +80,12 @@ export class AgentLoop {
   private tokenBudget: number;
   private maxRetries: number;
   private canWrite: boolean;
+  private depth: number;
+  private maxDepth: number;
+  /** Optional memory store for persisting and recalling agent observations across runs */
+  private memoryStore?: any;
+  /** When true, the agent can recall memories but will not store new ones */
+  private memoryReadOnly: boolean;
   private onProgress: (event: AgentProgressEvent) => void;
   private onEscalate: (question: string) => Promise<string>;
   private onReplanProposed: (reason: string, newSteps: AgentStep[]) => Promise<boolean>;
@@ -90,6 +98,12 @@ export class AgentLoop {
     tokenBudget: number;
     maxRetries: number;
     canWrite: boolean;
+    depth?: number;
+    maxDepth?: number;
+    /** Optional memory store instance for persisting/recalling observations (avoids circular deps) */
+    memoryStore?: any;
+    /** When true, agent can recall but not store new memories */
+    memoryReadOnly?: boolean;
     onProgress: (event: AgentProgressEvent) => void;
     onEscalate: (question: string) => Promise<string>;
     onReplanProposed: (reason: string, newSteps: AgentStep[]) => Promise<boolean>;
@@ -99,6 +113,10 @@ export class AgentLoop {
     this.tokenBudget = opts.tokenBudget;
     this.maxRetries = opts.maxRetries;
     this.canWrite = opts.canWrite;
+    this.depth = opts.depth ?? 0;
+    this.maxDepth = opts.maxDepth ?? 2;
+    this.memoryStore = opts.memoryStore;
+    this.memoryReadOnly = opts.memoryReadOnly ?? false;
     this.onProgress = opts.onProgress;
     this.onEscalate = opts.onEscalate;
     this.onReplanProposed = opts.onReplanProposed;
@@ -194,6 +212,17 @@ export class AgentLoop {
     this.currentContext = context;
     let completedSteps = 0;
 
+    // Auto-recall relevant memories at start
+    if (this.memoryStore && this.settings.agentMemoryEnabled !== false) {
+      const memories = this.memoryStore.searchMemories(plan.goal.slice(0, 50));
+      const relevant = memories.slice(0, 5);
+      if (relevant.length > 0) {
+        const memoryContext = relevant.map((m: any) => `- [${m.category}] ${m.content.slice(0, 200)}`).join('\n');
+        context.previousOutputs.push({ stepId: 0, type: 'text', content: `Previous observations:\n${memoryContext}` });
+        this.emit('memory_recalled', undefined, `Recalled ${relevant.length} relevant memories`, 0, plan.steps.length);
+      }
+    }
+
     for (const step of plan.steps) {
       if (this.signal?.aborted) {
         this.emit('aborted', step, 'Stopped by user', completedSteps, plan.steps.length);
@@ -222,7 +251,7 @@ export class AgentLoop {
             step.error = diagnostic;
             this.emit('step_failed', step, diagnostic, completedSteps, plan.steps.length);
             const answer = await this.onEscalate(`Step "${step.description}" failed.\n\n${diagnostic}\n\nHow should I proceed?`);
-            context.previousOutputs.push({ stepId: step.id, output: `User guidance: ${answer}` });
+            context.previousOutputs.push({ stepId: step.id, type: 'text', content: `User guidance: ${answer}` });
             break;
           }
         } catch (err: any) {
@@ -233,7 +262,7 @@ export class AgentLoop {
             step.error = diagnostic;
             this.emit('step_failed', step, diagnostic, completedSteps, plan.steps.length);
             const answer = await this.onEscalate(`Step "${step.description}" failed after ${this.maxRetries} retries.\n\n${diagnostic}\n\nHow should I proceed?`);
-            context.previousOutputs.push({ stepId: step.id, output: `User guidance: ${answer}` });
+            context.previousOutputs.push({ stepId: step.id, type: 'text', content: `User guidance: ${answer}` });
           }
         }
       }
@@ -246,7 +275,7 @@ export class AgentLoop {
             step.correctionAttempts = (step.correctionAttempts || 0) + 1;
             step.correctionReason = evaluation.reason;
             this.emit('self_correcting', step, `Self-correcting: ${evaluation.reason}`, completedSteps, plan.steps.length);
-            context.previousOutputs.push({ stepId: step.id, output: `Previous attempt inadequate: ${evaluation.reason}. Suggestion: ${evaluation.suggestion}` });
+            context.previousOutputs.push({ stepId: step.id, type: 'text', content: `Previous attempt inadequate: ${evaluation.reason}. Suggestion: ${evaluation.suggestion}` });
             step.status = 'running';
             try {
               result = await this.executeStep(step, context);
@@ -261,7 +290,7 @@ export class AgentLoop {
           step.output = result.output;
           step.tokensUsed = result.tokensUsed;
           this.tokensUsed += result.tokensUsed;
-          context.previousOutputs.push({ stepId: step.id, output: result.output });
+          context.previousOutputs.push({ stepId: step.id, type: 'text', content: result.output });
           completedSteps++;
           this.emit('step_complete', step, result.output, completedSteps, plan.steps.length);
 
@@ -271,7 +300,7 @@ export class AgentLoop {
           }
 
           // Replan only when something unexpected happened
-          const lastOutput = context.previousOutputs[context.previousOutputs.length - 1]?.output || '';
+          const lastOutput = context.previousOutputs[context.previousOutputs.length - 1]?.content || '';
           const wasUnexpected = (step.correctionAttempts && step.correctionAttempts > 0)
             || lastOutput.includes('Error:')
             || lastOutput.includes('not found')
@@ -296,6 +325,16 @@ export class AgentLoop {
     }
 
     this.emit('complete', undefined, `Completed ${completedSteps}/${plan.steps.length} steps`, completedSteps, plan.steps.length);
+
+    // Store observation from this run
+    if (this.memoryStore && !this.memoryReadOnly && this.settings.agentMemoryEnabled !== false && completedSteps > 0) {
+      const lastOutput = plan.steps.filter(s => s.status === 'done').pop()?.output || '';
+      if (lastOutput.length > 20) {
+        const summary = lastOutput.slice(0, 500);
+        this.memoryStore.addMemoryIfUnique('agent_observation', summary, plan.goal.slice(0, 100));
+        this.emit('memory_stored', undefined, 'Observation stored to memory', completedSteps, plan.steps.length);
+      }
+    }
   }
 
   private async synthesizeFinalAnswer(plan: AgentPlan, context: StepContext): Promise<string | null> {
@@ -304,7 +343,7 @@ export class AgentLoop {
 
     // Build a comprehensive context from ALL step outputs
     const allOutputs = context.previousOutputs
-      .map(o => `--- Step ${o.stepId} ---\n${o.output.slice(0, maxStepOutputLen)}`)
+      .map(o => `--- Step ${o.stepId} ---\n${o.content.slice(0, maxStepOutputLen)}`)
       .join('\n\n');
 
     // Include scratchPad gathered data (this is the key Map-Reduce integration)
@@ -323,7 +362,7 @@ export class AgentLoop {
     }
 
     // Check if we have enough content worth synthesizing
-    const totalContent = context.previousOutputs.reduce((sum, o) => sum + o.output.length, 0) +
+    const totalContent = context.previousOutputs.reduce((sum, o) => sum + o.content.length, 0) +
       Array.from(context.scratchPad.values()).reduce((sum, v) => sum + v.length, 0);
     if (totalContent < 100) return null; // Nothing substantial to synthesize
 
@@ -358,13 +397,27 @@ RULES:
     }
   }
 
+  private async executeRecallStep(step: AgentStep, context: StepContext): Promise<StepResult> {
+    if (!this.memoryStore) {
+      return { success: true, output: '(No memory store available)', tokensUsed: 0 };
+    }
+    const query = step.description || context.goal;
+    const memories = this.memoryStore.searchMemories(query.slice(0, 50));
+    const limited = memories.slice(0, 5);
+    if (limited.length === 0) {
+      return { success: true, output: '(No relevant memories found)', tokensUsed: 0 };
+    }
+    const formatted = limited.map((m: any) => `[${m.category}] ${m.content.slice(0, 200)}`).join('\n');
+    return { success: true, output: `Recalled ${limited.length} memories:\n${formatted}`, tokensUsed: 0 };
+  }
+
   private async executeStep(step: AgentStep, context: StepContext): Promise<StepResult> {
     // For the last step (synthesis/presentation), provide much more context from prior steps
     const contextLimit = getContextLimitForModel(this.settings.selectedModel);
     const isLastStep = context.previousOutputs.length >= 1 && step.type === 'think';
     const maxOutputLen = isLastStep ? Math.min(Math.floor(contextLimit * 0.3), 30000) : Math.min(Math.floor(contextLimit * 0.1), 8000);
     const maxPriorSteps = isLastStep ? context.previousOutputs.length : Math.min(context.previousOutputs.length, Math.max(5, Math.floor(contextLimit / 10000)));
-    const contextSummary = context.previousOutputs.slice(-maxPriorSteps).map(o => `Step ${o.stepId}: ${o.output.slice(0, maxOutputLen)}`).join('\n\n');
+    const contextSummary = context.previousOutputs.slice(-maxPriorSteps).map(o => `Step ${o.stepId}: ${o.content.slice(0, maxOutputLen)}`).join('\n\n');
 
     // Append scratchPad data if available (from gather steps)
     let scratchPadContext = '';
@@ -386,9 +439,19 @@ RULES:
       return await this.executeGatherStep(step, context);
     }
 
+    // Recall: retrieve relevant memories from the memory store
+    if (step.type === 'recall') {
+      return await this.executeRecallStep(step, context);
+    }
+
     // Specialist: isolated LLM call with focused context (no accumulated noise)
     if (step.type === 'specialist') {
       return await this.executeSpecialistStep(step, context);
+    }
+
+    // Subgoal: spawn an independent child agent with its own plan/execute cycle
+    if (step.type === 'subgoal') {
+      return await this.executeSubGoalStep(step, context);
     }
 
     // For tool and search steps, use the full ReAct loop for iterative chaining
@@ -580,7 +643,7 @@ RULES:
     let totalTokens = 0;
 
     // Determine which pages to gather from prior step outputs
-    const priorOutputs = context.previousOutputs.map(o => o.output).join('\n');
+    const priorOutputs = context.previousOutputs.map(o => o.content).join('\n');
 
     // Ask LLM to extract page names from prior context
     const extractMessages: ChatMessage[] = [
@@ -681,7 +744,7 @@ RULES:
 
   private async diagnoseFailure(step: AgentStep, error: string, context: StepContext): Promise<string> {
     try {
-      const recentContext = context.previousOutputs.slice(-3).map(o => `Step ${o.stepId}: ${o.output.slice(0, 200)}`).join('\n');
+      const recentContext = context.previousOutputs.slice(-3).map(o => `Step ${o.stepId}: ${o.content.slice(0, 200)}`).join('\n');
       const messages: ChatMessage[] = [
         {
           role: 'system',
@@ -755,7 +818,7 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
     const remaining = plan.steps.filter(s => s.status === 'pending');
     if (remaining.length === 0) return;
 
-    const progressSummary = context.previousOutputs.slice(-4).map(o => `Step ${o.stepId}: ${o.output.slice(0, 150)}`).join('\n');
+    const progressSummary = context.previousOutputs.slice(-4).map(o => `Step ${o.stepId}: ${o.content.slice(0, 150)}`).join('\n');
     const remainingDesc = remaining.map(s => `${s.id}. [${s.type}] ${s.description}`).join('\n');
 
     const messages: ChatMessage[] = [
@@ -795,7 +858,7 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
    * attention degradation in subsequent steps.
    */
   private async compressContext(context: StepContext): Promise<void> {
-    const allOutputText = context.previousOutputs.map(o => o.output).join('\n');
+    const allOutputText = context.previousOutputs.map(o => o.content).join('\n');
     const totalTokens = countTokens(allOutputText);
 
     // Only compress if we have substantial accumulated context
@@ -819,7 +882,7 @@ RULES:
         },
         {
           role: 'user',
-          content: `Goal: ${context.goal}\n\nStep outputs to compress:\n${context.previousOutputs.map(o => `[Step ${o.stepId}]: ${o.output}`).join('\n\n---\n\n')}\n\nCompress into working memory:`,
+          content: `Goal: ${context.goal}\n\nStep outputs to compress:\n${context.previousOutputs.map(o => `[Step ${o.stepId}]: ${o.content}`).join('\n\n---\n\n')}\n\nCompress into working memory:`,
         },
       ];
 
@@ -832,11 +895,75 @@ RULES:
         // Replace all previous outputs with the single compressed version
         const lastStepId = context.previousOutputs[context.previousOutputs.length - 1]?.stepId ?? 0;
         console.info(`[AgentLoop] Context compressed: ${totalTokens} → ${countTokens(compressed)} tokens (${context.previousOutputs.length} steps)`);
-        context.previousOutputs = [{ stepId: lastStepId, output: `[Compressed working memory from steps 1-${lastStepId}]\n${compressed}` }];
+        context.previousOutputs = [{ stepId: lastStepId, type: 'data', content: `[Compressed working memory from steps 1-${lastStepId}]\n${compressed}` }];
       }
     } catch (err) {
       console.warn('[AgentLoop] Context compression failed, continuing with uncompressed context:', err);
     }
+  }
+
+  /**
+   * Execute a sub-goal step — spawn an independent child AgentLoop with its own
+   * plan/execute cycle. The child operates with isolated context and has read-only
+   * access by default. If the current depth has reached maxDepth, the step is
+   * downgraded to a specialist step to prevent infinite recursion.
+   */
+  private async executeSubGoalStep(step: AgentStep, context: StepContext): Promise<StepResult> {
+    // If at max depth, downgrade to specialist
+    if (this.depth >= this.maxDepth) {
+      return this.executeSpecialistStep(step, context);
+    }
+
+    const completedCount = context.previousOutputs.length;
+    const totalSteps = completedCount + 1; // approximate
+    this.emit('subgoal_start', step, `Starting sub-goal: ${step.description}`, completedCount, totalSteps);
+
+    const childMaxDepth = step.subgoalConfig?.maxDepth ?? this.maxDepth;
+    const childCanWrite = step.subgoalConfig?.canWrite ?? false;
+    const childBudget = this.tokenBudget > 0 ? Math.max(0, this.tokenBudget - this.tokensUsed) : 0;
+
+    const child = new AgentLoop({
+      settings: this.settings,
+      signal: this.signal,
+      tokenBudget: childBudget,
+      maxRetries: this.maxRetries,
+      canWrite: childCanWrite,
+      depth: this.depth + 1,
+      maxDepth: childMaxDepth,
+      onProgress: (event) => {
+        // Bubble up child progress with prefix
+        this.onProgress({ ...event, message: `[Sub-goal] ${event.message}` });
+      },
+      onEscalate: this.onEscalate,
+      onReplanProposed: async () => true, // auto-approve child replans
+    });
+
+    // Build context for child from inputSteps
+    let childContext = '';
+    if (step.inputSteps && step.inputSteps.length > 0) {
+      const selectedOutputs = context.previousOutputs.filter(o => step.inputSteps!.includes(o.stepId));
+      childContext = selectedOutputs.map(o => `Step ${o.stepId}: ${o.content}`).join('\n\n');
+    }
+    const contextForChild = childContext || context.previousOutputs.slice(-3).map(o => `Step ${o.stepId}: ${o.content.slice(0, 500)}`).join('\n');
+
+    const plan = await child.generatePlan(step.description, contextForChild);
+
+    // Limit steps if configured
+    if (step.subgoalConfig?.maxSteps && plan.steps.length > step.subgoalConfig.maxSteps) {
+      plan.steps = plan.steps.slice(0, step.subgoalConfig.maxSteps);
+    }
+
+    await child.run(plan);
+
+    // Extract final output from child
+    const completedSteps = plan.steps.filter(s => s.status === 'done');
+    const lastOutput = completedSteps[completedSteps.length - 1]?.output || '';
+    const tokensUsed = plan.steps.reduce((sum, s) => sum + (s.tokensUsed || 0), 0);
+    this.tokensUsed += tokensUsed;
+
+    this.emit('subgoal_complete', step, `Sub-goal completed: ${step.description}`, completedCount + 1, totalSteps);
+
+    return { success: !!lastOutput, output: lastOutput, tokensUsed };
   }
 
   /**
@@ -846,6 +973,10 @@ RULES:
    *
    * This prevents the "lost in the middle" problem by giving the specialist a clean,
    * focused context window to produce high-quality output.
+   *
+   * When specialistTools is 'read-only' (default) or 'full', the specialist runs a ReAct loop
+   * with access to Logseq tools for autonomous information gathering and (optionally) editing.
+   * When 'none', it performs a single LLM call (legacy behavior).
    */
   private async executeSpecialistStep(step: AgentStep, context: StepContext): Promise<StepResult> {
     // Determine the specialist's role/system prompt
@@ -856,7 +987,7 @@ RULES:
     if (step.inputSteps && step.inputSteps.length > 0) {
       // Pull data from specific prior steps
       const selectedOutputs = context.previousOutputs.filter(o => step.inputSteps!.includes(o.stepId));
-      inputData = selectedOutputs.map(o => `[From step ${o.stepId}]:\n${o.output}`).join('\n\n---\n\n');
+      inputData = selectedOutputs.map(o => `[From step ${o.stepId}]:\n${o.content}`).join('\n\n---\n\n');
     }
 
     // Also include relevant scratchPad data if available
@@ -877,7 +1008,7 @@ RULES:
     // If no specific inputs were selected, provide a brief summary of what's been done
     if (!inputData) {
       inputData = context.previousOutputs.length > 0
-        ? context.previousOutputs.map(o => `Step ${o.stepId}: ${o.output.slice(0, 200)}`).join('\n')
+        ? context.previousOutputs.map(o => `Step ${o.stepId}: ${o.content.slice(0, 200)}`).join('\n')
         : '(No prior data available)';
     }
 
@@ -898,9 +1029,39 @@ RULES:
       },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
-    const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
-    const tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
+    // Determine tool access level — default is 'read-only'
+    const toolAccess = step.specialistTools ?? 'read-only';
+
+    let raw: string;
+    let tokens: number;
+
+    if (toolAccess === 'none') {
+      // Legacy behavior: single LLM call, no tools
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+      raw = result.choices?.[0]?.message?.content?.trim() ?? '';
+      tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
+    } else {
+      // ReAct loop with tool access
+      const remainingBudget = this.tokenBudget > 0 ? Math.max(0, this.tokenBudget - this.tokensUsed) : 0;
+      const reactResult = await runReActLoop(messages, {
+        settings: this.settings,
+        signal: this.signal,
+        maxIterations: 5,
+        tokenBudget: remainingBudget,
+        includeLogseqTools: true,
+        includeLogseqWriteTools: toolAccess === 'full',
+      });
+
+      // Extract the answer and include tool call summaries if any
+      raw = reactResult.answer;
+      if (reactResult.toolCalls.length > 0) {
+        const toolSummary = reactResult.toolCalls
+          .map(tc => `[Tool: ${tc.tool}] ${tc.result.slice(0, 200)}`)
+          .join('\n');
+        raw += '\n\n--- Tool Results ---\n' + toolSummary;
+      }
+      tokens = reactResult.tokensUsed;
+    }
 
     // Store specialist output in scratchPad for downstream use
     const specialistKey = `specialist_step_${step.id}`;

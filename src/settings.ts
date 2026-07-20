@@ -183,6 +183,20 @@ const settings: SettingSchemaDesc[] = [
     default: false,
   },
   {
+    key: 'agentMemoryEnabled',
+    type: 'boolean',
+    title: 'Agent Memory',
+    description: 'Allow the agent to store and recall observations from previous runs, improving performance on recurring tasks.',
+    default: true,
+  },
+  {
+    key: 'agentFastModel',
+    type: 'string',
+    title: 'Agent Fast Model',
+    description: 'Optional lightweight model for extraction and gather steps (e.g. gpt-4o-mini). Leave empty to use the main model for all agent steps.',
+    default: '',
+  },
+  {
     key: 'mcpToolTimeout',
     type: 'number',
     title: 'MCP Tool Call Timeout (seconds)',
