@@ -431,14 +431,14 @@ const GROUNDING_INSTRUCTIONS = `
 - If the context contains conflicting information, acknowledge both perspectives rather than silently choosing one.
 - You may use your general knowledge to explain, synthesize, or contextualize the retrieved information, but clearly distinguish between what comes from the user's notes vs. general knowledge.`;
 
-export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string | string[]): Promise<string | EditQueryResult> {
+export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string | string[], onChunk?: (chunk: string) => void): Promise<string | EditQueryResult> {
   lastMemorySaved = false;
   pendingAgentGoal = null;
 
   // Detect multi-step goals and route to agent loop
   // Skip goal detection when an image is attached — images need the multipart message path
   // Skip goal detection when edit mode is on — edit mode handles write requests directly
-  if (settings.agentMode === 'on' && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
+  if (settings.agentMode !== false && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
     pendingAgentGoal = query;
     return '__AGENT_GOAL_DETECTED__';
   }
@@ -586,6 +586,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Execute via ReAct loop
   const tools = MCPManager.getInstance().getEnabledTools();
+  const streamingEnabled = settings.streamingEnabled !== false && !editMode;
   const reactResult = await runReActLoop(messages, {
     settings, signal,
     maxIterations: settings.agentMaxIterations || 25,
@@ -594,6 +595,8 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     includeLogseqTools: true,
     includeLogseqWriteTools: !!editMode,
     onThought: onThoughtCallback || undefined,
+    onChunk: streamingEnabled ? onChunk : undefined,
+    streamingEnabled,
   });
 
   const assistantResponse = reactResult.answer;

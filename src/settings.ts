@@ -90,6 +90,13 @@ const settings: SettingSchemaDesc[] = [
     default: 300,
   },
   {
+    key: 'streamingEnabled',
+    type: 'boolean',
+    title: 'Streaming Responses',
+    description: 'When enabled, AI responses are streamed token-by-token as they are generated, appearing progressively in the chat. Disable if you prefer responses to appear all at once, or if your provider has issues with streaming.',
+    default: true,
+  },
+  {
     key: 'mcpServers',
     type: 'string',
     title: 'MCP Servers Configuration',
@@ -119,12 +126,10 @@ const settings: SettingSchemaDesc[] = [
   },
   {
     key: 'agentMode',
-    type: 'enum',
+    type: 'boolean',
     title: 'Agent Mode',
-    description: 'On: enables autonomous goal detection and multi-step execution. Off: disabled.',
-    default: 'on',
-    enumChoices: ['on', 'off'],
-    enumPicker: 'select',
+    description: 'When enabled, autonomous goal detection and multi-step execution are active.',
+    default: true,
   },
   {
     key: 'agentConfidenceThreshold',

@@ -15,10 +15,11 @@ interface IPluginSettings {
   embeddingProvider?: string;
   chatProvider?: string;
   chatEndpoint?: string;
+  streamingEnabled?: boolean;
   memoryEnabled?: boolean;
   autoSummarize?: boolean;
   memoryBudgetPercent?: number;
-  agentMode?: string;
+  agentMode?: boolean;
   agentConfidenceThreshold?: number;
   agentAutonomy?: string;
   agentTokenBudget?: number;

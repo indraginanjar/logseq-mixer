@@ -614,7 +614,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [isDismissing, setIsDismissing] = useState(false);
   const [progressCount, setProgressCount] = useState(getIndexingProgress);
   const [autoEmbedEnabled, setAutoEmbedEnabled] = useState(() => (logseq.settings?.autoEmbedEnabled as boolean) ?? true);
-  const [agentModeOn, setAgentModeOn] = useState(() => (logseq.settings?.agentMode as string) !== 'off');
+  const [agentModeOn, setAgentModeOn] = useState(() => (logseq.settings?.agentMode as boolean) !== false);
   const [verboseMode, setVerboseMode] = useState(() => (logseq.settings?.agentVerboseMode as boolean) ?? true);
   const [cooldownActive, setCooldownActive] = useState(false);
   const [showDbPanel, setShowDbPanel] = useState(false);
@@ -971,7 +971,30 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         ? '\n\n---\n' + fileContexts.map(f => `Attached file: ${f.name}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
         : '';
       const queryWithFile = messageToSend + fileAppendix;
-      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages.length > 0 ? attachedImages.map(img => img.content) : undefined);
+      const streamingEnabled = settings.streamingEnabled !== false && !effectiveEditMode;
+      const streamingMsgId = Date.now() + '_assistant';
+      let isStreamingStarted = false;
+
+      // Streaming callback: progressively update the assistant message as chunks arrive
+      const onChunk = streamingEnabled ? (chunk: string) => {
+        if (!isStreamingStarted) {
+          isStreamingStarted = true;
+          setLoading(false);
+          setMessages(prev => [...prev, {
+            id: streamingMsgId,
+            content: chunk,
+            sender: 'assistant',
+            model: settings?.selectedModel,
+            timestamp: chatTimestamp(),
+          }]);
+        } else {
+          setMessages(prev => prev.map(m =>
+            m.id === streamingMsgId ? { ...m, content: m.content + chunk } : m
+          ));
+        }
+      } : undefined;
+
+      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages.length > 0 ? attachedImages.map(img => img.content) : undefined, onChunk);
       abortControllerRef.current = null;
 
       // Handle agent goal detection
@@ -1189,14 +1212,18 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         }
       } else {
         const responseText = typeof resp === 'string' ? resp : resp.text;
-        const assistantMsgId = Date.now() + '_assistant';
-        setMessages(prev => [...prev, {
-          id: assistantMsgId,
-          content: responseText,
-          sender: 'assistant',
-          model: settings?.selectedModel,
-          timestamp: chatTimestamp(),
-        }]);
+        if (!isStreamingStarted) {
+          // Non-streaming path: add the complete response as a new message
+          const assistantMsgId = Date.now() + '_assistant';
+          setMessages(prev => [...prev, {
+            id: assistantMsgId,
+            content: responseText,
+            sender: 'assistant',
+            model: settings?.selectedModel,
+            timestamp: chatTimestamp(),
+          }]);
+        }
+        // When streaming was used, the message is already rendered progressively via onChunk
       }
 
       // Check if a memory was saved during this query
@@ -1340,8 +1367,8 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   };
 
   const handleAgentModeToggle = () => {
-    const newMode = agentModeOn ? 'off' : 'on';
-    setAgentModeOn(!agentModeOn);
+    const newMode = !agentModeOn;
+    setAgentModeOn(newMode);
     logseq.updateSettings({ agentMode: newMode });
   };
 
