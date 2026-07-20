@@ -286,18 +286,16 @@ Plus any [MCP tools](https://github.com/indraginanjar/logseq-mixer/blob/main/doc
 
 | Setting | Default | Description |
 |---|---|---|
-| **Agent Mode** | `on` | Master toggle — `on` or `off` |
-| **Agent Autonomy Level** | `plan-first` | `plan-first` (approval required) or `autopilot` |
-| **Agent Confidence Threshold** | `0.6` | Goal detection sensitivity (0.0–1.0, lower = more triggers) |
-| **Agent Token Budget** | `100000` | Max tokens per autonomous run (0 = unlimited) |
-| **Agent Max Tool Iterations** | `25` | Max ReAct tool-call iterations per query |
-| **Agent Max Retries Per Step** | `2` | Retry attempts per step before escalating |
-| **Agent Verbose Mode** | `true` | Show step type badges, token usage, self-correction reasoning, and error details. Toggle via 📋 in toolbar. |
-| **Persist Agent Steps to Chat** | `false` | Stream each step as a chat message and keep in conversation context. Requires Verbose Mode ON. |
-| **MCP Tool Call Timeout** | `180` | Seconds to wait for external tool calls. Increase for slow tools (Playwright: 300+). |
-| **Enable Agent Memory** | `true` | Toggle persistent memory (preserves data when disabled) |
-| **Auto-summarize Sessions** | `true` | Auto-summarize on "New Session" |
-| **Memory Token Budget (%)** | `10` | Context window allocation for memories (1-25%) |
+| **Agent Mode** | `true` | Enable autonomous goal detection and multi-step execution |
+| **Agent Confidence Threshold** | `0.6` | Minimum confidence to trigger the agent (0.0-1.0) |
+| **Agent Autonomy Level** | `plan-first` | `plan-first` shows plan for approval; `autopilot` executes immediately |
+| **Agent Token Budget** | `100000` | Maximum tokens per autonomous run (0 = unlimited) |
+| **Agent Max Retries** | `2` | Retry attempts per failed step before escalation |
+| **Agent Max Tool Iterations** | `25` | Maximum ReAct loop iterations per query |
+| **Agent Verbose Mode** | `true` | Show detailed step outputs and self-correction in progress UI |
+| **Persist Agent Steps to Chat** | `false` | Stream each step as a chat message |
+| **Agent Fast Model** | _(empty)_ | Lightweight model for extraction steps (e.g., `gpt-4o-mini`) |
+| **Agent Memory** | `true` | Allow agent to recall and store observations across runs |
 
 ---
 
@@ -352,6 +350,124 @@ Example: if you ask "Compare my React and Vue notes and create a comparison tabl
 5. 🎯 **Specialist**: Create comparison table (receives *only* the gathered data from steps 2 and 4)
 
 The specialist step produces higher-quality output because it's not distracted by search results, intermediate reasoning, or other noise — it sees only the relevant extracted data.
+
+---
+
+## Sub-Agent Capabilities
+
+Mixer's agent can now decompose complex goals into independent sub-tasks, execute them in parallel, and use different models for different phases — all automatically.
+
+### Sub-Goals (Recursive Decomposition)
+
+When a goal is too complex for a linear plan, the agent can spawn **sub-agents** — independent child agents that plan and execute autonomously:
+
+```
+You: "Compare my notes about React, Vue, and Angular, and create
+      a recommendation page based on my project requirements"
+
+Agent: 🤖 Plan generated:
+       1. Search for framework-related pages
+       2. 🔀 Sub-goal: "Analyze React notes" (independent agent)
+       3. 🔀 Sub-goal: "Analyze Vue notes" (independent agent)
+       4. 🔀 Sub-goal: "Analyze Angular notes" (independent agent)
+       5. Specialist: Compare and synthesize recommendation
+       6. Write recommendation page
+```
+
+Each sub-goal gets its own plan, executes independently, and returns its synthesis to the parent. Sub-goals:
+- Have **read-only access** by default (can't modify your graph)
+- Share the parent's **token budget** (can't blow the limit)
+- Respect the **Stop button** (abort propagates to all children)
+- Are limited to **2 levels deep** (prevents infinite recursion)
+
+### Specialists with Tool Access
+
+Specialist steps can now **search and read pages autonomously** during their execution:
+
+```
+You: "Create a detailed comparison of my project management approaches"
+
+Agent: ... → Specialist step: "Research and compare PM approaches"
+       Specialist uses tools:
+         🔧 logseq_search_pages("project management")
+         🔧 logseq_get_blocks("Agile Notes")
+         🔧 logseq_get_blocks("Waterfall Process")
+         → Produces comprehensive comparison
+```
+
+Previously, specialists could only reason about data already gathered. Now they can independently fetch what they need.
+
+### Parallel Execution
+
+When steps don't depend on each other, the agent executes them **simultaneously**:
+
+```
+🤖 Executing Wave 1: (3 steps in parallel)
+   ✅ Search for React pages        [0.8s]
+   ✅ Search for Vue pages           [0.7s]
+   ✅ Search for Angular pages       [0.9s]
+
+🤖 Executing Wave 2: (3 steps in parallel)
+   ✅ Gather React concepts          [3.2s]
+   ✅ Gather Vue concepts            [2.8s]
+   ✅ Gather Angular concepts        [3.1s]
+
+🤖 Executing Wave 3:
+   ✅ Synthesize comparison          [2.5s]
+
+Total: 7.4s (vs ~15s sequential)
+```
+
+Parallel execution activates automatically when the planner identifies independent steps.
+
+### Model Routing
+
+Configure a **fast model** for extraction tasks to reduce cost while maintaining quality for synthesis:
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Agent Fast Model** | _(empty)_ | Lightweight model for gather/read steps (e.g., `gpt-4o-mini`) |
+
+When set, the agent automatically routes:
+- **Gather & Read steps** → Fast model (cheaper, still accurate for extraction)
+- **Think, Specialist, Write steps** → Main model (full reasoning power)
+
+Leave empty to use your main model for everything.
+
+### Agent Memory
+
+The agent now **remembers observations** across runs:
+
+**First run:**
+> "Summarize my machine learning notes"
+>
+> Agent searches, gathers 7 pages, synthesizes summary.
+> 💾 Stores: *"User has ML notes across 7 pages: Neural Nets, Supervised Learning, ..."*
+
+**Second run:**
+> "What else do I know about neural networks?"
+>
+> Agent recalls: *"User has ML notes across 7 pages: Neural Nets, ..."*
+> → Immediately searches the right pages without trial-and-error.
+
+Agent memory is **on by default** and works alongside your existing Mixer memories. Toggle it off in settings if you prefer each run to start fresh.
+
+---
+
+## Agent Settings Reference
+
+| Setting | Default | Description |
+|---|---|---|
+| **Agent Mode** | `true` | Enable autonomous goal detection and multi-step execution |
+| **Agent Confidence Threshold** | `0.6` | Minimum confidence to trigger the agent (0.0-1.0) |
+| **Agent Autonomy Level** | `plan-first` | `plan-first` shows plan for approval; `autopilot` executes immediately |
+| **Agent Token Budget** | `100000` | Maximum tokens per autonomous run (0 = unlimited) |
+| **Agent Max Retries** | `2` | Retry attempts per failed step before escalation |
+| **Agent Max Tool Iterations** | `25` | Maximum ReAct loop iterations per query |
+| **Agent Verbose Mode** | `true` | Show detailed step outputs and self-correction in progress UI |
+| **Persist Agent Steps to Chat** | `false` | Stream each step as a chat message |
+| **Agent Fast Model** | _(empty)_ | Lightweight model for extraction steps (e.g., `gpt-4o-mini`) |
+| **Agent Memory** | `true` | Allow agent to recall and store observations across runs |
 
 ---
 

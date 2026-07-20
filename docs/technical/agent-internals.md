@@ -296,7 +296,9 @@ The LLM receives the goal + available capabilities and returns structured JSON:
 | `tool` | ReAct loop (iterative, max 10) | External MCP tool calls with chaining |
 | `think` | Single LLM call | Analysis, reasoning, synthesis |
 | `gather` | Map-Reduce pipeline | Batch-read multiple pages with per-batch summarization |
-| `specialist` | Isolated LLM call | Focused sub-task with targeted input — no accumulated context noise |
+| `specialist` | ReAct loop (max 5) or single LLM call | Focused sub-task with tool access and isolated context |
+| `subgoal` | Child AgentLoop (recursive) | Spawns independent agent with own plan/execute cycle |
+| `recall` | MemoryStore query | Retrieves relevant memories from previous runs |
 
 ### Context Compression Layer
 
@@ -357,7 +359,7 @@ Even with compression, some tasks inherently need high-quality output from a cle
 
 #### Solution: Isolated Execution
 
-The `specialist` step executes with its own fresh LLM call that receives **only targeted input** — not the full accumulated context. This gives the specialist the full attention span of the model on just the relevant data.
+The `specialist` step executes with its own ReAct loop (or single LLM call when `specialistTools: 'none'`) that receives **only targeted input** — not the full accumulated context. This gives the specialist the full attention span of the model on just the relevant data.
 
 #### How It Works
 
@@ -662,11 +664,14 @@ Full management UI:
 
 ```
 src/agent/
-├── types.ts           AgentPlan, AgentStep, StepResult, StepType
-├── AgentLoop.ts       Plan generation, step execution, self-correction, replanning
-├── ReActLoop.ts       Iterative tool chaining engine
-├── goalDetector.ts    LLM-based goal classification with regex fallback
-└── logseqTools.ts     Logseq APIs as OpenAI-compatible function tool schemas
+├── types.ts             StepType (10 types), AgentStep, StepOutput, StepContext
+├── AgentLoop.ts         Plan, execute, self-correct, replan, sub-goals, memory
+├── ReActLoop.ts         Iterative tool chaining engine
+├── goalDetector.ts      LLM-based goal classification with regex fallback
+├── logseqTools.ts       Logseq APIs as OpenAI-compatible function tool schemas
+├── modelRouter.ts       Per-step model resolution (fast/quality/explicit)
+├── executionGraph.ts    Topological wave grouping for parallel step execution
+└── outputParser.ts      Structured output classification and metadata extraction
 
 src/memory/
 ├── MemoryStore.ts     CRUD on agent_memory SQLite table
@@ -764,3 +769,300 @@ User types message
 - [Architecture](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/architecture.md) — System overview and module map
 - [MCP Protocol](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/mcp-protocol.md) — How MCP tools integrate with the agent
 - [Agentic AI (User Guide)](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/agentic-ai.md) — User-facing capabilities and configuration
+
+
+---
+
+## 7. Sub-Agent Architecture
+
+Mixer's agent now supports recursive sub-agent spawning, parallel execution, model routing, structured communication, and persistent memory. These capabilities work together to enable complex multi-step goals that would overwhelm a flat sequential pipeline.
+
+### Overview
+
+```mermaid
+graph TD
+    Goal[User Goal] --> Planner[Plan Generation]
+    Planner --> Waves[Execution Graph]
+    Waves --> Wave1[Wave 1: Independent Steps]
+    Waves --> Wave2[Wave 2: Dependent Steps]
+    Wave1 --> |parallel| S1[Step: search]
+    Wave1 --> |parallel| S2[Step: search]
+    Wave2 --> Sub[Step: subgoal]
+    Sub --> Child[Child AgentLoop]
+    Child --> ChildPlan[Child Plan]
+    Child --> ChildExec[Child Execution]
+    Wave2 --> Spec[Step: specialist + tools]
+    Spec --> React[ReAct Loop]
+    React --> Tools[Logseq + MCP Tools]
+    
+    Memory[(Agent Memory)] -.-> Goal
+    ChildExec -.-> Memory
+```
+
+---
+
+### 7.1 Specialist with Tool Access
+
+The `specialist` step type now supports iterative tool calling via the ReAct loop, configurable through the `specialistTools` field:
+
+| `specialistTools` | Behavior | Tools Available | Max Iterations |
+|---|---|---|---|
+| `'read-only'` (default) | ReAct loop with read tools | `logseq_get_page`, `logseq_get_blocks`, `logseq_search_pages`, MCP tools | 5 |
+| `'full'` | ReAct loop with all tools | All Logseq tools + MCP tools (including write) | 5 |
+| `'none'` | Single LLM call (legacy) | None — pure reasoning | 1 |
+
+#### Plan JSON
+
+```json
+{
+  "id": 3,
+  "type": "specialist",
+  "description": "Research and synthesize comparison",
+  "specialistRole": "You are a technical analyst...",
+  "specialistTools": "read-only",
+  "inputSteps": [1, 2]
+}
+```
+
+#### Execution Flow
+
+1. Assemble isolated input (only from `inputSteps` + scratchPad)
+2. Build messages with `specialistRole` as system prompt
+3. If `specialistTools === 'none'`: single `queryLiteLLM` call
+4. Otherwise: `runReActLoop()` with tool access and 5-iteration limit
+5. Extract answer + tool result summaries
+6. Store in scratchPad for downstream steps
+
+---
+
+### 7.2 Recursive Sub-Goal Spawning
+
+The `subgoal` step type spawns a child `AgentLoop` instance with its own plan/execute/synthesize cycle.
+
+#### Depth Control
+
+| Depth | Behavior |
+|---|---|
+| 0 (root) | Can spawn sub-goals (depth limit: 2) |
+| 1 (child) | Can spawn sub-goals if maxDepth > 1 |
+| ≥ maxDepth | Automatically downgrades to `specialist` (prevents infinite recursion) |
+
+#### Child Configuration
+
+| Parameter | Default | Source |
+|---|---|---|
+| `canWrite` | `false` | `subgoalConfig.canWrite` |
+| `maxSteps` | unlimited | `subgoalConfig.maxSteps` |
+| `maxDepth` | parent's maxDepth | `subgoalConfig.maxDepth` |
+| Token budget | Parent's remaining budget | Calculated at spawn time |
+| Abort signal | Shared with parent | Same `AbortSignal` instance |
+| Autonomy | Always autopilot | No user approval for child plans |
+
+#### Plan JSON
+
+```json
+{
+  "id": 2,
+  "type": "subgoal",
+  "description": "Analyze all React-related notes and extract patterns",
+  "inputSteps": [1],
+  "subgoalConfig": { "canWrite": false, "maxSteps": 5 }
+}
+```
+
+#### Token Budget Sharing
+
+The child receives the parent's *remaining* budget. After the child completes, its actual token usage is added to the parent's counter. This prevents budget overruns from nested agents.
+
+```
+Parent budget: 100K
+Parent used so far: 30K
+Child receives: 70K
+Child uses: 25K
+Parent counter after: 55K (30K + 25K)
+```
+
+---
+
+### 7.3 Per-Step Model Routing
+
+`modelRouter.ts` resolves which model to use for each step, enabling cost-efficient execution.
+
+#### Resolution Priority
+
+1. **Explicit `step.model`** — literal model name (e.g., `"claude-3-opus"`)
+2. **Hint keywords** — `"fast"` → `agentFastModel`, `"quality"` → main model
+3. **Type-based routing** — gather/read → fast model (if configured)
+4. **Default** — main model (`settings.selectedModel`)
+
+#### Type-Based Defaults
+
+| Step Type | Default Model | Rationale |
+|---|---|---|
+| `gather`, `read` | Fast model (if configured) | Extraction doesn't need top-tier reasoning |
+| `think`, `specialist`, `subgoal`, `write`, `search`, `tool` | Main model | Quality-critical tasks |
+
+#### Setting
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `agentFastModel` | string | `''` (empty) | Lightweight model for extraction. Leave empty to use main model everywhere. |
+
+---
+
+### 7.4 Parallel Execution
+
+`executionGraph.ts` groups steps into execution waves based on dependency declarations.
+
+#### How It Works
+
+1. Planner generates steps with optional `dependsOn: number[]` fields
+2. `buildExecutionWaves(steps)` performs topological sorting into waves
+3. Steps within the same wave execute concurrently via `Promise.allSettled()`
+4. After a wave completes, all outputs are available to the next wave
+
+#### Backward Compatibility
+
+If no step has a `dependsOn` field, execution falls back to sequential (one step per wave). Existing plans work unchanged.
+
+#### Example
+
+```json
+{
+  "steps": [
+    { "id": 1, "type": "search", "description": "Find React pages", "dependsOn": [] },
+    { "id": 2, "type": "search", "description": "Find Vue pages", "dependsOn": [] },
+    { "id": 3, "type": "gather", "description": "Process React pages", "dependsOn": [1] },
+    { "id": 4, "type": "gather", "description": "Process Vue pages", "dependsOn": [2] },
+    { "id": 5, "type": "specialist", "description": "Compare frameworks", "dependsOn": [3, 4] }
+  ]
+}
+```
+
+Execution waves:
+- **Wave 1:** Steps 1, 2 (run in parallel)
+- **Wave 2:** Steps 3, 4 (run in parallel — both dependencies met)
+- **Wave 3:** Step 5 (waits for 3 and 4)
+
+#### Circular Dependency Detection
+
+`buildExecutionWaves()` throws an error if it detects circular dependencies (e.g., step 1 depends on step 2, which depends on step 1). This prevents infinite hangs.
+
+---
+
+### 7.5 Structured Inter-Agent Communication
+
+Step outputs are now typed `StepOutput` objects rather than raw strings:
+
+```typescript
+interface StepOutput {
+  stepId: number;
+  type: 'text' | 'data' | 'error' | 'request';
+  content: string;
+  structured?: Record<string, any>;  // Parsed JSON data
+  metadata?: {
+    pageNames?: string[];     // Detected [[page]] references
+    blockUUIDs?: string[];    // Detected UUID patterns
+    tokenCount?: number;
+    model?: string;
+  };
+}
+```
+
+#### Output Parsing (`outputParser.ts`)
+
+`parseStepOutput()` automatically classifies and enriches raw LLM output:
+
+| Detection | Sets `type` | Extracts |
+|---|---|---|
+| Starts with `Error:` or `Failed:` | `'error'` | — |
+| Starts with `REQUEST:` | `'request'` | JSON body into `.structured` |
+| Contains ```json block | `'data'` | Parsed JSON into `.structured` |
+| Entire output is valid JSON | `'data'` | Parsed object into `.structured` |
+| `[[PageName]]` patterns | — | `.metadata.pageNames` |
+| UUID patterns | — | `.metadata.blockUUIDs` |
+
+#### Request Mechanism
+
+A specialist or sub-agent can output `type: 'request'` to ask the parent for additional context:
+
+```json
+{ "type": "request", "action": "read", "page": "ProjectA" }
+```
+
+The parent fulfills the request and re-runs the step with the additional data (limited to 1 request per step to prevent loops).
+
+---
+
+### 7.6 Persistent Agent Memory
+
+The agent integrates with `MemoryStore` to recall observations from previous runs and store new ones.
+
+#### Auto-Recall (Start of Run)
+
+When a goal starts executing:
+1. Search `MemoryStore` with the first 50 characters of the goal
+2. Retrieve up to 5 matching memories
+3. Inject as initial context: `"Previous observations: ..."`
+4. Emit `'memory_recalled'` progress event
+
+#### Auto-Store (End of Run)
+
+After successful completion (≥1 completed step, output > 20 chars):
+1. Take the final synthesis output (truncated to 500 chars)
+2. Call `addMemoryIfUnique('agent_observation', summary, goal)`
+3. Deduplication prevents storing the same observation twice
+4. Emit `'memory_stored'` progress event
+
+#### Read-Only Mode for Sub-Agents
+
+Child agents (spawned by `subgoal`) receive `memoryReadOnly: true`:
+- They CAN recall existing memories (useful for context)
+- They CANNOT store new memories (prevents memory spam from parallel children)
+- Only the root parent agent stores the final observation
+
+#### `recall` Step Type
+
+The planner can explicitly include a `recall` step to retrieve memories before execution:
+
+```json
+{ "id": 1, "type": "recall", "description": "Recall previous observations about ML projects" }
+```
+
+Returns up to 5 memories, each truncated to 200 characters.
+
+#### Settings
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `agentMemoryEnabled` | boolean | `true` | Toggle agent memory recall and storage |
+
+---
+
+### 7.7 File Structure (Updated)
+
+```
+src/agent/
+├── types.ts              StepType (10 types), AgentStep, StepOutput, StepContext
+├── AgentLoop.ts          Plan → Execute → Self-Correct → Replan → Memory
+├── ReActLoop.ts          Iterative tool chaining (Reason → Act → Observe)
+├── goalDetector.ts       LLM-based goal classification with regex fallback
+├── logseqTools.ts        6 Logseq tools as OpenAI function schemas
+├── modelRouter.ts        Per-step model resolution (fast/quality/explicit)
+├── executionGraph.ts     Topological wave grouping for parallel execution
+└── outputParser.ts       Structured output classification and metadata extraction
+```
+
+### Step Type Summary (Complete)
+
+| Type | Execution | Tool Access | Isolation | Recursion |
+|---|---|---|---|---|
+| `read` | Single API call | Logseq API only | No | No |
+| `write` | Action JSON → `executeOne()` | Logseq API only | No | No |
+| `search` | ReAct loop (10 iter) | Read-only tools | No | No |
+| `tool` | ReAct loop (10 iter) | Read-only tools + MCP | No | No |
+| `think` | Single LLM call | None | No | No |
+| `gather` | Map-Reduce (3 pages/batch) | Logseq API only | No | No |
+| `specialist` | ReAct loop (5 iter) or single call | Configurable | Yes (inputSteps) | No |
+| `subgoal` | Child AgentLoop | Full (per config) | Yes (own plan) | Yes (depth-limited) |
+| `recall` | MemoryStore search | None | No | No |

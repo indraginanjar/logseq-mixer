@@ -55,11 +55,14 @@ src/
 ├── LLMManager.ts               LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation, streaming SSE support
 │
 ├── agent/
-│   ├── AgentLoop.ts            Multi-step goal execution with self-correction
+│   ├── AgentLoop.ts            Multi-step goal execution with self-correction, sub-goals, and memory
 │   ├── ReActLoop.ts            Iterative tool chaining (Reason → Act → Observe)
 │   ├── goalDetector.ts         LLM-based goal classification with regex fallback
 │   ├── logseqTools.ts          Built-in Logseq tools as OpenAI function schemas
-│   └── types.ts                AgentPlan, AgentStep, StepResult types
+│   ├── types.ts                AgentPlan, AgentStep, StepResult, StepOutput types
+│   ├── modelRouter.ts          Per-step model routing (fast/quality/explicit)
+│   ├── executionGraph.ts       Topological wave grouping for parallel step execution
+│   └── outputParser.ts         Structured output parsing (JSON extraction, metadata detection)
 │
 ├── memory/
 │   ├── MemoryStore.ts          CRUD on agent_memory SQLite table
