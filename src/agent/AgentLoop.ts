@@ -28,7 +28,14 @@ PLANNING RULES:
 - Use "specialist" for the FINAL synthesis/output step when the goal requires combining data from multiple prior steps (search + gather → specialist synthesizes). Also use specialist when you need high-quality output that would be degraded by large accumulated context. Specify "inputSteps" to tell the specialist which step outputs to use as input.
 - A gather step description should specify WHAT to look for and WHAT to extract. Example: "Gather all machine learning pages and extract key concepts, definitions, and relationships from each."
 - Use "search" first to find relevant pages, then "gather" to process them in bulk.
-- Keep steps atomic and sequential. Estimate total tokens needed for all LLM calls.`;
+- Keep steps atomic and sequential. Estimate total tokens needed for all LLM calls.
+
+WRITE STEP RESTRICTIONS (CRITICAL):
+- Use "write" steps ONLY when the user's goal EXPLICITLY asks to create, insert, update, modify, or delete content in their graph.
+- NEVER use "write" steps for: answering questions, summarizing, analyzing, explaining, listing, comparing, or presenting information. These should use "think" or "specialist" steps — the output goes to the chat response automatically.
+- The FINAL step of a plan should almost NEVER be a "write" step unless the user specifically asked for content to be written to a page. Summaries, analyses, and answers belong in the chat, not written to the graph.
+- When in doubt, use "think" instead of "write". The user can always manually edit later.
+- A plan should have AT MOST 1-2 "write" steps, and only for the specific content the user asked to be written. Intermediate results (search results, analyses, etc.) should NEVER be written to the graph.`;
 
 const STEP_SYSTEM_PROMPT = `You are an execution agent for Logseq. Execute the given step and return the ACTUAL result — not a plan or description of what to do.
 Available Logseq APIs: getPage(name), getPageBlocksTree(nameOrUuid), getAllPages(), insertBlock(parentUUID, content, {sibling:false}), updateBlock(uuid, content), removeBlock(uuid), createPage(name, {}, {journal:false, redirect:false}).
@@ -118,7 +125,7 @@ export class AgentLoop {
     try {
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
-      const steps: AgentStep[] = (parsed.steps || []).map((s: any, i: number) => ({
+      let steps: AgentStep[] = (parsed.steps || []).map((s: any, i: number) => ({
         id: s.id ?? i + 1,
         description: s.description,
         type: s.type || 'think',
@@ -127,10 +134,59 @@ export class AgentLoop {
         inputSteps: s.inputSteps,
         status: 'pending' as const,
       }));
+      // Sanitize: downgrade excessive write steps when the goal doesn't warrant them
+      steps = this.sanitizeWriteSteps(steps, goal);
       return { goal, steps, estimatedTokens: parsed.estimatedTokens || 50000 };
     } catch {
       return { goal, steps: [{ id: 1, description: goal, type: 'think', status: 'pending' }], estimatedTokens: 10000 };
     }
+  }
+
+  /**
+   * Downgrade excessive "write" steps to "think" when the user's goal doesn't
+   * explicitly ask for content to be written, created, or modified in the graph.
+   *
+   * This prevents overly aggressive models (e.g. GPT-5) from writing intermediate
+   * results, analyses, or summaries directly to Logseq pages when the user only
+   * asked a question or requested a summary in chat.
+   */
+  private sanitizeWriteSteps(steps: AgentStep[], goal: string): AgentStep[] {
+    // Detect whether the goal explicitly requests writing to the graph
+    const goalLower = goal.toLowerCase();
+    const WRITE_INTENT_PATTERNS = [
+      /\b(create|make|add|insert|write|put|build|generate)\b.{0,30}\b(page|block|note|entry|bullet|item|section|outline)\b/,
+      /\b(update|edit|modify|change|rewrite|revise|fix|correct)\b.{0,30}\b(page|block|note|entry|content)\b/,
+      /\b(delete|remove|clear)\b.{0,30}\b(page|block|note|entry)\b/,
+      /\bcreate\b.{0,20}\b(overview|summary|index|toc|table of contents)\b/,
+      /\bwrite\s+(it|this|that|the result|the output)\s+(to|in|into|on)\b/,
+      /\b(save|store|record)\b.{0,20}\b(to|in|into|on)\b.{0,20}\b(page|block|graph|logseq)\b/,
+      /\bstructured?\s+overview\b.*\blink/,
+    ];
+
+    const hasWriteIntent = WRITE_INTENT_PATTERNS.some(p => p.test(goalLower));
+
+    if (hasWriteIntent) {
+      // Goal explicitly asks for writes — allow up to 3 write steps max
+      const MAX_WRITE_STEPS = 3;
+      let writeCount = 0;
+      return steps.map(step => {
+        if (step.type === 'write') {
+          writeCount++;
+          if (writeCount > MAX_WRITE_STEPS) {
+            return { ...step, type: 'think' as const };
+          }
+        }
+        return step;
+      });
+    }
+
+    // Goal does NOT explicitly request writes — downgrade ALL write steps to think
+    return steps.map(step => {
+      if (step.type === 'write') {
+        return { ...step, type: 'think' as const };
+      }
+      return step;
+    });
   }
 
   async run(plan: AgentPlan): Promise<void> {
@@ -356,6 +412,7 @@ RULES:
         maxIterations: 10,
         tokenBudget: this.tokenBudget > 0 ? Math.max(0, this.tokenBudget - this.tokensUsed) : 0,
         includeLogseqTools: true,
+        includeLogseqWriteTools: false,
       });
       // Include key tool results in the output so subsequent steps can use the data
       const toolResultsSummary = reactResult.toolCalls
