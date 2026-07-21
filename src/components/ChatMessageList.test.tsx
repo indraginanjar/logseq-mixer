@@ -142,7 +142,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-import ChatMessageList, { ChatMessage } from './ChatMessageList';
+import ChatMessageList, { ChatMessage, transformBareUrls } from './ChatMessageList';
 
 describe('ChatMessageList integration', () => {
   /**
@@ -613,3 +613,79 @@ describe('ChatMessageList integration', () => {
   });
 });
 
+
+describe('transformBareUrls', () => {
+  it('returns empty string for empty input', () => {
+    expect(transformBareUrls('')).toBe('');
+  });
+
+  it('returns text unchanged when no URLs present', () => {
+    expect(transformBareUrls('hello world')).toBe('hello world');
+  });
+
+  it('transforms a bare https URL into a markdown link', () => {
+    expect(transformBareUrls('visit https://example.com for more')).toBe(
+      'visit [https://example.com](https://example.com) for more'
+    );
+  });
+
+  it('transforms a bare http URL into a markdown link', () => {
+    expect(transformBareUrls('see http://localhost:3000/api here')).toBe(
+      'see [http://localhost:3000/api](http://localhost:3000/api) here'
+    );
+  });
+
+  it('transforms multiple bare URLs', () => {
+    expect(transformBareUrls('links: https://a.com and https://b.com end')).toBe(
+      'links: [https://a.com](https://a.com) and [https://b.com](https://b.com) end'
+    );
+  });
+
+  it('does NOT re-link URLs already in markdown link syntax', () => {
+    const input = 'click [here](https://example.com) for details';
+    expect(transformBareUrls(input)).toBe(input);
+  });
+
+  it('does NOT re-link URLs in image syntax', () => {
+    const input = '![alt](https://example.com/img.png)';
+    expect(transformBareUrls(input)).toBe(input);
+  });
+
+  it('handles URL at start of string', () => {
+    expect(transformBareUrls('https://example.com is great')).toBe(
+      '[https://example.com](https://example.com) is great'
+    );
+  });
+
+  it('handles URL at end of string', () => {
+    expect(transformBareUrls('visit https://example.com')).toBe(
+      'visit [https://example.com](https://example.com)'
+    );
+  });
+
+  it('strips trailing period from URL', () => {
+    expect(transformBareUrls('See https://example.com.')).toBe(
+      'See [https://example.com](https://example.com).'
+    );
+  });
+
+  it('strips trailing comma from URL', () => {
+    expect(transformBareUrls('links: https://a.com, https://b.com')).toBe(
+      'links: [https://a.com](https://a.com), [https://b.com](https://b.com)'
+    );
+  });
+
+  it('handles URLs with paths and query params', () => {
+    const url = 'https://docs.example.com/api/v1?key=value&foo=bar#section';
+    expect(transformBareUrls(`see ${url} for docs`)).toBe(
+      `see [${url}](${url}) for docs`
+    );
+  });
+
+  it('handles Wikipedia-style URLs with balanced parens', () => {
+    const url = 'https://en.wikipedia.org/wiki/Logseq_(software)';
+    expect(transformBareUrls(`about ${url} here`)).toBe(
+      `about [${url}](${url}) here`
+    );
+  });
+});

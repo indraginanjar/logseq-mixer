@@ -502,6 +502,40 @@ export function transformCheckboxes(input: string): string {
   return transformed;
 }
 
+/**
+ * Transform bare http/https URLs into markdown links so they become clickable.
+ * Skips URLs already inside markdown link syntax: [text](url) or ![alt](url)
+ */
+export function transformBareUrls(input: string): string {
+  // Match bare URLs not preceded by ]( which would indicate they're already a markdown link target
+  return input.replace(
+    /(?<!\]\()(?<!\()(?<!")(https?:\/\/[^\s<>"{}|\\^`\]]+)/gi,
+    (match, url: string) => {
+      // Clean trailing punctuation that's likely not part of the URL
+      let cleanUrl = url;
+      // Strip trailing punctuation, but respect balanced parentheses (Wikipedia URLs)
+      const trailingMatch = /[.,;:!?]+$/.exec(cleanUrl);
+      let suffix = '';
+      if (trailingMatch) {
+        cleanUrl = cleanUrl.slice(0, -trailingMatch[0].length);
+        suffix = trailingMatch[0];
+      }
+      // Handle trailing ) — only strip if parens are unbalanced
+      while (cleanUrl.endsWith(')')) {
+        const openCount = (cleanUrl.match(/\(/g) || []).length;
+        const closeCount = (cleanUrl.match(/\)/g) || []).length;
+        if (closeCount > openCount) {
+          suffix = ')' + suffix;
+          cleanUrl = cleanUrl.slice(0, -1);
+        } else {
+          break;
+        }
+      }
+      return `[${cleanUrl}](${cleanUrl})${suffix}`;
+    }
+  );
+}
+
 const processMarkdownContent = (text: string) => {
   let processed = text;
   processed = transformTaskMarkers(processed);
@@ -510,6 +544,7 @@ const processMarkdownContent = (text: string) => {
   processed = transformBlockAnnotations(processed);
   processed = transformBlockRefs(processed);
   processed = transformPageLinks(processed);
+  processed = transformBareUrls(processed);
   return processed;
 };
 
