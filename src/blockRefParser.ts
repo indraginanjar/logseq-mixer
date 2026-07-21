@@ -62,3 +62,39 @@ export function transformToMarkdownLinks(input: string): string {
     return `[block:${uuid}](logseq://block/${uuid})`;
   });
 }
+
+/**
+ * Matches [block:uuid] annotations that the LLM may echo from RAG context.
+ * Does NOT match already-linked forms like [block:uuid](logseq://block/uuid).
+ */
+const BRACKET_BLOCK_ANNOTATION_REGEX = /\[block:([0-9a-f][0-9a-f-]*[0-9a-f])\](?!\()/gi;
+
+/**
+ * Matches bare block:uuid references (not inside brackets or already linked).
+ * Uses a negative lookbehind to skip already-bracketed [block:uuid] and linked [block:uuid](...).
+ */
+const BARE_BLOCK_REF_REGEX = /(?<!\[)block:([0-9a-f][0-9a-f-]*[0-9a-f])(?!\]|\()/gi;
+
+/**
+ * Transform leaked block annotations in LLM responses into clickable markdown links.
+ *
+ * The RAG context stores blocks with [block:uuid] annotations. LLMs sometimes echo
+ * these annotations verbatim instead of using the instructed ((uuid)) citation format.
+ * This transformer catches both patterns:
+ *
+ * 1. [block:uuid] → [block:uuid](logseq://block/uuid)
+ * 2. bare block:uuid → [block:uuid](logseq://block/uuid)
+ *
+ * Already-linked references (e.g., [block:uuid](logseq://block/uuid)) are left untouched.
+ */
+export function transformBlockAnnotations(input: string): string {
+  // First pass: convert [block:uuid] (not already linked) to markdown links
+  let result = input.replaceAll(BRACKET_BLOCK_ANNOTATION_REGEX, (_match, uuid: string) => {
+    return `[block:${uuid}](logseq://block/${uuid})`;
+  });
+  // Second pass: convert bare block:uuid (not inside brackets) to markdown links
+  result = result.replaceAll(BARE_BLOCK_REF_REGEX, (_match, uuid: string) => {
+    return `[block:${uuid}](logseq://block/${uuid})`;
+  });
+  return result;
+}

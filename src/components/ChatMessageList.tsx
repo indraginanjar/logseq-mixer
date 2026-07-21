@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { transformToMarkdownLinks as transformBlockRefs } from '../blockRefParser';
+import { transformToMarkdownLinks as transformBlockRefs, transformBlockAnnotations } from '../blockRefParser';
 import { transformToMarkdownLinks as transformPageLinks } from '../pageLinkParser';
 import { wrapCliInCodeBlocks } from '../utils/cliCodeBlockDetector';
 import { detectCsvBlocks, mightContainCsv } from '../utils/csvDetector';
@@ -507,6 +507,7 @@ const processMarkdownContent = (text: string) => {
   processed = transformTaskMarkers(processed);
   processed = transformCheckboxes(processed);
   processed = transformTags(processed);
+  processed = transformBlockAnnotations(processed);
   processed = transformBlockRefs(processed);
   processed = transformPageLinks(processed);
   return processed;

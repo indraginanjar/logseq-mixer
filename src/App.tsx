@@ -136,6 +136,8 @@ const HeaderRight = styled('div', {
   display: 'flex',
   alignItems: 'center',
   gap: '4px',
+  overflow: 'hidden',
+  minWidth: 0,
 });
 
 const HeaderButton = styled('button', {
@@ -151,6 +153,8 @@ const HeaderButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
   gap: '4px',
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
   '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
 });
 
@@ -167,6 +171,12 @@ const ModelSelect = styled('select', {
   outline: 'none',
   fontFamily: '$sans',
   appearance: 'none',
+  maxWidth: '140px',
+  minWidth: 0,
+  flexShrink: 1,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
   backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'right 6px center',
@@ -398,6 +408,7 @@ const ToolbarRow = styled('div', {
   justifyContent: 'space-between',
   gap: '6px',
   marginTop: '8px',
+  flexWrap: 'wrap',
 });
 
 const ImageButton = styled('button', {

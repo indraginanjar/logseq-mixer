@@ -1,6 +1,6 @@
 import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { parse, serialize, transformToMarkdownLinks } from './blockRefParser';
+import { parse, serialize, transformToMarkdownLinks, transformBlockAnnotations } from './blockRefParser';
 import { transformToMarkdownLinks as transformPageLinks } from './pageLinkParser';
 
 describe('parse', () => {
@@ -394,5 +394,108 @@ describe('Feature: clickable-block-references, Property 6: Parser Non-Interferen
       ),
       { numRuns: 100 }
     );
+  });
+});
+
+
+describe('transformBlockAnnotations', () => {
+  it('returns empty string for empty input', () => {
+    expect(transformBlockAnnotations('')).toBe('');
+  });
+
+  it('returns text unchanged when no block annotations present', () => {
+    expect(transformBlockAnnotations('hello world')).toBe('hello world');
+  });
+
+  // --- [block:uuid] bracketed annotation tests ---
+
+  it('transforms [block:uuid] to markdown link', () => {
+    expect(transformBlockAnnotations('see [block:ab-cd] here')).toBe(
+      'see [block:ab-cd](logseq://block/ab-cd) here'
+    );
+  });
+
+  it('transforms [block:uuid] with full UUID format', () => {
+    const uuid = '69d2280d-05f5-44c3-81e6-a9874f382e40';
+    expect(transformBlockAnnotations(`see [block:${uuid}] here`)).toBe(
+      `see [block:${uuid}](logseq://block/${uuid}) here`
+    );
+  });
+
+  it('transforms multiple [block:uuid] annotations', () => {
+    expect(transformBlockAnnotations('[block:aa-bb] and [block:cc-dd]')).toBe(
+      '[block:aa-bb](logseq://block/aa-bb) and [block:cc-dd](logseq://block/cc-dd)'
+    );
+  });
+
+  it('does NOT double-link already-linked [block:uuid](logseq://block/uuid)', () => {
+    const input = '[block:ab-cd](logseq://block/ab-cd)';
+    expect(transformBlockAnnotations(input)).toBe(input);
+  });
+
+  // --- bare block:uuid tests ---
+
+  it('transforms bare block:uuid to markdown link', () => {
+    expect(transformBlockAnnotations('see block:ab-cd here')).toBe(
+      'see [block:ab-cd](logseq://block/ab-cd) here'
+    );
+  });
+
+  it('transforms bare block:uuid with full UUID format', () => {
+    const uuid = '69d2280d-05f5-44c3-81e6-a9874f382e40';
+    expect(transformBlockAnnotations(`reference block:${uuid} in text`)).toBe(
+      `reference [block:${uuid}](logseq://block/${uuid}) in text`
+    );
+  });
+
+  it('transforms bare block:uuid at start of string', () => {
+    expect(transformBlockAnnotations('block:ab-cd is relevant')).toBe(
+      '[block:ab-cd](logseq://block/ab-cd) is relevant'
+    );
+  });
+
+  it('transforms bare block:uuid at end of string', () => {
+    expect(transformBlockAnnotations('see block:ab-cd')).toBe(
+      'see [block:ab-cd](logseq://block/ab-cd)'
+    );
+  });
+
+  it('does NOT transform block:uuid that is already inside brackets', () => {
+    // After first pass converts [block:uuid] → [block:uuid](logseq://...), the bare
+    // regex should not match "block:uuid](" since the ] stops it
+    const input = '[block:ab-cd](logseq://block/ab-cd)';
+    expect(transformBlockAnnotations(input)).toBe(input);
+  });
+
+  // --- Mixed patterns ---
+
+  it('handles mix of [block:uuid] and bare block:uuid in same text', () => {
+    const input = 'check [block:aa-bb] and also block:cc-dd for details';
+    expect(transformBlockAnnotations(input)).toBe(
+      'check [block:aa-bb](logseq://block/aa-bb) and also [block:cc-dd](logseq://block/cc-dd) for details'
+    );
+  });
+
+  it('leaves non-UUID content in brackets unchanged', () => {
+    expect(transformBlockAnnotations('see [block:not-a-uuid-xyz] here')).toBe(
+      'see [block:not-a-uuid-xyz] here'
+    );
+  });
+
+  it('leaves regular markdown links unchanged', () => {
+    const input = 'click [here](https://example.com)';
+    expect(transformBlockAnnotations(input)).toBe(input);
+  });
+
+  it('handles text with no hex content after block:', () => {
+    // "block:hello" should not match since 'hello' doesn't match hex pattern
+    expect(transformBlockAnnotations('see block:hello here')).toBe('see block:hello here');
+  });
+
+  it('idempotent: applying twice produces same result', () => {
+    const input = 'check [block:aa-bb] and block:cc-dd here';
+    const once = transformBlockAnnotations(input);
+    const twice = transformBlockAnnotations(once);
+    expect(twice).toBe(once);
   });
 });
