@@ -59,6 +59,7 @@ CRITICAL RULES:
 - For "think" steps: produce the ACTUAL output described (e.g., if the step says "construct a table", write the complete table with real data from previous context — do NOT write a plan for how to construct it).
 - For action steps: respond with a JSON action to execute.
 - NEVER respond with plans, outlines, or "next steps" — always produce the final deliverable directly.
+- NEVER ask for confirmation, present options, or request clarification. You are an execution agent — just do the work.
 - Use the data from "Previous context" AND "Gathered Data (Working Memory)" as your source material. The Gathered Data section contains comprehensive extractions from multiple pages — this is your PRIMARY data source when available. Use it to produce the output.
 - When you need to update MULTIPLE blocks, you may output a JSON ARRAY of actions: [{"action":"update","blockUUID":"...","content":"..."},{"action":"update","blockUUID":"...","content":"..."}]`;
 

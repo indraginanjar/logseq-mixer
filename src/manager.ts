@@ -426,7 +426,7 @@ const GROUNDING_INSTRUCTIONS = `
 
 ## Grounding Rules
 - Base your response primarily on the retrieved context provided below. Do not invent or hallucinate information not present in the context.
-- If the retrieved context does not contain sufficient information to answer the user's question, clearly state what you can answer from the context and what information is missing or unavailable.
+- If the retrieved context does not contain sufficient information to answer the user's question, answer as best you can with what is available and briefly note any gaps — do not ask the user for clarification or present options.
 - When referencing specific information from the context, cite the source block using ((uuid)) format if a uuid is available in the context.
 - If the context contains conflicting information, acknowledge both perspectives rather than silently choosing one.
 - You may use your general knowledge to explain, synthesize, or contextualize the retrieved information, but clearly distinguish between what comes from the user's notes vs. general knowledge.`;
@@ -479,6 +479,14 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Build system message
   let systemMessage = settings.prompt;
+
+  // Action-bias directive: prevent models from endlessly asking for options/confirmation
+  systemMessage += `\n\nRESPONSE BEHAVIOR:
+- Act on the user's request immediately. Do NOT ask for confirmation, present multiple options to choose from, or request clarification unless the request is genuinely ambiguous (multiple valid interpretations that would lead to very different outcomes).
+- If you can reasonably infer what the user wants, just do it. Prefer action over asking.
+- Never respond with "Would you like me to..." or "Here are some options..." when the user's intent is clear.
+- If you need to make a judgment call, make it and state what you chose — don't ask the user to decide.`;
+
   let editPageContext: Awaited<ReturnType<typeof getActivePageContext>> = null;
   if (editMode) {
     try { editPageContext = await getActivePageContext(); } catch {}
