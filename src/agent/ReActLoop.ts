@@ -30,7 +30,9 @@ const REACT_INSTRUCTION = `\n\nWhen using tools to solve problems:
 2. ACT: Call the appropriate tool(s).
 3. OBSERVE: Analyze the results.
 4. DECIDE: Either call more tools for additional information, or provide your final answer.
-You may chain multiple tool calls iteratively until you have enough information to answer fully.`;
+You may chain multiple tool calls iteratively until you have enough information to answer fully.
+
+IMPORTANT: Start calling tools IMMEDIATELY. Do NOT write out a plan of what you intend to do, do NOT ask the user for permission, and do NOT present options. The user has already told you what to do — execute it by calling tools right now.`;
 
 /**
  * Run a ReAct (Reason → Act → Observe) loop.

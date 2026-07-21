@@ -481,11 +481,13 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   let systemMessage = settings.prompt;
 
   // Action-bias directive: prevent models from endlessly asking for options/confirmation
-  systemMessage += `\n\nRESPONSE BEHAVIOR:
-- Act on the user's request immediately. Do NOT ask for confirmation, present multiple options to choose from, or request clarification unless the request is genuinely ambiguous (multiple valid interpretations that would lead to very different outcomes).
-- If you can reasonably infer what the user wants, just do it. Prefer action over asking.
-- Never respond with "Would you like me to..." or "Here are some options..." when the user's intent is clear.
-- If you need to make a judgment call, make it and state what you chose — don't ask the user to decide.`;
+  // This is prepended early but the final reinforcement is added at the very end (see below)
+  systemMessage += `\n\nRESPONSE BEHAVIOR (MANDATORY):
+- Execute the user's request immediately. Do NOT narrate what you plan to do, ask for confirmation, present options, or request clarification.
+- If the user tells you to do something, DO IT. Do not describe the steps you would take — take them.
+- Never say "Would you like me to...", "Here are some options...", "If you want me to proceed...", "I can do X if you'd like", or similar hedging. The user already told you what to do.
+- Complex or multi-step requests are NOT ambiguous — they are detailed instructions. Follow them.
+- If tools are available, call them immediately to accomplish the task. Do not explain what tools you would use — use them.`;
 
   let editPageContext: Awaited<ReturnType<typeof getActivePageContext>> = null;
   if (editMode) {
