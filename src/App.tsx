@@ -1752,10 +1752,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <ToolbarButton onClick={handleOpenDbPanel} title="Database">🗄️</ToolbarButton>
               <ToolbarButton onClick={handleOpenMcpPanel} title="MCP Servers">🔌</ToolbarButton>
               <ToolbarButton onClick={handleOpenMemoryPanel} title="Memory">
-                🧠{memoryCount > 0 && <span style={{ fontSize: '10px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', padding: '1px 5px', marginLeft: '2px' }}>{memoryCount}</span>}{isSummarizing && <span style={{ marginLeft: '2px' }}>⏳</span>}
+                🧠{memoryCount > 0 && <span style={{ fontSize: '10px', opacity: 0.7 }}>{memoryCount}</span>}{isSummarizing && <span style={{ marginLeft: '2px' }}>⏳</span>}
               </ToolbarButton>
               <ToolbarButton onClick={handleOpenSkillPanel} title="Skills">
-                🧩{skillCount > 0 && <span style={{ fontSize: '10px', backgroundColor: '#8b5cf6', color: 'white', borderRadius: '50%', padding: '1px 5px', marginLeft: '2px' }}>{skillCount}</span>}
+                🧩{skillCount > 0 && <span style={{ fontSize: '10px', opacity: 0.7 }}>{skillCount}</span>}
               </ToolbarButton>
               <ToolbarButton
                 variant={buttonProps.variant}
