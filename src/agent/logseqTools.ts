@@ -5,7 +5,7 @@
 
 import { activateSkill } from '../manager';
 import { importFromGitHub } from '../skills/skillImporter';
-import { blockContentToSkill } from '../skills/skillParser';
+import { blockContentToSkill, validateSkillName } from '../skills/skillParser';
 import { saveSkill } from '../skills/SkillStore';
 
 export const LOGSEQ_TOOLS = [
@@ -134,15 +134,16 @@ export const SKILL_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'mixer_create_skill',
-      description: 'Create a new skill from a Logseq block. Reads the block content and saves it as a skill page under Mixer/Skills/.',
+      description: 'Create a new skill and save it as a Logseq page under Mixer/Skills/. Provide EITHER a blockUUID to convert an existing block into a skill, OR a body with the skill instructions to create one from scratch.',
       parameters: {
         type: 'object',
         properties: {
-          blockUUID: { type: 'string', description: 'UUID of the Logseq block to convert into a skill' },
           name: { type: 'string', description: 'Skill name (lowercase, hyphens, 1-64 chars)' },
           description: { type: 'string', description: 'What the skill does and when to use it (max 1024 chars)' },
+          body: { type: 'string', description: 'The full skill instructions (markdown). Use this to create a skill from scratch without a block.' },
+          blockUUID: { type: 'string', description: 'UUID of a Logseq block to convert into a skill. If provided, the block content becomes the skill body (body parameter is ignored).' },
         },
-        required: ['blockUUID', 'name', 'description'],
+        required: ['name', 'description'],
       },
     },
   },
@@ -229,27 +230,42 @@ export async function executeLogseqTool(name: string, args: any): Promise<string
       return `✅ Skill "${result.skill.name}" imported successfully.\nDescription: ${result.skill.description}\nPage: ${result.skill.pageName}`;
     }
     case 'mixer_create_skill': {
-      const block = await logseq.Editor.getBlock(args.blockUUID);
-      if (!block) return `Block "${args.blockUUID}" not found.`;
-      // Collect block content including children
-      let content = block.content || '';
-      if (block.children?.length) {
-        const childBlocks = await logseq.Editor.getPageBlocksTree(block.uuid);
-        // childBlocks is the block itself with children — extract text
-        const lines: string[] = [content];
-        const collectChildren = (children: any[]) => {
-          for (const child of children) {
-            if (child.content) lines.push(child.content);
-            if (child.children?.length) collectChildren(child.children);
-          }
-        };
-        if (childBlocks?.[0]?.children) collectChildren(childBlocks[0].children);
-        content = lines.join('\n');
+      const nameValidation = validateSkillName(args.name);
+      if (!nameValidation.valid) return `Failed to create skill: ${nameValidation.error}`;
+      if (!args.description?.trim()) return 'Failed to create skill: description is required.';
+
+      let content: string;
+
+      if (args.blockUUID) {
+        // Create from block
+        const block = await logseq.Editor.getBlock(args.blockUUID);
+        if (!block) return `Block "${args.blockUUID}" not found.`;
+        content = block.content || '';
+        if (block.children?.length) {
+          const childBlocks = await logseq.Editor.getPageBlocksTree(block.uuid);
+          const lines: string[] = [content];
+          const collectChildren = (children: any[]) => {
+            for (const child of children) {
+              if (child.content) lines.push(child.content);
+              if (child.children?.length) collectChildren(child.children);
+            }
+          };
+          if (childBlocks?.[0]?.children) collectChildren(childBlocks[0].children);
+          content = lines.join('\n');
+        }
+      } else if (args.body?.trim()) {
+        // Create from provided body
+        content = args.body.trim();
+      } else {
+        return 'Failed to create skill: provide either a blockUUID or a body with instructions.';
       }
+
+      if (!content.trim()) return 'Failed to create skill: content is empty.';
+
       const skill = blockContentToSkill(content, args.name, args.description);
       if (!skill) return `Failed to create skill: invalid name or empty content.`;
       await saveSkill(skill);
-      return `✅ Skill "${skill.name}" created from block.\nDescription: ${skill.description}\nPage: ${skill.pageName}`;
+      return `✅ Skill "${skill.name}" created successfully.\nDescription: ${skill.description}\nPage: ${skill.pageName}`;
     }
     default:
       return `Unknown Logseq tool: ${name}`;
