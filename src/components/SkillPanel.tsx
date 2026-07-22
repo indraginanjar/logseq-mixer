@@ -261,6 +261,13 @@ export default function SkillPanel({ onClose, onCountChange }: SkillPanelProps) 
   const loadSkills = useCallback(async () => {
     try {
       const all = await loadAllSkills();
+      // Sort: built-in first, then alphabetical
+      all.sort((a, b) => {
+        const aBuiltin = a.source === 'builtin' ? 0 : 1;
+        const bBuiltin = b.source === 'builtin' ? 0 : 1;
+        if (aBuiltin !== bBuiltin) return aBuiltin - bBuiltin;
+        return a.name.localeCompare(b.name);
+      });
       setSkills(all);
       onCountChange?.(all.filter(s => s.enabled).length);
     } catch (err) {
@@ -353,28 +360,37 @@ export default function SkillPanel({ onClose, onCountChange }: SkillPanelProps) 
           </EmptyState>
         )}
 
-        {skills.map(skill => (
-          <SkillCard key={skill.name}>
+        {skills.map(skill => {
+          const isBuiltin = skill.source === 'builtin';
+          return (
+          <SkillCard key={skill.name} css={isBuiltin ? { borderColor: '$violet6', backgroundColor: '$violet2' } : undefined}>
             <SkillHeader>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                 <SkillName>{skill.name}</SkillName>
-                {skill.source && <SourceBadge>{skill.source.startsWith('github:') ? '📦 GitHub' : '📝 Local'}</SourceBadge>}
+                {isBuiltin && <SourceBadge css={{ backgroundColor: '$violet3', color: '$violet11' }}>⚙️ Built-in</SourceBadge>}
+                {!isBuiltin && skill.source?.startsWith('github:') && <SourceBadge>📦 GitHub</SourceBadge>}
+                {!isBuiltin && skill.source && !skill.source.startsWith('github:') && !isBuiltin && <SourceBadge>📝 Local</SourceBadge>}
+                {!isBuiltin && !skill.source && <SourceBadge>📝 Local</SourceBadge>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                 <ToggleSwitch on={skill.enabled} onClick={() => handleToggle(skill.name, skill.enabled)} />
-                {deletingName === skill.name ? (
-                  <>
-                    <DeleteBtn onClick={() => handleDelete(skill.name)}>Confirm</DeleteBtn>
-                    <DeleteBtn onClick={() => setDeletingName(null)} style={{ color: 'inherit' }}>Cancel</DeleteBtn>
-                  </>
-                ) : (
-                  <DeleteBtn onClick={() => setDeletingName(skill.name)}>🗑️</DeleteBtn>
+                {!isBuiltin && (
+                  deletingName === skill.name ? (
+                    <>
+                      <DeleteBtn onClick={() => handleDelete(skill.name)}>Confirm</DeleteBtn>
+                      <DeleteBtn onClick={() => setDeletingName(null)} style={{ color: 'inherit' }}>Cancel</DeleteBtn>
+                    </>
+                  ) : (
+                    <DeleteBtn onClick={() => setDeletingName(skill.name)}>🗑️</DeleteBtn>
+                  )
                 )}
               </div>
             </SkillHeader>
             <SkillDesc>{skill.description}</SkillDesc>
+            {isBuiltin && <div style={{ fontSize: '10px', color: '#8b5cf6', marginTop: '2px' }}>Auto-managed by Mixer · updated with plugin versions</div>}
           </SkillCard>
-        ))}
+          );
+        })}
 
         <Section>
           <SectionTitle>📥 Import from GitHub</SectionTitle>
