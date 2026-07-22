@@ -266,6 +266,25 @@ if (funcName.startsWith('logseq_') || funcName.startsWith('mixer_') || funcName 
 
 ---
 
+## Built-in Skills
+
+`src/skills/builtinHelpSkill.ts` provides auto-provisioned skills:
+
+### mixer-help
+
+- **Created by:** `ensureBuiltinHelpSkill()` called in App.tsx useEffect on mount
+- **Version tracked:** `BUILTIN_SKILL_VERSION` constant — only recreated when version changes
+- **Content:** ~4000 tokens of comprehensive Mixer documentation
+- **Source field:** `builtin` (distinguishes from user-created or imported)
+
+Initialization flow:
+1. App mounts → `ensureBuiltinHelpSkill()` called
+2. Checks if `Mixer/Skills/mixer-help` page exists via `getSkill('mixer-help')`
+3. If missing or version mismatch → `saveSkill()` creates/updates the page
+4. Skill appears in catalog on next query
+
+---
+
 ## Testing
 
 Unit tests in `src/skills/`:

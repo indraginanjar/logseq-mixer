@@ -234,6 +234,28 @@ The `mixer_run_subtask` tool:
 
 ---
 
+## Built-in Skills
+
+Mixer ships with a built-in skill that's automatically created on first launch:
+
+### mixer-help
+
+**Description:** Answers questions about Logseq Mixer features, commands, settings, workflows, and troubleshooting.
+
+**Activates when:** You ask anything about how to use Mixer — "how do I set up Ollama?", "what does the 🤖 button do?", "how do skills work?", etc.
+
+**What it contains:** Comprehensive reference covering the entire Mixer interface, all slash commands, provider setup, agent mode, memory, skills, MCP tools, keyboard shortcuts, and troubleshooting.
+
+**Manual activation:** `/skill mixer-help`
+
+**Notes:**
+- Auto-created under `Mixer/Skills/mixer-help` on plugin startup
+- Updated automatically when Mixer is updated (version-tracked)
+- You can edit the page to add custom notes, but changes may be overwritten on next version bump
+- Disable via the 🧩 Skills panel toggle if you don't want it in the catalog
+
+---
+
 ## Settings
 
 | Setting | Default | Description |
