@@ -255,6 +255,7 @@ Click the **Re-Index** button in the chat panel. Mixer will incrementally proces
 | [Getting Started](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/getting-started.md) | Installation, provider setup, first-time indexing |
 | [User Guide](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/user-guide.md) | UI walkthrough, settings reference, troubleshooting |
 | [Agentic AI](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/agentic-ai.md) | Agent capabilities, memory, autonomy modes |
+| [Agent Skills](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/skills.md) | Skills system, import from GitHub, creating and managing skills |
 | [MCP Tools](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/mcp-tools.md) | External tool setup and configuration |
 
 ### For Developers
@@ -264,6 +265,7 @@ Click the **Re-Index** button in the chat panel. Mixer will incrementally proces
 | [Architecture](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/architecture.md) | System overview, module map, data flow |
 | [Retrieval Pipeline](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/retrieval-pipeline.md) | Embedding, chunking, hybrid search, HNSW |
 | [Agent Internals](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/agent-internals.md) | ReAct loop, goal detection, self-correction |
+| [Skills System](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/skills-system.md) | Storage format, progressive disclosure, tool integration, subagent |
 | [MCP Protocol](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/mcp-protocol.md) | Transport layer, tool calling loop |
 
 ---

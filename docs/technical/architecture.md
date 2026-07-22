@@ -15,14 +15,18 @@ graph TD
     Manager --> Memory[Memory System]
     Manager --> ReAct[ReActLoop.ts]
     Manager --> LLM[LLMManager.ts — LiteLLM Interface]
+    Manager --> Skills[Skills System]
     
     AgentLoop --> GoalDetect[goalDetector.ts]
     AgentLoop --> ReAct
     AgentLoop --> Memory
     
-    ReAct --> LogseqTools[logseqTools.ts — 6 Built-in Tools]
+    ReAct --> LogseqTools[logseqTools.ts — Built-in Tools + Skills Tools]
     ReAct --> MCP[MCPManager.ts — External Tools]
     ReAct --> LLM
+    
+    Skills --> SkillStore[SkillStore.ts — Logseq Pages]
+    Skills --> SkillCatalog[skillCatalog.ts — Progressive Disclosure]
     
     MCP --> MCPClient[MCPClient.ts — SSE Connection]
     MCPClient --> SSEServer[External MCP Servers]

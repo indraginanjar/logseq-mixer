@@ -16,7 +16,7 @@ Click the Mixer toolbar icon in Logseq to open the chat panel:
 │  (Chat messages appear here)                         │
 │                                                      │
 ├──────────────────────────────────────────────────────┤
-│  [📇][✏️][🤖]              [🗄️][🔌][🧠][Re-Index]  │
+│  [📇][✏️][🤖]           [🗄️][🔌][🧠][🧩][Re-Index]  │
 │  📄 Page Name ▸ Block preview...                     │
 ├──────────────────────────────────────────────────────┤
 │  [📎]  Type your message...              [Send ▶]   │
@@ -59,6 +59,7 @@ These control what the AI *can do* in response to your messages.
 | **🗄️** | **Database Center** — Index stats (pages, chunks, DB size), export/import/clear actions |
 | **🔌** | **MCP Servers** — Manage external tool connections (web search, file system, browser) |
 | **🧠** | **Memory Manager** — View, edit, and delete stored memories. Badge shows memory count. |
+| **🧩** | **Skills Manager** — Enable/disable skills, import from GitHub, create new skills. Badge shows active skill count. See [Agent Skills](skills.md). |
 | **Re-Index** | Triggers incremental re-indexing. Only processes new/changed pages; automatically purges stale entries from deleted pages. Becomes "Stop" during active indexing. |
 
 ---
