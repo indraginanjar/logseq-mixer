@@ -149,7 +149,7 @@ export const SKILL_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'mixer_create_skill',
-      description: 'Create a new skill and save it as a Logseq page under Mixer/Skills/. Provide EITHER a blockUUID to convert an existing block into a skill, OR a body with the skill instructions to create one from scratch.',
+      description: 'Create a new skill and save it as a Logseq page under Mixer/Skills/. Use this when the user asks to "create a skill", "make a skill", or "save as a skill". The name will be auto-normalized (lowercased, spaces become hyphens). Provide a body with the skill instructions, OR a blockUUID to use existing block content.',
       parameters: {
         type: 'object',
         properties: {
@@ -261,7 +261,12 @@ export async function executeLogseqTool(name: string, args: any): Promise<string
       return `✅ Skill "${result.skill.name}" imported successfully.\nDescription: ${result.skill.description}\nPage: ${result.skill.pageName}`;
     }
     case 'mixer_create_skill': {
-      const nameValidation = validateSkillName(args.name);
+      // Auto-normalize name: lowercase, replace spaces/underscores with hyphens, strip invalid chars
+      let skillName = (args.name || '').toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
+      if (!skillName) return 'Failed to create skill: name is required.';
+      if (skillName.length > 64) skillName = skillName.slice(0, 64).replace(/-$/, '');
+
+      const nameValidation = validateSkillName(skillName);
       if (!nameValidation.valid) return `Failed to create skill: ${nameValidation.error}`;
       if (!args.description?.trim()) return 'Failed to create skill: description is required.';
 
@@ -293,7 +298,7 @@ export async function executeLogseqTool(name: string, args: any): Promise<string
 
       if (!content.trim()) return 'Failed to create skill: content is empty.';
 
-      const skill = blockContentToSkill(content, args.name, args.description);
+      const skill = blockContentToSkill(content, skillName, args.description);
       if (!skill) return `Failed to create skill: invalid name or empty content.`;
       await saveSkill(skill);
       return `✅ Skill "${skill.name}" created successfully.\nDescription: ${skill.description}\nPage: ${skill.pageName}`;
