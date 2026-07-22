@@ -560,6 +560,12 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     systemMessage += GROUNDING_INSTRUCTIONS;
   }
 
+  // Inject activated skill instructions directly into system prompt (strong adherence)
+  if (skillActivationContext) {
+    systemMessage += '\n\n## Active Skill Instructions (FOLLOW THESE)\n' + skillActivationContext;
+    console.info(`[handleQuery] Skill activation context injected: ${countTokens(skillActivationContext)} tokens`);
+  }
+
   // Calculate token budgets
   const systemTokens = countTokens(systemMessage);
   const contextLimit = getContextLimitForModel(settings.selectedModel);
@@ -630,9 +636,6 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   }
   if (editContextText) {
     contextBlock += "\n## Edit Target\n" + editContextText + "\n";
-  }
-  if (skillActivationContext) {
-    contextBlock += "\n## Activated Skill Instructions\n" + skillActivationContext + "\n";
   }
 
   // --- Assemble user message (clean — just the user's request + image notes) ---
