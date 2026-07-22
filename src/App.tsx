@@ -4,6 +4,7 @@ import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
 import SkillPanel from './components/SkillPanel';
 import { ensureBuiltinHelpSkill } from './skills/builtinHelpSkill';
+import { loadAllSkills } from './skills/SkillStore';
 import { MCPManager } from 'mcp/MCPManager';
 import { MemoryStore } from './memory/MemoryStore';
 import { setMemoryStore, getLastMemorySaved, setOnThoughtCallback } from './manager';
@@ -754,7 +755,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   // Initialize built-in skills on mount
   useEffect(() => {
-    ensureBuiltinHelpSkill();
+    ensureBuiltinHelpSkill().then(() => {
+      // Refresh skill count after built-in skills are ensured
+      loadAllSkills().then(skills => {
+        setSkillCount(skills.filter(s => s.enabled).length);
+      }).catch(() => {});
+    });
   }, []);
 
   // Track active page name

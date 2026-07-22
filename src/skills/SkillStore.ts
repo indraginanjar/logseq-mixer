@@ -49,7 +49,12 @@ async function loadSkillFromPage(page: any): Promise<SkillEntry | null> {
 
   // First block typically contains properties
   const propsBlock = blocks[0];
-  const properties = propsBlock.properties ?? {};
+  // Try Logseq's parsed properties first, fall back to parsing from content
+  let properties = propsBlock.properties ?? {};
+  if ((!properties.name && !properties.description) && propsBlock.content) {
+    // Logseq may not have parsed properties yet — extract from content manually
+    properties = parsePropertiesFromContent(propsBlock.content);
+  }
 
   const name = properties.name ?? extractNameFromPageName(page.name);
   const description = properties.description ?? '';
@@ -107,6 +112,21 @@ function tryParseJson(value: string): Record<string, string> | undefined {
 }
 
 /**
+ * Parse properties from block content text (fallback when Logseq hasn't parsed them yet).
+ * Handles format: "key:: value\nkey2:: value2"
+ */
+function parsePropertiesFromContent(content: string): Record<string, string> {
+  const properties: Record<string, string> = {};
+  for (const line of content.split('\n')) {
+    const match = line.match(/^([a-zA-Z0-9_-]+)::\s*(.*)$/);
+    if (match) {
+      properties[match[1].toLowerCase()] = match[2].trim();
+    }
+  }
+  return properties;
+}
+
+/**
  * Get the catalog of enabled skills (name + description only).
  */
 export async function getSkillCatalog(): Promise<SkillCatalogEntry[]> {
@@ -135,9 +155,16 @@ export async function saveSkill(skill: Omit<SkillEntry, 'pageName'> & { pageName
   let page = await logseq.Editor.getPage(pageName);
   if (!page) {
     page = await logseq.Editor.createPage(pageName, {}, { journal: false, redirect: false });
+    // Wait briefly for Logseq to initialize the page's block tree
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
-  const blocks = await logseq.Editor.getPageBlocksTree(pageName);
+  let blocks = await logseq.Editor.getPageBlocksTree(pageName);
+  // Retry once if blocks not ready (race condition on fresh pages)
+  if (!blocks || blocks.length === 0) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    blocks = await logseq.Editor.getPageBlocksTree(pageName);
+  }
   if (!blocks || blocks.length === 0) return pageName;
 
   // Build properties string
