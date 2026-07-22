@@ -3,34 +3,9 @@ import { styled } from '../stitches.config';
 
 const Wrapper = styled('div', {
   position: 'relative',
-  maxWidth: '140px',
-  minWidth: 0,
+  maxWidth: '160px',
+  minWidth: '80px',
   flexShrink: 1,
-});
-
-const Trigger = styled('button', {
-  background: 'transparent',
-  border: '1px solid $slate6',
-  borderRadius: '6px',
-  padding: '4px 24px 4px 8px',
-  cursor: 'pointer',
-  color: '$slate10',
-  fontSize: '12px',
-  fontWeight: 500,
-  transition: 'all 0.15s',
-  outline: 'none',
-  fontFamily: '$sans',
-  width: '100%',
-  textAlign: 'left',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 6px center',
-  backgroundSize: '12px',
-  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
-  '&:focus': { borderColor: '$blue8' },
 });
 
 const SearchTrigger = styled('input', {
@@ -39,13 +14,14 @@ const SearchTrigger = styled('input', {
   borderRadius: '6px',
   padding: '4px 24px 4px 8px',
   cursor: 'pointer',
-  color: '$slate10',
+  color: '$highContrast',
   fontSize: '12px',
   fontWeight: 500,
   transition: 'all 0.15s',
   outline: 'none',
   fontFamily: '$sans',
   width: '100%',
+  boxSizing: 'border-box',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -53,9 +29,9 @@ const SearchTrigger = styled('input', {
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'right 6px center',
   backgroundSize: '12px',
-  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
+  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8' },
   '&:focus': { borderColor: '$blue8', cursor: 'text' },
-  '&::placeholder': { color: '$slate8' },
+  '&::placeholder': { color: '$slate9' },
 });
 
 const Dropdown = styled('div', {
