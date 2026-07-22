@@ -33,6 +33,31 @@ const Trigger = styled('button', {
   '&:focus': { borderColor: '$blue8' },
 });
 
+const SearchTrigger = styled('input', {
+  background: 'transparent',
+  border: '1px solid $slate6',
+  borderRadius: '6px',
+  padding: '4px 24px 4px 8px',
+  cursor: 'pointer',
+  color: '$slate10',
+  fontSize: '12px',
+  fontWeight: 500,
+  transition: 'all 0.15s',
+  outline: 'none',
+  fontFamily: '$sans',
+  width: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 6px center',
+  backgroundSize: '12px',
+  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
+  '&:focus': { borderColor: '$blue8', cursor: 'text' },
+  '&::placeholder': { color: '$slate8' },
+});
+
 const Dropdown = styled('div', {
   position: 'absolute',
   top: '100%',
@@ -46,19 +71,6 @@ const Dropdown = styled('div', {
   zIndex: 200,
   overflow: 'hidden',
   minWidth: '180px',
-});
-
-const SearchInput = styled('input', {
-  width: '100%',
-  padding: '6px 8px',
-  border: 'none',
-  borderBottom: '1px solid $slate6',
-  backgroundColor: '$elevation0',
-  color: '$highContrast',
-  fontSize: '12px',
-  fontFamily: '$sans',
-  outline: 'none',
-  '&::placeholder': { color: '$slate8' },
 });
 
 const OptionList = styled('div', {
@@ -113,6 +125,23 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
     setSearch('');
   }, [onChange]);
 
+  const handleFocus = () => {
+    setOpen(true);
+    setSearch('');
+  };
+
+  const handleBlur = (e: React.FocusEvent) => {
+    // Don't close if clicking inside the dropdown
+    if (wrapperRef.current?.contains(e.relatedTarget as Node)) return;
+    // Delay to allow click on option to register
+    setTimeout(() => {
+      if (!wrapperRef.current?.contains(document.activeElement)) {
+        setOpen(false);
+        setSearch('');
+      }
+    }, 150);
+  };
+
   // Close on outside click
   useEffect(() => {
     if (!open) return;
@@ -126,48 +155,40 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  // Focus search input when dropdown opens
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  }, [open]);
-
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setOpen(false);
       setSearch('');
+      inputRef.current?.blur();
     } else if (e.key === 'Enter' && filtered.length > 0) {
       handleSelect(filtered[0]);
+      inputRef.current?.blur();
     }
   };
 
   return (
     <Wrapper ref={wrapperRef}>
-      <Trigger
-        onClick={() => setOpen(!open)}
-        title={value}
+      <SearchTrigger
+        ref={inputRef}
+        value={open ? search : value}
+        placeholder={value}
+        onChange={e => { setSearch(e.target.value); if (!open) setOpen(true); }}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         aria-label="Select Model"
-      >
-        {value}
-      </Trigger>
+        title={value}
+      />
       {open && (
         <Dropdown>
-          <SearchInput
-            ref={inputRef}
-            placeholder="Search models..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
           <OptionList>
             {filtered.length === 0 && <NoResults>No models found</NoResults>}
             {filtered.map(model => (
               <Option
                 key={model}
                 active={model === value}
-                onClick={() => handleSelect(model)}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(model); }}
                 title={model}
               >
                 {model}
