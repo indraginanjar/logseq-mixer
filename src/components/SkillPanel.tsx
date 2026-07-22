@@ -350,6 +350,9 @@ export default function SkillPanel({ onClose, onCountChange }: SkillPanelProps) 
         <CloseBtn onClick={onClose}>✕</CloseBtn>
       </Header>
       <Content>
+        <div style={{ fontSize: '11px', color: '#6b7280', padding: '4px 0 10px', borderBottom: '1px solid var(--colors-slate6, #e2e8f0)', marginBottom: '10px' }}>
+          💡 Use <code style={{ fontSize: '11px', backgroundColor: 'rgba(0,0,0,0.06)', padding: '1px 4px', borderRadius: '3px' }}>/skill skill-name</code> in chat to activate a skill directly.
+        </div>
         {skills.length === 0 && (
           <EmptyState>
             <div style={{ fontSize: '24px', marginBottom: '8px' }}>🧩</div>
