@@ -125,6 +125,13 @@ const settings: SettingSchemaDesc[] = [
     default: 10,
   },
   {
+    key: 'skillsEnabled',
+    type: 'boolean',
+    title: 'Enable Agent Skills',
+    description: 'When enabled, the AI can use specialized skills stored under Mixer/Skills/ pages. Skills provide focused instructions for specific tasks.',
+    default: true,
+  },
+  {
     key: 'agentMode',
     type: 'boolean',
     title: 'Agent Mode',

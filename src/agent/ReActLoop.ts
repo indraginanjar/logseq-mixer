@@ -1,7 +1,7 @@
 import { queryLiteLLM, queryLiteLLMStreaming, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
 import { countTokens } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
-import { executeLogseqTool, LOGSEQ_TOOLS } from './logseqTools';
+import { executeLogseqTool, LOGSEQ_TOOLS, SKILL_TOOLS } from './logseqTools';
 
 export interface ReActOptions {
   settings: any;
@@ -56,7 +56,8 @@ export async function runReActLoop(
         opts.includeLogseqWriteTools !== false || !LOGSEQ_WRITE_TOOL_NAMES.includes(t.function.name)
       )
     : [];
-  const allTools = [...mcpTools, ...logseqToolsFiltered];
+  const skillTools = opts.includeLogseqTools !== false ? SKILL_TOOLS : [];
+  const allTools = [...mcpTools, ...logseqToolsFiltered, ...skillTools];
 
   // Determine whether to use streaming.
   // Stream the final answer only (when no tool_calls are returned).

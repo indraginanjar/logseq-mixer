@@ -24,6 +24,7 @@ vi.mock('../tokenizer', () => ({
 // Mock logseqTools
 vi.mock('./logseqTools', () => ({
   LOGSEQ_TOOLS: [],
+  SKILL_TOOLS: [],
   executeLogseqTool: vi.fn(),
 }));
 

@@ -12,6 +12,7 @@ const USER_GUIDE = `
 - 🗄️ Database Center: view index stats, export/import/clear database
 - 🔌 MCP Servers: manage external tool connections
 - 🧠 Memory: view/edit/delete stored memories
+- 🧩 Skills: manage agent skills (enable/disable, import, create)
 - Re-Index: trigger incremental re-indexing of your graph
 
 ## How to Use Direct Page Edit
@@ -33,6 +34,16 @@ const USER_GUIDE = `
 - Sessions auto-summarize when you click "✨ New"
 - Click 🧠 to manage stored memories
 - Memories are injected into context automatically
+
+## Skills
+- Skills give the AI specialized instructions for specific tasks (follows agentskills.io spec)
+- Stored as Logseq pages under Mixer/Skills/
+- Use /skill <name> to manually activate a skill in chat
+- The AI can also activate skills autonomously when a task matches
+- Click 🧩 to manage skills (enable/disable, import, create)
+- Import from GitHub: paste a URL in the Skills panel or ask "import skill from https://github.com/..."
+- Create from block: ask "create a skill from block ((uuid)) named my-skill"
+- Each skill has name, description, and instruction body
 
 ## MCP Tools Setup
 1. Run an MCP server: npx -y supergateway --port 3002 --stdio "npx -y @playwright/mcp@latest"
@@ -68,6 +79,7 @@ const USER_GUIDE = `
 - /help: show help topics
 - /help <topic>: get help on a specific topic
 - /tools: list available built-in Logseq tools
+- /skill <name>: activate a skill for the current session
 - /raw <prompt>: send prompt directly to LLM without RAG, memory, or context
 
 ## Troubleshooting

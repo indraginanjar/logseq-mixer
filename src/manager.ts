@@ -20,6 +20,8 @@ import { MemoryStore } from './memory/MemoryStore';
 import { detectExplicitMemory } from './memory/memoryDetector';
 import { detectGoal } from './agent/goalDetector';
 import { runReActLoop } from './agent/ReActLoop';
+import { loadAllSkills, getSkillBody, buildSkillCatalogPrompt, buildSkillActivationContext } from './skills';
+import type { SkillEntry, SkillCatalogEntry } from './skills';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -42,6 +44,7 @@ interface ScoredChunk {
 /** Clear the conversation history for a fresh session. */
 export function clearConversationHistory(): void {
   conversationHistory.length = 0;
+  activatedSkills = new Set();
 }
 
 /** Add a message to conversation history (used by agent to persist results for follow-up). */
@@ -97,6 +100,33 @@ export function getMemoryStore(): MemoryStore | null {
 
 export function getLastMemorySaved(): boolean {
   return lastMemorySaved;
+}
+
+/** Skills activated in the current session (for deduplication). */
+let activatedSkills: Set<string> = new Set();
+/** Cached skill catalog (refreshed per query). */
+let cachedSkillCatalog: SkillCatalogEntry[] = [];
+
+/** Clear activated skills (call on new session). */
+export function clearActivatedSkills(): void {
+  activatedSkills = new Set();
+}
+
+/** Get currently activated skill names. */
+export function getActivatedSkills(): string[] {
+  return [...activatedSkills];
+}
+
+/**
+ * Activate a skill by name. Returns the activation context text or null if not found/already active.
+ */
+export async function activateSkill(name: string): Promise<string | null> {
+  if (activatedSkills.has(name)) return null; // Already activated
+  const skills = await loadAllSkills();
+  const skill = skills.find(s => s.name === name && s.enabled);
+  if (!skill) return null;
+  activatedSkills.add(name);
+  return buildSkillActivationContext(skill);
 }
 
 /** Pending agent goal detected by handleQuery. */
@@ -443,6 +473,30 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     return '__AGENT_GOAL_DETECTED__';
   }
 
+  // Handle /skill <name> slash command — activate a skill and process remaining query
+  let skillActivationContext = '';
+  const skillCommandMatch = query.match(/^\/skill\s+([a-z0-9-]+)\s*(.*)/s);
+  if (skillCommandMatch && settings.skillsEnabled !== false) {
+    const [, skillName, remainingQuery] = skillCommandMatch;
+    const activation = await activateSkill(skillName);
+    if (activation) {
+      skillActivationContext = activation;
+      console.info(`[handleQuery] Skill activated via slash command: ${skillName}`);
+    }
+    // If there's remaining text after /skill name, use it as the query
+    // If there's nothing else, inform the user the skill is now active
+    if (!remainingQuery.trim()) {
+      conversationHistory.push({ role: "user", content: query });
+      const reply = activation
+        ? `✅ Skill **${skillName}** activated. Its instructions are now loaded. How can I help you with ${skillName}?`
+        : `⚠️ Skill "${skillName}" not found or already active.`;
+      conversationHistory.push({ role: "assistant", content: reply });
+      return reply;
+    }
+    // Use the remaining text as the actual query
+    query = remainingQuery.trim();
+  }
+
   // Add the new user query to the conversation history
   conversationHistory.push({ role: "user", content: query });
 
@@ -523,6 +577,21 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     console.info('[handleQuery] No memory injected');
   }
 
+  // Inject skill catalog (progressive disclosure tier 1)
+  if (settings.skillsEnabled !== false) {
+    try {
+      cachedSkillCatalog = (await loadAllSkills()).filter(s => s.enabled).map(s => ({ name: s.name, description: s.description }));
+      const catalogText = buildSkillCatalogPrompt(cachedSkillCatalog);
+      if (catalogText) {
+        systemMessage += catalogText;
+        userBudget -= countTokens(catalogText);
+        console.info(`[handleQuery] Skills catalog injected: ${cachedSkillCatalog.length} skills`);
+      }
+    } catch (err) {
+      console.warn('[handleQuery] Failed to load skills catalog:', err);
+    }
+  }
+
   // Build edit context
   let editContextText = "";
   if (editMode && editPageContext) {
@@ -560,6 +629,9 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   }
   if (editContextText) {
     contextBlock += "\n## Edit Target\n" + editContextText + "\n";
+  }
+  if (skillActivationContext) {
+    contextBlock += "\n## Activated Skill Instructions\n" + skillActivationContext + "\n";
   }
 
   // --- Assemble user message (clean — just the user's request + image notes) ---

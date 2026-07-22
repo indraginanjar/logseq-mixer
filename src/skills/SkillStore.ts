@@ -59,7 +59,7 @@ async function loadSkillFromPage(page: any): Promise<SkillEntry | null> {
 
   // Body content: all blocks after the properties block, or child blocks
   const bodyLines: string[] = [];
-  const bodyBlocks = propsBlock.children?.length > 0 ? propsBlock.children : blocks.slice(1);
+  const bodyBlocks: any[] = (propsBlock.children as any[])?.length > 0 ? (propsBlock.children as any[]) : blocks.slice(1);
   collectBlockContent(bodyBlocks, bodyLines, 0);
 
   return {
@@ -156,7 +156,7 @@ export async function saveSkill(skill: Omit<SkillEntry, 'pageName'> & { pageName
 
   // Remove existing child blocks (to replace body)
   if (blocks[0].children) {
-    for (const child of blocks[0].children) {
+    for (const child of (blocks[0].children as any[])) {
       await logseq.Editor.removeBlock(child.uuid);
     }
   }
