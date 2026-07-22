@@ -246,6 +246,23 @@ Skills can instruct the AI to use mixer_run_subtask for complex sub-tasks that b
  * Called during plugin initialization.
  */
 export async function ensureBuiltinHelpSkill(): Promise<void> {
+  // Wait for Logseq Editor API to be ready (it may not be available immediately on mount)
+  let retries = 0;
+  while (retries < 10) {
+    try {
+      const pages = await logseq.Editor.getAllPages();
+      if (pages !== null && pages !== undefined) break;
+    } catch {
+      // API not ready yet
+    }
+    retries++;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  if (retries >= 10) {
+    console.warn('[Skills] Logseq API not ready after 10s, skipping built-in skill creation.');
+    return;
+  }
+
   try {
     const existing = await getSkill('mixer-help');
 
