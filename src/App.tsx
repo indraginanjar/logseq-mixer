@@ -3,6 +3,7 @@ import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
 import SkillPanel from './components/SkillPanel';
+import { ensureBuiltinHelpSkill } from './skills/builtinHelpSkill';
 import { MCPManager } from 'mcp/MCPManager';
 import { MemoryStore } from './memory/MemoryStore';
 import { setMemoryStore, getLastMemorySaved, setOnThoughtCallback } from './manager';
@@ -750,6 +751,11 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     });
     return () => { unlisten(); };
   }, [storageProvider]);
+
+  // Initialize built-in skills on mount
+  useEffect(() => {
+    ensureBuiltinHelpSkill();
+  }, []);
 
   // Track active page name
   useEffect(() => {

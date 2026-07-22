@@ -4,3 +4,5 @@ export { parseSkillMd, validateSkillName, skillToLogseqBlocks, blockContentToSki
 export { importFromGitHub, normalizeGitHubUrl, isGitHubUrl } from './skillImporter';
 export type { ImportResult } from './skillImporter';
 export { buildSkillCatalogPrompt, buildSkillActivationContext, buildActivatedSkillsSummary } from './skillCatalog';
+
+export { ensureBuiltinHelpSkill } from './builtinHelpSkill';
