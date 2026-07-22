@@ -2,6 +2,7 @@ import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
+import SkillPanel from './components/SkillPanel';
 import { MCPManager } from 'mcp/MCPManager';
 import { MemoryStore } from './memory/MemoryStore';
 import { setMemoryStore, getLastMemorySaved, setOnThoughtCallback } from './manager';
@@ -631,8 +632,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [showDbPanel, setShowDbPanel] = useState(false);
   const [showMcpPanel, setShowMcpPanel] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [showSkillPanel, setShowSkillPanel] = useState(false);
   const [confirmClearDb, setConfirmClearDb] = useState(false);
   const [memoryCount, setMemoryCount] = useState(0);
+  const [skillCount, setSkillCount] = useState(0);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [memoryStoreInstance, setMemoryStoreInstance] = useState<MemoryStore | null>(null);
   const [thinkingText, setThinkingText] = useState<string | null>(null);
@@ -1535,13 +1538,22 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const handleOpenMcpPanel = () => {
     setShowDbPanel(false);
     setShowMemoryPanel(false);
+    setShowSkillPanel(false);
     setShowMcpPanel(prev => !prev);
   };
 
   const handleOpenMemoryPanel = () => {
     setShowDbPanel(false);
     setShowMcpPanel(false);
+    setShowSkillPanel(false);
     setShowMemoryPanel(prev => !prev);
+  };
+
+  const handleOpenSkillPanel = () => {
+    setShowDbPanel(false);
+    setShowMcpPanel(false);
+    setShowMemoryPanel(false);
+    setShowSkillPanel(prev => !prev);
   };
 
   if (!isVisible) return null;
@@ -1730,6 +1742,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <ToolbarButton onClick={handleOpenMemoryPanel} title="Memory">
                 🧠{memoryCount > 0 && <span style={{ fontSize: '10px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', padding: '1px 5px', marginLeft: '2px' }}>{memoryCount}</span>}{isSummarizing && <span style={{ marginLeft: '2px' }}>⏳</span>}
               </ToolbarButton>
+              <ToolbarButton onClick={handleOpenSkillPanel} title="Skills">
+                🧩{skillCount > 0 && <span style={{ fontSize: '10px', backgroundColor: '#8b5cf6', color: 'white', borderRadius: '50%', padding: '1px 5px', marginLeft: '2px' }}>{skillCount}</span>}
+              </ToolbarButton>
               <ToolbarButton
                 variant={buttonProps.variant}
                 onClick={handleIndexDB}
@@ -1765,6 +1780,12 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             memoryStore={memoryStoreInstance}
             memoryEnabled={(settings?.memoryEnabled as boolean) ?? true}
             onCountChange={setMemoryCount}
+          />
+        )}
+        {showSkillPanel && (
+          <SkillPanel
+            onClose={() => setShowSkillPanel(false)}
+            onCountChange={setSkillCount}
           />
         )}
         {showDbPanel && (
