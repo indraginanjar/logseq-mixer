@@ -3,6 +3,7 @@ import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
 import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
 import SkillPanel from './components/SkillPanel';
+import ModelSelector from './components/ModelSelector';
 import { ensureBuiltinHelpSkill } from './skills/builtinHelpSkill';
 import { loadAllSkills } from './skills/SkillStore';
 import { MCPManager } from 'mcp/MCPManager';
@@ -1476,8 +1477,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     ? (fetchedModels.includes(currentModel) ? fetchedModels : [currentModel, ...fetchedModels])
     : [currentModel];
 
-  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newModel = e.target.value;
+  const handleModelChange = (newModel: string) => {
     logseq.updateSettings({ selectedModel: newModel });
   };
 
@@ -1601,18 +1601,11 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             <Title>Mixer</Title>
           </HeaderLeft>
           <HeaderRight>
-            <ModelSelect
+            <ModelSelector
               value={currentModel}
+              choices={modelChoices}
               onChange={handleModelChange}
-              aria-label="Select Model"
-              title="Select Model"
-            >
-              {modelChoices.map((choice) => (
-                <option key={choice} value={choice}>
-                  {choice}
-                </option>
-              ))}
-            </ModelSelect>
+            />
             <HeaderButton onClick={handleNewSession} aria-label="New Session" title="New Session">✨ New</HeaderButton>
             <MemoryIndicator status={memoryStatus} onTrimMessages={handleTrimMessages} />
             <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close" title="Close">✕</CloseButton>
