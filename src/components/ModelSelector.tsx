@@ -140,6 +140,9 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
     } else if (e.key === 'Enter' && filtered.length > 0) {
       handleSelect(filtered[0]);
       inputRef.current?.blur();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!open) setOpen(true);
     }
   };
 
