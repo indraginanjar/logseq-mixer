@@ -6,7 +6,22 @@
 import { activateSkill } from '../manager';
 import { importFromGitHub } from '../skills/skillImporter';
 import { blockContentToSkill, validateSkillName } from '../skills/skillParser';
-import { saveSkill } from '../skills/SkillStore';
+import { saveSkill, getSkill } from '../skills/SkillStore';
+import { buildSkillActivationContext } from '../skills/skillCatalog';
+import { runReActLoop } from './ReActLoop';
+
+/** Module-level settings reference for subtask execution. */
+let _subtaskSettings: any = null;
+
+/** Set the settings reference for subtask execution (called from manager.ts or App). */
+export function setSubtaskSettings(settings: any): void {
+  _subtaskSettings = settings;
+}
+
+/** Get settings for subtask execution. */
+function getSubtaskSettings(): any {
+  return _subtaskSettings;
+}
 
 export const LOGSEQ_TOOLS = [
   {
@@ -147,6 +162,22 @@ export const SKILL_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'mixer_run_subtask',
+      description: 'Delegate a focused subtask to a subagent that runs in an isolated context. The subagent has access to all Logseq tools and MCP tools but has its own conversation history. Use for complex sub-tasks that benefit from a fresh, focused context (e.g., research gathering, analysis, content generation). Returns the subagent\'s final answer.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task: { type: 'string', description: 'Clear description of what the subtask should accomplish. Be specific about expected output format.' },
+          skill: { type: 'string', description: 'Optional: name of a skill to activate in the subagent context for specialized instructions.' },
+          maxIterations: { type: 'number', description: 'Optional: max tool call iterations for the subtask (default: 15).' },
+        },
+        required: ['task'],
+      },
+    },
+  },
 ];
 
 /**
@@ -266,6 +297,46 @@ export async function executeLogseqTool(name: string, args: any): Promise<string
       if (!skill) return `Failed to create skill: invalid name or empty content.`;
       await saveSkill(skill);
       return `✅ Skill "${skill.name}" created successfully.\nDescription: ${skill.description}\nPage: ${skill.pageName}`;
+    }
+    case 'mixer_run_subtask': {
+      const task = args.task;
+      if (!task?.trim()) return 'Failed: task description is required.';
+
+      // Build isolated system prompt for the subagent
+      let systemPrompt = 'You are a focused subagent executing a specific subtask. Complete the task thoroughly and return a clear, concise result. Use tools as needed to gather information or perform actions.';
+
+      // Optionally activate a skill in the subagent context
+      if (args.skill) {
+        const skillEntry = await getSkill(args.skill);
+        if (skillEntry?.enabled) {
+          systemPrompt += '\n\n' + buildSkillActivationContext(skillEntry);
+        }
+      }
+
+      const subtaskMessages = [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: task },
+      ];
+
+      // Get settings from the parent context (available via closure from executeLogseqTool callers)
+      // We need to access settings — use a module-level reference
+      const settings = getSubtaskSettings();
+      if (!settings) return 'Failed: unable to resolve settings for subtask execution.';
+
+      try {
+        const result = await runReActLoop(subtaskMessages, {
+          settings,
+          maxIterations: args.maxIterations || 15,
+          tokenBudget: 0,
+          includeLogseqTools: true,
+          includeLogseqWriteTools: true,
+        });
+        const answer = result.answer || '(subtask produced no output)';
+        const summary = answer.length > 3000 ? answer.slice(0, 3000) + '\n\n... (truncated)' : answer;
+        return `[Subtask completed in ${result.iterations} iterations, ${result.toolCalls.length} tool calls]\n\n${summary}`;
+      } catch (err: any) {
+        return `Subtask failed: ${err.message || err}`;
+      }
     }
     default:
       return `Unknown Logseq tool: ${name}`;

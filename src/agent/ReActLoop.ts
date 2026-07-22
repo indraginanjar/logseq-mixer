@@ -128,7 +128,7 @@ export async function runReActLoop(
 
       let toolResult = '';
       try {
-        if (funcName.startsWith('logseq_')) {
+        if (funcName.startsWith('logseq_') || funcName.startsWith('mixer_') || funcName === 'activate_skill') {
           toolResult = await executeLogseqTool(funcName, args);
         } else {
           toolResult = await MCPManager.getInstance().executeToolCall(funcName, args);

@@ -20,6 +20,7 @@ import { MemoryStore } from './memory/MemoryStore';
 import { detectExplicitMemory } from './memory/memoryDetector';
 import { detectGoal } from './agent/goalDetector';
 import { runReActLoop } from './agent/ReActLoop';
+import { setSubtaskSettings } from './agent/logseqTools';
 import { loadAllSkills, getSkillBody, buildSkillCatalogPrompt, buildSkillActivationContext } from './skills';
 import type { SkillEntry, SkillCatalogEntry } from './skills';
 
@@ -669,6 +670,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Execute via ReAct loop
   const tools = MCPManager.getInstance().getEnabledTools();
   const streamingEnabled = settings.streamingEnabled !== false && !editMode;
+  setSubtaskSettings(settings);
   const reactResult = await runReActLoop(messages, {
     settings, signal,
     maxIterations: settings.agentMaxIterations || 25,
