@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { styled } from '../stitches.config';
 
 const Wrapper = styled('div', {
@@ -35,16 +36,12 @@ const SearchTrigger = styled('input', {
 });
 
 const Dropdown = styled('div', {
-  position: 'absolute',
-  top: '100%',
-  left: 0,
-  right: 0,
-  marginTop: '2px',
+  position: 'fixed',
   backgroundColor: '$elevation0',
   border: '1px solid $slate6',
   borderRadius: '6px',
   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-  zIndex: 200,
+  zIndex: 9999,
   overflow: 'hidden',
   minWidth: '180px',
 });
@@ -88,6 +85,7 @@ interface ModelSelectorProps {
 export default function ModelSelector({ value, choices, onChange }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -103,6 +101,7 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
 
   const handleFocus = () => {
     setOpen(true);
+    updateDropdownPosition();
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,15 +109,24 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
     if (!open) setOpen(true);
   };
 
+  const updateDropdownPosition = () => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        top: rect.bottom + 2,
+        left: rect.left,
+        width: Math.max(rect.width, 200),
+      });
+    }
+  };
+
   const handleBlur = (e: React.FocusEvent) => {
     // Don't close if clicking inside the dropdown
     if (wrapperRef.current?.contains(e.relatedTarget as Node)) return;
     // Delay to allow click on option to register
     setTimeout(() => {
-      if (!wrapperRef.current?.contains(document.activeElement)) {
-        setOpen(false);
-        setSearch('');
-      }
+      setOpen(false);
+      setSearch('');
     }, 150);
   };
 
@@ -126,10 +134,12 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSearch('');
-      }
+      const target = e.target as Node;
+      // Don't close if clicking inside the wrapper or the portal dropdown
+      if (wrapperRef.current?.contains(target)) return;
+      if ((target as HTMLElement).closest?.('[data-model-dropdown]')) return;
+      setOpen(false);
+      setSearch('');
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -146,9 +156,31 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
       inputRef.current?.blur();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (!open) setOpen(true);
+      if (!open) {
+        setOpen(true);
+        updateDropdownPosition();
+      }
     }
   };
+
+  const dropdown = open && ReactDOM.createPortal(
+    <Dropdown style={dropdownStyle} data-model-dropdown="true">
+      <OptionList>
+        {filtered.length === 0 && <NoResults>No models found</NoResults>}
+        {filtered.map(model => (
+          <Option
+            key={model}
+            active={model === value}
+            onMouseDown={(e) => { e.preventDefault(); handleSelect(model); }}
+            title={model}
+          >
+            {model}
+          </Option>
+        ))}
+      </OptionList>
+    </Dropdown>,
+    document.body
+  );
 
   return (
     <Wrapper ref={wrapperRef}>
@@ -163,23 +195,7 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
         aria-label="Select Model"
         title={value}
       />
-      {open && (
-        <Dropdown>
-          <OptionList>
-            {filtered.length === 0 && <NoResults>No models found</NoResults>}
-            {filtered.map(model => (
-              <Option
-                key={model}
-                active={model === value}
-                onMouseDown={(e) => { e.preventDefault(); handleSelect(model); }}
-                title={model}
-              >
-                {model}
-              </Option>
-            ))}
-          </OptionList>
-        </Dropdown>
-      )}
+      {dropdown}
     </Wrapper>
   );
 }
