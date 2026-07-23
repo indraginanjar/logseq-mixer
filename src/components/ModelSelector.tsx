@@ -103,7 +103,11 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
 
   const handleFocus = () => {
     setOpen(true);
-    setSearch('');
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+    if (!open) setOpen(true);
   };
 
   const handleBlur = (e: React.FocusEvent) => {
@@ -151,8 +155,8 @@ export default function ModelSelector({ value, choices, onChange }: ModelSelecto
       <SearchTrigger
         ref={inputRef}
         value={open ? search : value}
-        placeholder={value}
-        onChange={e => { setSearch(e.target.value); if (!open) setOpen(true); }}
+        placeholder={open ? 'Type to filter...' : value}
+        onChange={handleInputChange}
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
