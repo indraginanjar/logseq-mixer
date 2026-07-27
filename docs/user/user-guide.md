@@ -73,7 +73,7 @@ These control what the AI *can do* in response to your messages.
 | **🗑️** | Clear input history — removes all saved previous inputs (only appears when history exists) |
 | **Text Area** | Type your message. Enter sends, Shift+Enter for newline, Arrow Up/Down navigates input history. |
 | **Send ▶** | Send message. Transforms to Cancel while AI is responding. |
-| **Page/Block Indicator** | Shows the active page (📄) and focused block (▸) — this is what Direct Page Edit targets. |
+| **Page/Block Indicator** | Shows the active page (📄) and focused block (▸). This page's full content is always included as context in every AI request, ensuring the model has full awareness of what you're looking at. Also serves as the target for Direct Page Edit commands. |
 
 ### Persistent Input History
 
@@ -108,7 +108,7 @@ Turn your AI into a co-author that directly modifies your graph.
 
 1. Toggle **✏️ ON**
 2. Click into the page/block you want edited
-3. Confirm the page indicator shows the correct target
+3. Confirm the page indicator shows the correct target (the AI always sees this page's content as context)
 4. Type your instruction (e.g., "add a summary section" or "reorganize by priority")
 5. The AI sends structured edit commands executed via Logseq's API
 6. A change summary shows exactly what was created or modified
@@ -425,7 +425,7 @@ When **Streaming Responses** is enabled (the default), the AI's reply appears pr
 ### "No active page" warning
 
 **Cause:** You're on the journal home view without clicking into a block.
-**Fix:** Click into any block — the page indicator will update to show the target.
+**Fix:** Click into any block — the page indicator will update. The active page's full content is always sent as context to the AI, so clicking into the relevant page helps the AI understand what you're working on.
 
 ### Direct Page Edit doesn't do anything
 
