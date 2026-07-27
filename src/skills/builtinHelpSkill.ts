@@ -268,10 +268,12 @@ export async function ensureBuiltinHelpSkill(): Promise<void> {
 
     // Create if missing, or update if version changed
     if (!existing || existing.version !== BUILTIN_SKILL_VERSION) {
+      // Preserve user's enabled preference when updating; default to true only for new installs
+      const enabled = existing?.enabled ?? true;
       await saveSkill({
         name: 'mixer-help',
         description: 'Answer questions about Logseq Mixer features, commands, settings, workflows, troubleshooting, and configuration. Activate when the user asks how to use Mixer, what a button does, how to set up providers, or needs help with any Mixer feature.',
-        enabled: true,
+        enabled,
         body: MIXER_HELP_BODY,
         version: BUILTIN_SKILL_VERSION,
         source: 'builtin',
