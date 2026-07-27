@@ -595,18 +595,38 @@ export async function useGenerateEmbedding(
 }
 
 
+export interface PageJournalData {
+  isJournal: boolean;
+  /** journalDay from Logseq, e.g. 20260727 (YYYYMMDD integer). */
+  journalDay?: number;
+}
+
 /**
  * Build the page header string that prefixes each chunk.
- * Includes page id, name, tags (if any), and optional graph context
+ * Includes page id, name, type, tags (if any), and optional graph context
  * (outgoing links and backlinks) for richer semantic context.
  */
 export function buildPageHeader(
   pageId: string | number,
   pageName: string,
   properties?: Record<string, any>,
-  linkData?: PageLinkData
+  linkData?: PageLinkData,
+  journalData?: PageJournalData
 ): string {
   let header = `note_id: ${pageId}\nnote_name: ${pageName}\n`;
+  if (journalData?.isJournal) {
+    header += `note_type: journal\n`;
+    if (journalData.journalDay) {
+      // Format YYYYMMDD integer into YYYY-MM-DD string
+      const s = String(journalData.journalDay);
+      const formatted = s.length === 8
+        ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
+        : s;
+      header += `note_date: ${formatted}\n`;
+    }
+  } else {
+    header += `note_type: page\n`;
+  }
   const tags = properties?.tags;
   if (tags) {
     const tagList = Array.isArray(tags) ? tags.join(', ') : String(tags);
@@ -681,7 +701,10 @@ export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAU
           const backlinks = await fetchBacklinks(page.name);
           const linkData: PageLinkData = { outgoingLinks, backlinks };
 
-          const pageHeader = buildPageHeader(page.id, page.name, page.properties, linkData);
+          const pageHeader = buildPageHeader(page.id, page.name, page.properties, linkData, {
+            isJournal: !!(page as any)['journal?'],
+            journalDay: (page as any).journalDay,
+          });
           const subtreeChunks = buildSubtreeChunks(semanticBlockLines, { maxTokens, pageHeader });
 
           const chunkEmbeddings: VectorDBSchemaDynamic[] = [];
@@ -735,7 +758,8 @@ export async function getEmbeddingsForPage(
   properties?: Record<string, any>,
   linkData?: PageLinkData,
   endpoint?: string,
-  provider?: EmbeddingProvider
+  provider?: EmbeddingProvider,
+  journalData?: PageJournalData
 ): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[]; chunkDepthMetadata: ChunkDepthMetadata[] }> {
   const { lines: originalLines, metadata: blockMetadata } = await flattenBlocks(blocks, [], pageName);
 
@@ -766,7 +790,7 @@ export async function getEmbeddingsForPage(
     semanticBlockLines[idx].content = dedupedLines[idx];
   }
 
-  const pageHeader = buildPageHeader(pageId, pageName, properties, linkData);
+  const pageHeader = buildPageHeader(pageId, pageName, properties, linkData, journalData);
   const maxTokens = EMBEDDING_MODELS[model].maxTokens;
   const subtreeChunks = buildSubtreeChunks(semanticBlockLines, { maxTokens, pageHeader });
   const embeddings: VectorDBSchemaDynamic[] = [];

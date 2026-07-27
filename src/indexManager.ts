@@ -347,7 +347,8 @@ export async function checkAndIndexUpdatedPages(
             page.properties,
             linkData,
             embeddingEndpoint,
-            embeddingProvider
+            embeddingProvider,
+            { isJournal: !!(page as any)['journal?'], journalDay: (page as any).journalDay }
           );
 
           // Delete old chunks for this page

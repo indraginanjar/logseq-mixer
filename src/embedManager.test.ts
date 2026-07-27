@@ -376,9 +376,9 @@ describe('extractOutgoingLinks', () => {
 
 
 describe('buildPageHeader', () => {
-  it('builds basic header with id and name', () => {
+  it('builds basic header with id, name, and note_type page', () => {
     const result = buildPageHeader(42, 'My Page');
-    expect(result).toBe('note_id: 42\nnote_name: My Page\nnote_content:\n\n');
+    expect(result).toBe('note_id: 42\nnote_name: My Page\nnote_type: page\nnote_content:\n\n');
   });
 
   it('includes tags when properties contain tags array', () => {
@@ -424,7 +424,7 @@ describe('buildPageHeader', () => {
     const linkData: PageLinkData = { outgoingLinks: ['Out A'], backlinks: ['In B'] };
     const result = buildPageHeader(42, 'Full', { tags: ['t1'] }, linkData);
     expect(result).toBe(
-      'note_id: 42\nnote_name: Full\nnote_tags: t1\nnote_links: Out A\nnote_backlinks: In B\nnote_content:\n\n'
+      'note_id: 42\nnote_name: Full\nnote_type: page\nnote_tags: t1\nnote_links: Out A\nnote_backlinks: In B\nnote_content:\n\n'
     );
   });
 
@@ -440,16 +440,42 @@ describe('buildPageHeader', () => {
     expect(result).toMatch(/note_content:\n\n$/);
   });
 
-  it('preserves field ordering: id, name, tags, links, backlinks, content', () => {
+  it('preserves field ordering: id, name, type, tags, links, backlinks, content', () => {
     const linkData: PageLinkData = { outgoingLinks: ['Out'], backlinks: ['In'] };
     const result = buildPageHeader(1, 'Order', { tags: ['t'] }, linkData);
     const lines = result.split('\n');
     expect(lines[0]).toBe('note_id: 1');
     expect(lines[1]).toBe('note_name: Order');
-    expect(lines[2]).toBe('note_tags: t');
-    expect(lines[3]).toBe('note_links: Out');
-    expect(lines[4]).toBe('note_backlinks: In');
-    expect(lines[5]).toBe('note_content:');
+    expect(lines[2]).toBe('note_type: page');
+    expect(lines[3]).toBe('note_tags: t');
+    expect(lines[4]).toBe('note_links: Out');
+    expect(lines[5]).toBe('note_backlinks: In');
+    expect(lines[6]).toBe('note_content:');
+  });
+
+  it('sets note_type: journal and note_date for journal pages', () => {
+    const result = buildPageHeader(99, 'Jul 27th, 2026', undefined, undefined, { isJournal: true, journalDay: 20260727 });
+    expect(result).toContain('note_type: journal\n');
+    expect(result).toContain('note_date: 2026-07-27\n');
+    expect(result).not.toContain('note_type: page');
+  });
+
+  it('sets note_type: page when journalData.isJournal is false', () => {
+    const result = buildPageHeader(1, 'Regular', undefined, undefined, { isJournal: false });
+    expect(result).toContain('note_type: page\n');
+    expect(result).not.toContain('note_date');
+  });
+
+  it('sets note_type: page when journalData is undefined', () => {
+    const result = buildPageHeader(1, 'No Journal Data');
+    expect(result).toContain('note_type: page\n');
+    expect(result).not.toContain('note_date');
+  });
+
+  it('omits note_date when journalDay is undefined even if isJournal is true', () => {
+    const result = buildPageHeader(1, 'Journal No Date', undefined, undefined, { isJournal: true });
+    expect(result).toContain('note_type: journal\n');
+    expect(result).not.toContain('note_date');
   });
 });
 
