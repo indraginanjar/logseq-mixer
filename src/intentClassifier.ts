@@ -71,3 +71,71 @@ export function shouldRetrieveContext(query: string): boolean {
   // Default: retrieve context (assume it's a knowledge question)
   return true;
 }
+
+
+/**
+ * Patterns indicating the query needs tool access (search, read, write, create pages).
+ * If none match, tools can be omitted — the model should answer from RAG context alone.
+ */
+const TOOL_NEEDED_PATTERNS: RegExp[] = [
+  // Explicit tool/action requests
+  /\b(search|find|look up|look for|locate|retrieve)\b.*\b(page|block|note|graph)\b/i,
+  /\b(create|make|add|insert|write|update|edit|delete|remove)\b.*\b(page|block|note|section|heading)\b/i,
+  /\b(read|open|show|get)\s+(the\s+)?(page|block|content of)\b/i,
+  // Page manipulation
+  /\bcreate\s+(a\s+)?(new\s+)?page\b/i,
+  /\binsert\s+(a\s+)?block\b/i,
+  /\bupdate\s+(the\s+)?block\b/i,
+  /\bdelete\s+(the\s+)?block\b/i,
+  // MCP / external tools
+  /\b(web search|browse|fetch|download|run|execute)\b/i,
+  // Skill invocation
+  /^\/skill\b/i,
+  // Multi-step / agent-like imperatives that need graph interaction
+  /\b(find all|gather|collect|extract from|across all|every page)\b/i,
+  // Explicit requests to use tools
+  /\b(use|call|invoke)\s+(a\s+)?(tool|function|search)\b/i,
+];
+
+/**
+ * Patterns that strongly indicate no tools are needed — simple Q&A or chat.
+ * These override tool detection if matched.
+ */
+const NO_TOOLS_PATTERNS: RegExp[] = [
+  /\bdo not use\s+(any\s+)?tools\b/i,
+  /\bwithout\s+(using\s+)?(any\s+)?tools\b/i,
+  /\bno tools\b/i,
+  /\bjust answer\b/i,
+  /\bfrom (the\s+)?(context|information|notes)\s+(above|provided|given|below)\b/i,
+];
+
+/**
+ * Determine whether tool schemas should be included in the LLM request.
+ *
+ * Returns `true` if the query likely needs tool access (search/read/write/MCP).
+ * Returns `false` if it's a simple Q&A that can be answered from RAG context alone.
+ *
+ * When `false`, tools are not sent — preventing weaker models from hallucinating
+ * tool call syntax and improving response quality for straightforward questions.
+ *
+ * @param query - The user's message
+ * @param hasRetrievedContext - Whether RAG context was successfully retrieved
+ * @param editMode - Whether Direct Page Edit mode is active (always needs tools)
+ */
+export function shouldIncludeTools(query: string, hasRetrievedContext: boolean, editMode: boolean): boolean {
+  // Edit mode always needs write tools
+  if (editMode) return true;
+
+  // Explicit "no tools" instruction from user
+  if (NO_TOOLS_PATTERNS.some(p => p.test(query))) return false;
+
+  // If the query matches a tool-needed pattern, include tools
+  if (TOOL_NEEDED_PATTERNS.some(p => p.test(query))) return true;
+
+  // If we have RAG context and the query doesn't explicitly need tools,
+  // skip tools — the model can answer from context alone
+  if (hasRetrievedContext) return false;
+
+  // No RAG context and no clear signal → include tools so the model can search
+  return true;
+}

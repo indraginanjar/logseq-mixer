@@ -5,7 +5,7 @@ import { buildEditSystemPrompt, buildPageContextMessage } from 'editPromptBuilde
 import { clearRefCache, useGenerateEmbedding } from 'embedManager';
 import { hybridSearch } from 'hybridSearch';
 import type { RankedHit } from 'reranker';
-import { shouldRetrieveContext } from 'intentClassifier';
+import { shouldRetrieveContext, shouldIncludeTools } from 'intentClassifier';
 import { rewriteQueryForRetrieval } from './queryRewriter';
 import { isDiagramIntent, DIAGRAM_RULES } from './utils/diagramIntentDetector';
 import { checkAndIndexUpdatedPages, startPageIndexingOnChange, type IndexingResult } from 'indexManager';
@@ -675,12 +675,19 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   const tools = MCPManager.getInstance().getEnabledTools();
   const streamingEnabled = settings.streamingEnabled !== false && !editMode;
   setSubtaskSettings(settings);
+
+  // Determine if tools are needed for this query.
+  // Simple Q&A with RAG context doesn't need tools — prevents weaker models
+  // from hallucinating tool call syntax instead of answering directly.
+  const hasContext = !!vectorContext;
+  const needsTools = shouldIncludeTools(query, hasContext, !!editMode);
+
   const reactResult = await runReActLoop(messages, {
     settings, signal,
     maxIterations: settings.agentMaxIterations || 25,
     tokenBudget: 0,
-    tools,
-    includeLogseqTools: true,
+    tools: needsTools ? tools : [],
+    includeLogseqTools: needsTools,
     includeLogseqWriteTools: !!editMode,
     onThought: onThoughtCallback || undefined,
     onChunk: streamingEnabled ? onChunk : undefined,
