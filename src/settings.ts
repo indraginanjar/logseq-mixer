@@ -68,6 +68,15 @@ const settings: SettingSchemaDesc[] = [
     default: 'https://api.openai.com/v1/chat/completions',
   },
   {
+    key: 'reasoningEffort',
+    type: 'enum',
+    title: 'Reasoning Effort',
+    description: 'Controls how much thinking the model does before responding. Higher levels produce deeper reasoning but cost more tokens. Low=fastest/cheapest, High=default, Max=deepest reasoning.',
+    default: 'high',
+    enumChoices: ['low', 'medium', 'high', 'xhigh', 'max'],
+    enumPicker: 'select',
+  },
+  {
     key: 'apiKey',
     type: 'string',
     title: 'API Key',

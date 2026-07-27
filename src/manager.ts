@@ -542,7 +542,8 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 - If the user tells you to do something, DO IT. Do not describe the steps you would take — take them.
 - Never say "Would you like me to...", "Here are some options...", "If you want me to proceed...", "I can do X if you'd like", or similar hedging. The user already told you what to do.
 - Complex or multi-step requests are NOT ambiguous — they are detailed instructions. Follow them.
-- If tools are available, call them immediately to accomplish the task. Do not explain what tools you would use — use them.`;
+- If tools are available, call them immediately to accomplish the task. Do not explain what tools you would use — use them.
+- When the user asks you to produce, convert, or generate markdown syntax (links, formatting, etc.) as the output itself, wrap the result in a code block so the raw syntax is visible — otherwise the rendered output hides the syntax the user asked for.`;
 
   let editPageContext: Awaited<ReturnType<typeof getActivePageContext>> = null;
   if (editMode) {

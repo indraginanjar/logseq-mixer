@@ -108,6 +108,8 @@ Three built-in providers — **no proxy required** for the simplest setups:
 
 **Need Anthropic, Google, or other providers?** Run a [LiteLLM](https://github.com/BerriAI/litellm) proxy to access 100+ providers through a single endpoint. Switch models mid-conversation without changing any plugin settings.
 
+**Control reasoning depth:** Use the ⚡ Effort selector in the header to dial reasoning up or down — from fast/cheap (`Low`) to maximum capability (`Max`). Works across all providers. Reasoning models think deeper; standard models gracefully ignore it.
+
 ---
 
 ## Autonomous agent

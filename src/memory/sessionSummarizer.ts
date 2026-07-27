@@ -10,7 +10,7 @@ export async function summarizeSession(messages: Array<{ role: string; content: 
       },
       { role: 'user', content: conversation },
     ];
-    const result = await queryLiteLLM(llmMessages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider);
+    const result = await queryLiteLLM(llmMessages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider, settings.reasoningEffort);
     const response = result.choices?.[0]?.message?.content?.trim() ?? '';
     if (response === 'NOTHING_TO_REMEMBER') return null;
     return response || null;

@@ -121,6 +121,7 @@ Open **Settings → Plugin Settings → Mixer** and configure:
 | **Selected Model** | `gpt-4o` | Must match a model name in your LiteLLM config |
 | **API Key** | Your provider's API key | e.g., `sk-...` for OpenAI |
 | **LiteLLM api link** | `http://127.0.0.1:4000/chat/completions` | Default — change if your proxy uses a different port |
+| **Reasoning Effort** | `high` | Controls thinking depth. `low`=fast/cheap, `high`=default, `max`=deepest. Also adjustable from the ⚡ header dropdown. |
 
 ### Embedding Settings (for RAG search)
 

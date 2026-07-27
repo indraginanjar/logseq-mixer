@@ -98,7 +98,8 @@ export async function rewriteQueryForRetrieval(
       endpoint,
       signal,
       undefined, // no tools
-      settings.chatProvider
+      settings.chatProvider,
+      settings.reasoningEffort
     );
 
     const rewritten = result.choices?.[0]?.message?.content?.trim();

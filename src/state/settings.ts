@@ -15,6 +15,7 @@ interface IPluginSettings {
   embeddingProvider?: string;
   chatProvider?: string;
   chatEndpoint?: string;
+  reasoningEffort?: string;
   streamingEnabled?: boolean;
   memoryEnabled?: boolean;
   autoSummarize?: boolean;

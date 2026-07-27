@@ -46,7 +46,7 @@ export async function detectGoal(
       { role: 'system', content: CLASSIFICATION_PROMPT },
       { role: 'user', content: message },
     ];
-    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider);
+    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider, settings.reasoningEffort);
     const response = result.choices?.[0]?.message?.content?.trim().toLowerCase() ?? '';
     // Robust parsing: look for "goal" anywhere in the response (handles verbose models
     // that may add reasoning, punctuation, or extra text around the classification)

@@ -9,18 +9,18 @@ Everything you need to know about the Logseq Mixer interface — what every butt
 Click the Mixer toolbar icon in Logseq to open the chat panel:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  [Logo] Mixer    [Model Selector ▾]  [✨ New]  [✕]  │
-├──────────────────────────────────────────────────────┤
-│                                                      │
-│  (Chat messages appear here)                         │
-│                                                      │
-├──────────────────────────────────────────────────────┤
-│  [📇][✏️][🤖]           [🗄️][🔌][🧠][🧩][Re-Index]  │
-│  📄 Page Name ▸ Block preview...                     │
-├──────────────────────────────────────────────────────┤
-│  [📎]  Type your message...              [Send ▶]   │
-└──────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  [Logo] Mixer    [Model ▾] [⚡Effort ▾]  [✨ New]  [✕]     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  (Chat messages appear here)                                │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  [📇][✏️][🤖]           [🗄️][🔌][🧠][🧩][Re-Index]         │
+│  📄 Page Name ▸ Block preview...                            │
+├─────────────────────────────────────────────────────────────┤
+│  [📎]  Type your message...              [Send ▶]          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 The panel can be resized by dragging its left edge. Width persists across sessions (min 320px, max 85%, default 520px).
@@ -32,6 +32,7 @@ The panel can be resized by dragging its left edge. Width persists across sessio
 | Element | What it does |
 |---|---|
 | **Model Selector** | Switch between LLM models on the fly. Dynamically fetches available models from your configured provider (OpenAI, Ollama, or LiteLLM). Remembers your last selected model per provider. |
+| **⚡ Effort Selector** | Control how much "thinking" the model does before responding. Five levels from Low (fastest/cheapest) to Max (deepest reasoning). See [Reasoning Effort](#reasoning-effort) below. |
 | **✨ New** | Start a fresh conversation. If auto-summarize is enabled, the current session is saved to memory first. |
 | **✕** | Close the chat panel. |
 
@@ -313,8 +314,38 @@ Open **Settings → Plugin Settings → Mixer**.
 | **Selected Model** | `gpt-4o` | Model name passed to LiteLLM |
 | **API Key** | — | Your LLM provider API key |
 | **LiteLLM api link** | `http://127.0.0.1:4000/chat/completions` | LiteLLM proxy endpoint |
+| **Reasoning Effort** | `high` | Controls how much thinking the model does. See [Reasoning Effort](#reasoning-effort) below. |
 | **AI prompt** | (default template) | System prompt — customize AI behavior |
 | **Streaming Responses** | `true` | Stream AI responses token-by-token as they are generated. See [Streaming Responses](#streaming-responses) below. |
+
+### Reasoning Effort
+
+The **Reasoning Effort** setting (also accessible via the ⚡ dropdown in the header) controls how deeply the AI model reasons before responding. This maps to the `reasoning_effort` API parameter supported by modern LLM providers.
+
+**Effort Levels:**
+
+| Level | Label | Behavior | Best for |
+|---|---|---|---|
+| `low` | ⚡Low | Fastest, cheapest, minimal reasoning | Simple lookups, classification, quick answers |
+| `medium` | ⚡Med | Balanced speed and quality | General chat, moderate complexity |
+| `high` | ⚡High | Default — thorough reasoning | Complex questions, coding, analysis |
+| `xhigh` | ⚡XH | Extended reasoning depth | Hard multi-step problems, agentic work |
+| `max` | ⚡Max | Maximum capability, no constraints | Frontier problems requiring deepest analysis |
+
+**Provider support:**
+
+| Provider | Supported levels | How it's applied |
+|---|---|---|
+| **OpenAI** | `low`, `medium`, `high` | `reasoning_effort` parameter for o-series reasoning models (o1, o3, o4-mini). Non-reasoning models (GPT-4o) ignore it gracefully. |
+| **Ollama** | All levels | Maps to Ollama's `think` option. `low` = thinking disabled, all others = thinking enabled. |
+| **LiteLLM** | All levels | Automatically translated to each backend's native parameter (Anthropic's `effort`, Gemini's `thinkingLevel`, etc.) |
+
+**Tips:**
+- Start with `high` (the default) — it matches what all providers use by default.
+- Use `low` for high-volume simple tasks where speed matters more than depth.
+- Use `xhigh` or `max` for agent mode tasks that involve multi-step planning and tool use.
+- Models that don't support reasoning effort simply ignore the parameter — no errors occur.
+- The setting persists across sessions. Change it any time from the header dropdown.
 
 ### Streaming Responses
 

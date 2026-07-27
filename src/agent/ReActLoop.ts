@@ -82,9 +82,9 @@ export async function runReActLoop(
   let llmOutput: any;
   if (useStreaming && !hasTools) {
     // Simple Q&A with no tools: stream directly
-    llmOutput = await queryLiteLLMStreaming(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), opts.onChunk!, signal, undefined, settings.chatProvider);
+    llmOutput = await queryLiteLLMStreaming(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), opts.onChunk!, signal, undefined, settings.chatProvider, settings.reasoningEffort);
   } else {
-    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider);
+    llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider, settings.reasoningEffort);
   }
   let assistantMessage = llmOutput.choices?.[0]?.message;
   tokensUsed += estimateTokens(messages, assistantMessage?.content || '', allTools);
@@ -171,7 +171,7 @@ export async function runReActLoop(
       let pendingChunks: string[] = [];
       llmOutput = await queryLiteLLMStreaming(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), (chunk) => {
         pendingChunks.push(chunk);
-      }, signal, allTools, settings.chatProvider);
+      }, signal, allTools, settings.chatProvider, settings.reasoningEffort);
       assistantMessage = llmOutput.choices?.[0]?.message;
       // If this was the final answer (no tool_calls), flush accumulated chunks to the UI
       if (!assistantMessage?.tool_calls || assistantMessage.tool_calls.length === 0) {
@@ -180,7 +180,7 @@ export async function runReActLoop(
         }
       }
     } else {
-      llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools, settings.chatProvider);
+      llmOutput = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), signal, allTools, settings.chatProvider, settings.reasoningEffort);
       assistantMessage = llmOutput.choices?.[0]?.message;
     }
     tokensUsed += estimateTokens([], assistantMessage?.content || '');

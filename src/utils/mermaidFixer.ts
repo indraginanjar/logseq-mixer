@@ -44,6 +44,7 @@ export async function fixMermaidWithLLM(
     chatEndpoint?: string;
     chatProvider?: string;
     LiteLLMLink?: string;
+    reasoningEffort?: string;
   }
 ): Promise<string | null> {
   const endpoint = resolveChatEndpoint(settings);
@@ -77,7 +78,7 @@ Return ONLY the fixed Mermaid code, nothing else.`,
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    const response = await queryLiteLLM(messages, model, apiKey, endpoint, controller.signal, undefined, provider);
+    const response = await queryLiteLLM(messages, model, apiKey, endpoint, controller.signal, undefined, provider, settings.reasoningEffort);
     clearTimeout(timeoutId);
 
     const content = response?.choices?.[0]?.message?.content?.trim();

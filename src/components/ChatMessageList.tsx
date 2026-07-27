@@ -76,12 +76,14 @@ const Avatar = styled('div', {
 
 const Bubble = styled('div', {
   maxWidth: '80%',
+  minWidth: 0,
   padding: '10px 14px',
   borderRadius: '12px',
   fontSize: '14px',
   lineHeight: 1.6,
   wordBreak: 'break-word',
   overflowWrap: 'break-word',
+  overflow: 'hidden',
   // Markdown content styling
   '& p': { margin: '0 0 8px 0', '&:last-child': { marginBottom: 0 } },
   '& pre': {
@@ -91,6 +93,7 @@ const Bubble = styled('div', {
     overflow: 'auto',
     fontSize: '13px',
     margin: '8px 0',
+    maxWidth: '100%',
   },
   '& code': {
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",

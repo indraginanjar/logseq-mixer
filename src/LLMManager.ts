@@ -126,7 +126,8 @@ export async function queryLiteLLM(
   endpoint: string,
   signal?: AbortSignal,
   tools?: any[],
-  provider?: string
+  provider?: string,
+  reasoningEffort?: string
 ): Promise<any> {
   const chatProvider = provider || 'litellm';
 
@@ -164,6 +165,11 @@ export async function queryLiteLLM(
     if (tools && tools.length > 0) {
       requestBody.tools = tools;
     }
+    // Map reasoning effort to Ollama's think option
+    if (reasoningEffort) {
+      requestBody.options = requestBody.options || {};
+      requestBody.options.think = reasoningEffort !== 'low';
+    }
   } else {
     requestBody = {
       model: model,
@@ -179,6 +185,9 @@ export async function queryLiteLLM(
       requestBody.max_completion_tokens = getMaxTokensForModel(model);
     } else {
       requestBody.max_tokens = getMaxTokensForModel(model);
+    }
+    if (reasoningEffort) {
+      requestBody.reasoning_effort = reasoningEffort;
     }
     if (apiKey?.trim()) {
       headers['Authorization'] = `Bearer ${apiKey}`;
@@ -263,7 +272,8 @@ export async function queryLiteLLMStreaming(
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
   tools?: any[],
-  provider?: string
+  provider?: string,
+  reasoningEffort?: string
 ): Promise<any> {
   const chatProvider = provider || 'litellm';
   const useMaxCompletionTokens = shouldUseMaxCompletionTokens(model);
@@ -298,6 +308,11 @@ export async function queryLiteLLMStreaming(
     if (tools && tools.length > 0) {
       requestBody.tools = tools;
     }
+    // Map reasoning effort to Ollama's think option
+    if (reasoningEffort) {
+      requestBody.options = requestBody.options || {};
+      requestBody.options.think = reasoningEffort !== 'low';
+    }
   } else {
     requestBody = {
       model: model,
@@ -314,6 +329,9 @@ export async function queryLiteLLMStreaming(
       requestBody.max_completion_tokens = getMaxTokensForModel(model);
     } else {
       requestBody.max_tokens = getMaxTokensForModel(model);
+    }
+    if (reasoningEffort) {
+      requestBody.reasoning_effort = reasoningEffort;
     }
     if (apiKey?.trim()) {
       headers['Authorization'] = `Bearer ${apiKey}`;

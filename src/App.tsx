@@ -4,6 +4,7 @@ import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
 import SkillPanel from './components/SkillPanel';
 import ModelSelector from './components/ModelSelector';
+import EffortSelector from './components/EffortSelector';
 import { ensureBuiltinHelpSkill } from './skills/builtinHelpSkill';
 import { loadAllSkills } from './skills/SkillStore';
 import { MCPManager } from 'mcp/MCPManager';
@@ -1481,6 +1482,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     logseq.updateSettings({ selectedModel: newModel });
   };
 
+  const handleEffortChange = (level: string) => {
+    logseq.updateSettings({ reasoningEffort: level });
+  };
+
   const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1606,6 +1611,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               choices={modelChoices}
               onChange={handleModelChange}
             />
+            <EffortSelector value={settings?.reasoningEffort || 'high'} onChange={handleEffortChange} />
             <HeaderButton onClick={handleNewSession} aria-label="New Session" title="New Session">✨ New</HeaderButton>
             <MemoryIndicator status={memoryStatus} onTrimMessages={handleTrimMessages} />
             <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close" title="Close">✕</CloseButton>

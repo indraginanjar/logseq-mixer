@@ -137,7 +137,7 @@ export class AgentLoop {
       { role: 'user', content: `Goal: ${goal}\n\nCurrent context:\n${context}` },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
 
@@ -388,7 +388,7 @@ RULES:
     ];
 
     try {
-      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
       const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
       this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
       return raw || null;
@@ -531,7 +531,7 @@ RULES:
       { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}${writeContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using ALL the data above — especially the "Gathered Data (Working Memory)" section if present — produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     const tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
 
@@ -652,7 +652,7 @@ RULES:
       { role: 'user', content: `Goal: ${context.goal}\nStep description: ${step.description}\n\nPrior context:\n${priorOutputs.slice(0, 4000)}` },
     ];
 
-    const extractResult = await queryLiteLLM(extractMessages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+    const extractResult = await queryLiteLLM(extractMessages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
     const extractRaw = extractResult.choices?.[0]?.message?.content?.trim() ?? '[]';
     totalTokens += countTokens(JSON.stringify(extractMessages)) + countTokens(extractRaw);
 
@@ -715,7 +715,7 @@ RULES:
         { role: 'user', content: `Goal: ${context.goal}\nExtraction task: ${step.description}\n\nPages content (batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(pageNames.length / BATCH_SIZE)}):\n${batchContent}\n\nExtract ALL relevant information from these pages. Be comprehensive.` },
       ];
 
-      const batchResult = await queryLiteLLM(summarizeMessages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+      const batchResult = await queryLiteLLM(summarizeMessages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
       const batchSummary = batchResult.choices?.[0]?.message?.content?.trim() ?? '';
       totalTokens += countTokens(JSON.stringify(summarizeMessages)) + countTokens(batchSummary);
 
@@ -761,7 +761,7 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
           content: `Step: "${step.description}" (type: ${step.type})\nError: ${error}\nGoal: ${context.goal}\nRecent context:\n${recentContext}`,
         },
       ];
-      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
       const diagnostic = result.choices?.[0]?.message?.content?.trim() ?? '';
       this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(diagnostic);
       if (diagnostic) return diagnostic;
@@ -804,7 +804,7 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
       { role: 'system', content: EVAL_SYSTEM_PROMPT },
       { role: 'user', content: `Step intent: ${step.description}\nStep type: ${step.type}\nOutput received:\n${result.output.slice(0, 500)}\n\nWas the intent achieved?` },
     ];
-    const llmResult = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+    const llmResult = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
     const raw = llmResult.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
     try {
@@ -827,7 +827,7 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
       { role: 'user', content: `Goal: ${context.goal}\n\nProgress so far:\n${progressSummary}\n\nRemaining steps:\n${remainingDesc}\n\nShould the remaining plan change?` },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
 
@@ -887,7 +887,7 @@ RULES:
         },
       ];
 
-      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
       const compressed = result.choices?.[0]?.message?.content?.trim() ?? '';
       const compressionTokens = countTokens(JSON.stringify(messages)) + countTokens(compressed);
       this.tokensUsed += compressionTokens;
@@ -1038,7 +1038,7 @@ RULES:
 
     if (toolAccess === 'none') {
       // Legacy behavior: single LLM call, no tools
-      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider);
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
       raw = result.choices?.[0]?.message?.content?.trim() ?? '';
       tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
     } else {
