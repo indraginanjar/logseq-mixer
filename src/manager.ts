@@ -26,6 +26,44 @@ import type { SkillEntry, SkillCatalogEntry } from './skills';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
+/**
+ * Format a Date using a date-fns style pattern (as used by Logseq's preferredDateFormat).
+ * Supports common tokens: yyyy, yy, MMMM, MMM, MM, M, do, dd, d, EEEE, EEE, EE, E.
+ */
+function formatDateByPattern(date: Date, pattern: string): string {
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-indexed
+  const day = date.getDate();
+  const weekday = date.getDay();
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayAbbr = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const ordinal = (n: number) => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
+  // Replace tokens from longest to shortest to avoid partial matches
+  return pattern
+    .replace(/yyyy/g, String(year))
+    .replace(/yy/g, String(year).slice(-2))
+    .replace(/MMMM/g, monthNames[month])
+    .replace(/MMM/g, monthAbbr[month])
+    .replace(/MM/g, String(month + 1).padStart(2, '0'))
+    .replace(/M(?!o)/g, String(month + 1))
+    .replace(/do/g, ordinal(day))
+    .replace(/dd/g, String(day).padStart(2, '0'))
+    .replace(/d(?!o)/g, String(day))
+    .replace(/EEEE/g, dayNames[weekday])
+    .replace(/EEE/g, dayAbbr[weekday])
+    .replace(/EE/g, dayAbbr[weekday])
+    .replace(/E(?!E)/g, dayAbbr[weekday]);
+}
+
 // Global variable to store conversation history
 const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = [];
 // Set maximum number of history messages to include in the prompt (e.g., last 6 messages)
@@ -534,6 +572,24 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Build system message
   let systemMessage = settings.prompt;
+
+  // Inject environment context (date, timezone, locale, Logseq preferences)
+  const now = new Date();
+  const isoDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let envContext = `\n\nCurrent date: ${isoDate} (${dayName}), timezone: ${timezone}.`;
+  try {
+    const userConfigs = await logseq.App.getUserConfigs();
+    if (userConfigs.preferredDateFormat) {
+      envContext += `\nLogseq journal date format: "${userConfigs.preferredDateFormat}". Use this format when constructing [[journal page]] links (e.g., if format is "MMM do, yyyy" then today's journal is [[${formatDateByPattern(now, userConfigs.preferredDateFormat)}]]).`;
+    }
+    if (userConfigs.preferredLanguage) {
+      envContext += `\nUser language: ${userConfigs.preferredLanguage}.`;
+    }
+  } catch { /* Logseq API not ready — use date only */ }
+  envContext += `\nUse this context when the user refers to "today", "yesterday", "this week", etc.`;
+  systemMessage += envContext;
 
   // Action-bias directive: prevent models from endlessly asking for options/confirmation
   // This is prepended early but the final reinforcement is added at the very end (see below)

@@ -132,8 +132,19 @@ export class AgentLoop {
       ? '\n\nIMPORTANT: Direct Page Edit mode is OFF. Do NOT create pages or write/insert/update blocks in Logseq. Only gather information and present the results as text output. All output should be delivered in the chat response, not written to the graph.'
       : '';
 
+    // Build environment context for the planner
+    const planNow = new Date();
+    const planDate = planNow.toISOString().split('T')[0];
+    const planDay = planNow.toLocaleDateString('en-US', { weekday: 'long' });
+    const planTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let planEnv = `\n\nCurrent date: ${planDate} (${planDay}), timezone: ${planTz}.`;
+    try {
+      const configs = await logseq.App.getUserConfigs();
+      if (configs.preferredDateFormat) planEnv += ` Logseq journal date format: "${configs.preferredDateFormat}".`;
+    } catch { /* ignore */ }
+
     const messages: ChatMessage[] = [
-      { role: 'system', content: PLAN_SYSTEM_PROMPT + toolList + writeConstraint },
+      { role: 'system', content: PLAN_SYSTEM_PROMPT + toolList + writeConstraint + planEnv },
       { role: 'user', content: `Goal: ${goal}\n\nCurrent context:\n${context}` },
     ];
 
