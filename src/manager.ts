@@ -496,6 +496,9 @@ const GROUNDING_INSTRUCTIONS = `
 ## Grounding Rules
 - Base your response primarily on the retrieved context provided below. Do not invent or hallucinate information not present in the context.
 - If the retrieved context does not contain sufficient information to answer the user's question, answer as best you can with what is available and briefly note any gaps — do not ask the user for clarification or present options.
+- **Date/time verification:** When the user's query references a specific time period (e.g., "today", "yesterday", "this week"), verify that the retrieved context actually matches that time period. If the context is from a different date than what the user asked about, explicitly tell the user — e.g., "I found notes about X, but they are from [date], not today. There are no notes matching today's date." Do NOT present content from the wrong date as if it matches the user's request.
+- **Multiple similar results:** When the retrieved context contains multiple blocks that could answer the user's query, present ALL relevant matches with their source pages and dates rather than silently choosing one. Let the user see all candidates. When the user asks for the "last" or "latest" or "most recent" version of something, prefer results from more recent pages/dates.
+- **Accuracy over confidence:** If you are not certain which specific piece of retrieved content best matches the user's request (e.g., there are multiple similar entries), say so. Present what you found with their sources and let the user decide. Never present a guess as a definitive answer.
 - When referencing specific information from the context, cite the source block using ((uuid)) format if a uuid is available in the context.
 - If the context contains conflicting information, acknowledge both perspectives rather than silently choosing one.
 - You may use your general knowledge to explain, synthesize, or contextualize the retrieved information, but clearly distinguish between what comes from the user's notes vs. general knowledge.`;
@@ -737,6 +740,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // from hallucinating tool call syntax instead of answering directly.
   const hasContext = !!vectorContext;
   const needsTools = shouldIncludeTools(query, hasContext, !!editMode);
+  console.log(`[handleQuery] needsTools=${needsTools}, hasContext=${hasContext}, editMode=${!!editMode}, mcpTools=${tools.length}`);
 
   const reactResult = await runReActLoop(messages, {
     settings, signal,

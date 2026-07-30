@@ -37,7 +37,7 @@ export type ChatMessage = {
 /** Max output tokens per model. Falls back to 4096 for unknown models. */
 const MODEL_MAX_TOKENS: Record<string, number> = {
   'gpt-3.5-turbo': 4096,
-  'gpt-4': 8192,
+  'gpt-4': 4096,
   'gpt-4o': 16384,
   'claude-2': 4096,
   'claude-3-opus': 4096,
@@ -165,10 +165,11 @@ export async function queryLiteLLM(
     if (tools && tools.length > 0) {
       requestBody.tools = tools;
     }
-    // Map reasoning effort to Ollama's think option
-    if (reasoningEffort) {
+    // Only send think option when user explicitly wants reasoning (not low)
+    // Models that don't support thinking will error even with think:false
+    if (reasoningEffort && reasoningEffort !== 'low') {
       requestBody.options = requestBody.options || {};
-      requestBody.options.think = reasoningEffort !== 'low';
+      requestBody.options.think = true;
     }
   } else {
     requestBody = {
@@ -202,7 +203,7 @@ export async function queryLiteLLM(
   });
 
   if (!response.ok) {
-    // Check if the error is about unsupported max_tokens parameter
+    // Read the error body for diagnostics and retry logic
     let errorBody = '';
     try {
       errorBody = await response.text();
@@ -239,7 +240,72 @@ export async function queryLiteLLM(
       return retryData;
     }
 
-    throw new Error(`LLM request failed: ${response.status} ${response.statusText}`);
+    // Detect reasoning_effort incompatibility (model doesn't support it)
+    if (
+      response.status === 400 &&
+      requestBody.reasoning_effort &&
+      errorBody.includes('reasoning_effort')
+    ) {
+      console.info(`[queryLiteLLM] Model "${model}" rejected reasoning_effort, retrying without it.`);
+      delete requestBody.reasoning_effort;
+
+      const retryResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+        signal,
+      });
+
+      if (!retryResponse.ok) {
+        let retryErrorBody = '';
+        try { retryErrorBody = await retryResponse.text(); } catch { /* ignore */ }
+        throw new Error(`LLM request failed: ${retryResponse.status} ${retryResponse.statusText}${retryErrorBody ? ' — ' + retryErrorBody : ''}`);
+      }
+
+      const retryData = await retryResponse.json();
+      if (chatProvider === 'ollama' && retryData.message && !retryData.choices) {
+        return { choices: [{ message: retryData.message }] };
+      }
+      return retryData;
+    }
+
+    // Detect context_length_exceeded — reduce max_tokens to fit
+    if (
+      response.status === 400 &&
+      errorBody.includes('context_length_exceeded')
+    ) {
+      // Parse the context limit from the error if possible, otherwise halve max_tokens
+      const contextLimit = getContextLimitForModel(model);
+      const currentMaxTokens = requestBody.max_tokens || requestBody.max_completion_tokens || DEFAULT_MAX_TOKENS;
+      // Estimate input tokens from error or use a safe fraction
+      const reducedMaxTokens = Math.max(512, Math.floor(contextLimit * 0.4));
+      if (reducedMaxTokens < currentMaxTokens) {
+        console.info(`[queryLiteLLM] Model "${model}" context_length_exceeded, reducing max_tokens from ${currentMaxTokens} to ${reducedMaxTokens}.`);
+        if (requestBody.max_tokens) requestBody.max_tokens = reducedMaxTokens;
+        if (requestBody.max_completion_tokens) requestBody.max_completion_tokens = reducedMaxTokens;
+
+        const retryResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+          signal,
+        });
+
+        if (!retryResponse.ok) {
+          let retryErrorBody = '';
+          try { retryErrorBody = await retryResponse.text(); } catch { /* ignore */ }
+          throw new Error(`LLM request failed: ${retryResponse.status} ${retryResponse.statusText}${retryErrorBody ? ' — ' + retryErrorBody : ''}`);
+        }
+
+        const retryData = await retryResponse.json();
+        if (chatProvider === 'ollama' && retryData.message && !retryData.choices) {
+          return { choices: [{ message: retryData.message }] };
+        }
+        return retryData;
+      }
+    }
+
+    throw new Error(`LLM request failed: ${response.status} ${response.statusText}${errorBody ? ' — ' + errorBody : ''}`);
   }
 
   const data = await response.json();
@@ -308,10 +374,11 @@ export async function queryLiteLLMStreaming(
     if (tools && tools.length > 0) {
       requestBody.tools = tools;
     }
-    // Map reasoning effort to Ollama's think option
-    if (reasoningEffort) {
+    // Only send think option when user explicitly wants reasoning (not low)
+    // Models that don't support thinking will error even with think:false
+    if (reasoningEffort && reasoningEffort !== 'low') {
       requestBody.options = requestBody.options || {};
-      requestBody.options.think = reasoningEffort !== 'low';
+      requestBody.options.think = true;
     }
   } else {
     requestBody = {
@@ -338,7 +405,7 @@ export async function queryLiteLLMStreaming(
     }
   }
 
-  const response = await fetch(endpoint, {
+  let response = await fetch(endpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify(requestBody),
@@ -346,7 +413,38 @@ export async function queryLiteLLMStreaming(
   });
 
   if (!response.ok) {
-    throw new Error(`LLM streaming request failed: ${response.status} ${response.statusText}`);
+    // Read the error body for diagnostics and retry logic
+    let errorBody = '';
+    try {
+      errorBody = await response.text();
+    } catch { /* ignore read errors */ }
+
+    // Detect reasoning_effort incompatibility (model doesn't support it)
+    if (
+      response.status === 400 &&
+      requestBody.reasoning_effort &&
+      errorBody.includes('reasoning_effort')
+    ) {
+      console.info(`[queryLiteLLMStreaming] Model "${model}" rejected reasoning_effort, retrying without it.`);
+      delete requestBody.reasoning_effort;
+
+      const retryResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+        signal,
+      });
+
+      if (!retryResponse.ok) {
+        let retryErrorBody = '';
+        try { retryErrorBody = await retryResponse.text(); } catch { /* ignore */ }
+        throw new Error(`LLM streaming request failed: ${retryResponse.status} ${retryResponse.statusText}${retryErrorBody ? ' — ' + retryErrorBody : ''}`);
+      }
+
+      response = retryResponse;
+    } else {
+      throw new Error(`LLM streaming request failed: ${response.status} ${response.statusText}${errorBody ? ' — ' + errorBody : ''}`);
+    }
   }
 
   // Check if the response is actually a stream (SSE) or a plain JSON response
