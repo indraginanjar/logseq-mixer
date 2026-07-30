@@ -89,6 +89,8 @@ const TOOL_NEEDED_PATTERNS: RegExp[] = [
   /\bdelete\s+(the\s+)?block\b/i,
   // MCP / external tools
   /\b(web search|browse|fetch|download|run|execute)\b/i,
+  // OS / shell commands via MCP
+  /\b(open|launch|start)\s+\S/i,
   // Skill invocation
   /^\/skill\b/i,
   // Multi-step / agent-like imperatives that need graph interaction
