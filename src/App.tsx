@@ -1249,9 +1249,15 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             sender: 'assistant',
             model: settings?.selectedModel,
             timestamp: chatTimestamp(),
+            completedTimestamp: chatTimestamp(),
           }]);
         }
         // When streaming was used, the message is already rendered progressively via onChunk
+        if (isStreamingStarted) {
+          setMessages(prev => prev.map(m =>
+            m.id === streamingMsgId ? { ...m, completedTimestamp: chatTimestamp() } : m
+          ));
+        }
       }
 
       // Check if a memory was saved during this query

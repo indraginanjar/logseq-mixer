@@ -22,6 +22,7 @@ export type ChatMessage = {
   sender: 'user' | 'assistant';
   model?: string;
   timestamp?: string;
+  completedTimestamp?: string;
   image?: { name: string; content: string }[];
   file?: { name: string; content: string }[];
 };
@@ -1423,6 +1424,18 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
               msg.sender === 'assistant'
             )}
           </Bubble>
+          {msg.sender === 'assistant' && msg.completedTimestamp && (
+            <div style={{
+              fontSize: '10px',
+              color: '#8b5cf6',
+              marginTop: '3px',
+              fontFamily: 'monospace',
+              letterSpacing: '0.02em',
+              opacity: 0.7,
+            }}>
+              ✓ {msg.completedTimestamp}
+            </div>
+          )}
         </div>
       </MessageRow>
       {result && (
