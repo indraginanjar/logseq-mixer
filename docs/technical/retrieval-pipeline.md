@@ -23,13 +23,18 @@ End-to-end documentation of Logseq Mixer's hybrid RAG system — from embedding 
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  Query → classifyQuery() → [keyword|mixed|semantic]             │
+│        → detectTemporalIntent() → temporalBoost                │
 │        → useGenerateEmbedding(query)                            │
-│        ├→ BM25Index.search() ──────────────┐                    │
+│        ├→ BM25Index.search() ────────────┐                    │
 │        └→ VectorSearchAccelerator.search() ─┤                   │
 │                                             ↓                   │
 │                                    mergeWithRRF()               │
 │                                             ↓                   │
-│                              Top 5 fused chunks                 │
+│                                  applyDepthWeight()             │
+│                                             ↓                   │
+│                                  applyRecencyScoring()          │
+│                                             ↓                   │
+│                              Top 12 fused chunks                │
 │                                             ↓                   │
 │                         Build LLM prompt + query LLM            │
 │                                                                 │
@@ -167,6 +172,10 @@ Each block is annotated with `[block:<uuid>]` for LLM citation.
 
 Per-run cache prevents redundant `logseq.Editor.getBlock()` calls. Unresolvable references preserved as-is.
 
+**Source Annotations:** When a block reference or embed is resolved, the resolved content is annotated with its source page name: `resolved text [ref from: source-page-name]`. This helps the LLM distinguish between where content originates vs. where it is referenced, improving answer accuracy when multiple similar blocks exist across the graph.
+
+**Deduplication Exception:** During full indexing, lines containing resolved block references are exempted from cross-page deduplication. This ensures that a journal page referencing a block from another page retains that resolved content in its index chunk, enabling recency-aware retrieval to find the most recent reference.
+
 #### Subtree Chunking Rules
 
 1. **Heading cohesion:** Headings and their children stay together if within budget
@@ -254,6 +263,16 @@ The entire sql.js database is serialized as a binary `ArrayBuffer` and stored in
 | `mixed` | 1 | 1.0 | 1.0 |
 | `semantic` | 0 | 0.5 | 1.5 |
 
+#### Temporal Intent Detection
+
+In addition to keyword/semantic classification, `classifyQuery()` detects **temporal intent** — queries asking about recent, latest, or time-specific content:
+
+**Temporal Patterns:**
+- `last`, `latest`, `most recent`, `current`, `newest`
+- `today`, `yesterday`, `this week`, `this month`, `recent`
+
+When temporal intent is detected, `temporalBoost: true` is passed to the recency scoring stage, applying a stronger time-decay multiplier to results.
+
 ### Step 2: BM25 Keyword Search
 
 In-memory inverted index built from all document content at startup.
@@ -280,7 +299,25 @@ fused_score = bm25Weight × 1/(K + rank_bm25) + vectorWeight × 1/(K + rank_vect
 - Missing entries get penalty rank = `listLength + 1`
 - Deduplicated by chunk ID
 - Sorted by fused score descending
-- Limited to 5 results
+- Limited to 12 results (configurable via `options.limit`)
+
+### Step 5: Recency Scoring
+
+After RRF fusion and depth weighting, chunks from journal pages receive a recency multiplier based on their `note_date` header. Non-journal pages (without `note_date`) are unaffected.
+
+**Formula:** `weightedScore *= recencyWeight(daysOld, temporalBoost)`
+
+| Age | Standard Weight | Temporal Boost Weight |
+|---|---|---|
+| Today | 1.3 | 1.5 |
+| 1 week | ~1.23 | ~1.40 |
+| 1 month | ~1.0 | ~1.05 |
+| 2+ months | 0.7 (floor) | 0.6 (floor) |
+
+**Standard formula:** `max(0.7, 1.3 - daysOld * 0.01)`
+**Temporal boost formula:** `max(0.6, 1.5 - daysOld * 0.015)`
+
+This ensures that when a user asks for the "last" or "latest" version of something, more recently referenced content ranks higher — even if the original content lives on an older page.
 
 ### Fallback Chain
 
@@ -406,7 +443,7 @@ LLM responses containing Logseq notation are transformed:
 
 - **Full chunk injection:** Retrieved chunks injected in full — consumes significant prompt tokens for long pages
 - **No deduplication:** Current page may appear in both "Current Page Context" and "Additional Context"
-- **Fixed parameters:** Similarity threshold (0.5) and result limit (5) are hardcoded
+- **Fixed parameters:** Similarity threshold (0.5) and result limit (12) are defaults (limit is configurable via `options.limit`)
 - **No streaming:** Responses awaited in full before display
 - **Single-level reference resolution:** Nested references within references not recursively resolved
 - **Brute-force scaling:** Without HNSW, search scales linearly with document count

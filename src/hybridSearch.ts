@@ -1,6 +1,7 @@
 import type { BM25Index } from './bm25Index';
 import { applyDepthWeight } from './depthWeightedSearch';
 import { classifyQuery } from './queryClassifier';
+import { applyRecencyScoring, extractNoteDate, computeRecencyWeight } from './recencyScoring';
 import type { RankedHit, SearchHit } from './reranker';
 import { mergeWithRRF } from './reranker';
 import type { PerDocumentStorageProvider } from './storage/StorageProvider';
@@ -12,9 +13,10 @@ export interface HybridSearchOptions {
   rrfK?: number;        // RRF constant, default 60
   minRrfScore?: number; // minimum RRF score to include a result, default 0.025
   accelerator?: VectorSearchAccelerator;  // optional HNSW accelerator for fast vector search
+  temporalBoost?: boolean; // apply stronger recency boost for temporal queries
 }
 
-const DEFAULT_LIMIT = 8;
+const DEFAULT_LIMIT = 12;
 const DEFAULT_THRESHOLD = 0.5;
 const DEFAULT_RRF_K = 60;
 const DEFAULT_MIN_RRF_SCORE = 0.025;
@@ -34,10 +36,12 @@ export async function hybridSearch(
   // 1. Classify the query — default to mixed on error
   let bm25Weight = 1;
   let vectorWeight = 1;
+  let temporalBoost = options?.temporalBoost ?? false;
   try {
     const classification = classifyQuery(query);
     bm25Weight = classification.bm25Weight;
     vectorWeight = classification.vectorWeight;
+    temporalBoost = temporalBoost || classification.temporalBoost;
   } catch {
     // Default to mixed weights on classifier error
   }
@@ -86,11 +90,24 @@ export async function hybridSearch(
     typeof (storageProvider as any).getDepthMetadata === 'function';
 
   if (!hasDepthMetadata || merged.length === 0) {
+    applyRecencyScoring(merged, temporalBoost);
+    merged.sort((a, b) => b.rrfScore - a.rrfScore);
     return merged.filter(hit => hit.rrfScore >= minRrfScore);
   }
 
   const depthMeta = (storageProvider as any).getDepthMetadata(merged.map((h: RankedHit) => h.id)) as Map<string, { rootDepth: number; hasHeading: boolean }>;
   const weighted = applyDepthWeight(merged, depthMeta);
+
+  // Apply recency scoring to weighted results
+  const now = new Date();
+  for (const hit of weighted) {
+    const noteDate = extractNoteDate(hit.content);
+    if (noteDate) {
+      const weight = computeRecencyWeight(noteDate, now, temporalBoost);
+      hit.weightedRrfScore *= weight;
+    }
+  }
+
   weighted.sort((a, b) => b.weightedRrfScore - a.weightedRrfScore);
   return weighted.filter(hit => hit.rrfScore >= minRrfScore).slice(0, limit);
 }

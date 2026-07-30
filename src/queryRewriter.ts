@@ -22,6 +22,11 @@ const COREFERENCE_PATTERNS = [
   /\b(also|too|another|more about|more on|what about)\b/i,
   /^(and|but|so|how|why|what|where|when)\b/i,  // starts with conjunction/question word (follow-up)
   /\?$/, // questions are often follow-ups
+  // Indonesian coreference patterns
+  /\b(nya|tersebut|itu|ini|tadi|barusan)\b/i,
+  /\b(yang sama|di atas|sebelumnya|tadi|disebutkan)\b/i,
+  /\b(juga|lagi|selain itu|bagaimana dengan|gimana)\b/i,
+  /^(dan|tapi|jadi|terus|lalu|gimana|kenapa|apa|dimana|kapan)\b/i,
 ];
 
 /**

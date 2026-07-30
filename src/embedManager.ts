@@ -187,13 +187,14 @@ export const MAX_OVERLAP_BUDGET = 0.20;
  * by fetching the referenced block's content from Logseq.
  * Uses a cache to avoid redundant API calls for the same block.
  */
-const refCache = new Map<string, string>();
+const refCache = new Map<string, { content: string; pageName?: string }>();
 
-async function resolveBlockReferences(content: string): Promise<string> {
-  // Match block embeds: {{embed ((uuid))}}
+async function resolveBlockReferences(content: string): Promise<{ resolved: string; hadRefs: boolean }> {
   const embedRegex = /\{\{embed\s+\(\(([a-f0-9-]+)\)\)\s*\}\}/gi;
-  // Match block references: ((uuid))
   const refRegex = /\(\(([a-f0-9-]+)\)\)/g;
+
+  const hadRefs = embedRegex.test(content) || refRegex.test(content);
+  embedRegex.lastIndex = 0;
 
   let resolved = content;
 
@@ -201,34 +202,45 @@ async function resolveBlockReferences(content: string): Promise<string> {
   const embedMatches = [...content.matchAll(embedRegex)];
   for (const match of embedMatches) {
     const uuid = match[1];
-    const refContent = await fetchBlockContent(uuid);
-    resolved = resolved.replace(match[0], refContent);
+    const { content: refContent, pageName } = await fetchBlockContent(uuid);
+    const annotation = pageName ? ` [ref from: ${pageName}]` : '';
+    resolved = resolved.replace(match[0], refContent + annotation);
   }
 
   // Resolve remaining block references
   const refMatches = [...resolved.matchAll(refRegex)];
   for (const match of refMatches) {
     const uuid = match[1];
-    const refContent = await fetchBlockContent(uuid);
-    resolved = resolved.replace(match[0], refContent);
+    const { content: refContent, pageName } = await fetchBlockContent(uuid);
+    const annotation = pageName ? ` [ref from: ${pageName}]` : '';
+    resolved = resolved.replace(match[0], refContent + annotation);
   }
 
-  return resolved;
+  return { resolved, hadRefs };
 }
 
-async function fetchBlockContent(uuid: string): Promise<string> {
+async function fetchBlockContent(uuid: string): Promise<{ content: string; pageName?: string }> {
   if (refCache.has(uuid)) {
     return refCache.get(uuid)!;
   }
   try {
     const block = await logseq.Editor.getBlock(uuid);
     const content = block?.content ?? `((${uuid}))`;
-    refCache.set(uuid, content);
-    return content;
+    // Try to get the page this block belongs to
+    let pageName: string | undefined;
+    if (block?.page?.id) {
+      try {
+        const page = await logseq.Editor.getPage(block.page.id);
+        pageName = page?.name;
+      } catch { /* ignore */ }
+    }
+    const result = { content, pageName };
+    refCache.set(uuid, result);
+    return result;
   } catch {
-    // If fetch fails, keep the original reference syntax
-    refCache.set(uuid, `((${uuid}))`);
-    return `((${uuid}))`;
+    const result = { content: `((${uuid}))`, pageName: undefined };
+    refCache.set(uuid, result);
+    return result;
   }
 }
 
@@ -268,6 +280,8 @@ export function createContentPreview(content: string): string {
 export interface FlattenResult {
   lines: string[];
   metadata: BlockMetadataEntry[];
+  /** Parallel to `lines` — true if the line's original content contained a block reference ((uuid)) or embed. */
+  hasResolvedRef: boolean[];
 }
 
 /**
@@ -282,9 +296,10 @@ export interface FlattenResult {
 export async function flattenBlocks(blocks: any[], parentChain: string[] = [], pageName?: string): Promise<FlattenResult> {
   const lines: string[] = [];
   const metadata: BlockMetadataEntry[] = [];
+  const hasResolvedRef: boolean[] = [];
   for (const block of blocks) {
     if (block.content) {
-      const resolvedContent = await resolveBlockReferences(block.content);
+      const { resolved: resolvedContent, hadRefs } = await resolveBlockReferences(block.content);
       const props = formatBlockProperties(block.properties);
       let line: string;
       if (parentChain.length > 0) {
@@ -306,6 +321,7 @@ export async function flattenBlocks(blocks: any[], parentChain: string[] = [], p
         }
       }
       lines.push(line);
+      hasResolvedRef.push(hadRefs);
       if (block.children && block.children.length > 0) {
         const shortContent = resolvedContent.length > 60
           ? resolvedContent.slice(0, 60) + '…'
@@ -313,14 +329,16 @@ export async function flattenBlocks(blocks: any[], parentChain: string[] = [], p
         const childResult = await flattenBlocks(block.children, [...parentChain, shortContent], pageName);
         lines.push(...childResult.lines);
         metadata.push(...childResult.metadata);
+        hasResolvedRef.push(...childResult.hasResolvedRef);
       }
     } else if (block.children && block.children.length > 0) {
       const childResult = await flattenBlocks(block.children, parentChain, pageName);
       lines.push(...childResult.lines);
       metadata.push(...childResult.metadata);
+      hasResolvedRef.push(...childResult.hasResolvedRef);
     }
   }
-  return { lines, metadata };
+  return { lines, metadata, hasResolvedRef };
 }
 
 /**
@@ -662,17 +680,25 @@ export async function getEmbedingsAllNotes(apiKey: string, model: string = DEFAU
       batch.map(async (page) => {
         try {
           const blocks = await logseq.Editor.getPageBlocksTree(page.uuid);
-          const { lines: originalLines } = await flattenBlocks(blocks);
+          const { lines: originalLines, hasResolvedRef } = await flattenBlocks(blocks);
 
           // Normalize block content (strip markdown formatting)
           const normalizedLines = originalLines.map((line) => normalizeBlockContent(line));
+
+          // Build set of normalized lines that came from resolved references
+          const refLines = new Set<string>();
+          for (let idx = 0; idx < normalizedLines.length; idx++) {
+            if (hasResolvedRef[idx]) {
+              refLines.add(normalizedLines[idx]);
+            }
+          }
 
           // Deduplicate within-page
           const withinPageDeduped = deduplicateBlocks(normalizedLines);
 
           // Deduplicate across pages
           const crossPageDeduped = withinPageDeduped.filter(
-            (line) => crossPageDedup.tryAdd(line)
+            (line) => refLines.has(line) || crossPageDedup.tryAdd(line)
           );
 
           // Build a mapping from normalized line → original line for heading detection.
@@ -761,7 +787,7 @@ export async function getEmbeddingsForPage(
   provider?: EmbeddingProvider,
   journalData?: PageJournalData
 ): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[]; chunkDepthMetadata: ChunkDepthMetadata[] }> {
-  const { lines: originalLines, metadata: blockMetadata } = await flattenBlocks(blocks, [], pageName);
+  const { lines: originalLines, metadata: blockMetadata, hasResolvedRef } = await flattenBlocks(blocks, [], pageName);
 
   // Normalize block content (strip markdown formatting)
   const normalizedLines = originalLines.map((line) => normalizeBlockContent(line));

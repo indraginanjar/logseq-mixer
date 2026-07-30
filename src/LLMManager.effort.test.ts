@@ -74,7 +74,7 @@ describe('reasoning_effort parameter injection', () => {
       expect(body.options.think).toBe(true);
     });
 
-    it('sets think=false for ollama when effort is low', async () => {
+    it('omits think option for ollama when effort is low', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ message: { role: 'assistant', content: 'test' } }),
@@ -92,7 +92,7 @@ describe('reasoning_effort parameter injection', () => {
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.options.think).toBe(false);
+      expect(body.options?.think).toBeUndefined();
     });
 
     it('omits reasoning_effort when not provided', async () => {

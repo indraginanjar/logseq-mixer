@@ -4,6 +4,46 @@ export interface BM25Result {
   score: number;
 }
 
+/** Stopwords that are too common to be useful in BM25 scoring.
+ * Includes English and Indonesian function words.
+ */
+export const STOPWORDS = new Set([
+  // English
+  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+  'should', 'may', 'might', 'shall', 'can', 'of', 'in', 'to', 'for',
+  'with', 'on', 'at', 'by', 'from', 'as', 'into', 'through', 'during',
+  'before', 'after', 'above', 'below', 'between', 'and', 'but', 'or',
+  'not', 'no', 'if', 'then', 'than', 'so', 'very', 'just',
+  // Indonesian
+  'yang', 'dan', 'di', 'ini', 'itu', 'dengan', 'untuk', 'pada', 'adalah',
+  'dari', 'dalam', 'tidak', 'akan', 'juga', 'sudah', 'ke', 'karena',
+  'ada', 'bisa', 'oleh', 'saya', 'kita', 'kami', 'mereka', 'dia',
+  'anda', 'atau', 'tetapi', 'jika', 'maka', 'telah', 'belum', 'masih',
+  'hanya', 'lebih', 'sangat', 'banyak', 'satu', 'lain', 'semua',
+  'sedang', 'harus', 'dapat', 'seperti', 'antara', 'saat', 'secara',
+]);
+
+/** Basic Indonesian stemmer — strips common affixes to find root words.
+ * Returns the stem AND the original (both are used for matching).
+ * This is intentionally simple to avoid over-stemming.
+ */
+function indonesianStem(token: string): string | null {
+  if (token.length < 4) return null;
+  let stem = token;
+  // Strip common suffixes first
+  stem = stem.replace(/(-?nya|kah|lah|pun)$/, '');
+  stem = stem.replace(/(kan|an|i)$/, '');
+  // Strip common prefixes
+  stem = stem.replace(/^(meng?|mem|men|meny|me)/, '');
+  stem = stem.replace(/^(ber|be)/, '');
+  stem = stem.replace(/^(per|pe)/, '');
+  stem = stem.replace(/^(di|ke|se)/, '');
+  // Only return if stem is meaningful (at least 3 chars)
+  if (stem.length >= 3 && stem !== token) return stem;
+  return null;
+}
+
 export class BM25Index {
   private invertedIndex: Map<string, Map<string, number>>; // term → (docId → termFreq)
   private docLengths: Map<string, number>; // docId → token count
@@ -23,9 +63,33 @@ export class BM25Index {
     this.docCount = 0;
   }
 
-  /** Tokenize text: split on whitespace/punctuation, lowercase. */
+  /** Tokenize text: split on whitespace/punctuation, lowercase.
+   * Hyphenated words (e.g., Indonesian "baru-baru") are kept as compound tokens
+   * AND also emit individual parts for broader matching.
+   */
   static tokenize(text: string): string[] {
-    return text.toLowerCase().split(/[\s\p{P}]+/u).filter(Boolean);
+    const lower = text.toLowerCase();
+    // Split on whitespace first
+    const rawTokens = lower.split(/\s+/).filter(Boolean);
+    const tokens: string[] = [];
+    for (const raw of rawTokens) {
+      // Strip leading/trailing punctuation
+      const cleaned = raw.replace(/^[\p{P}]+|[\p{P}]+$/gu, '');
+      if (!cleaned) continue;
+      // If it contains a hyphen between word chars (e.g., "baru-baru"), keep compound AND parts
+      if (/^\w+(-\w+)+$/.test(cleaned)) {
+        tokens.push(cleaned); // compound: "baru-baru"
+        const parts = cleaned.split('-');
+        for (const part of parts) {
+          if (part) tokens.push(part); // individual parts
+        }
+      } else {
+        // Split remaining punctuation within token
+        const subTokens = cleaned.split(/[\p{P}]+/u).filter(Boolean);
+        tokens.push(...subTokens);
+      }
+    }
+    return tokens;
   }
 
   /** Build the index from all documents. Called on initialization. */
@@ -70,14 +134,23 @@ export class BM25Index {
 
   /** Search the index, returning top-K results scored by BM25. */
   search(query: string, limit: number): BM25Result[] {
-    const queryTerms = BM25Index.tokenize(query);
+    const queryTerms = BM25Index.tokenize(query).filter(t => !STOPWORDS.has(t));
     if (queryTerms.length === 0 || this.docCount === 0) {
       return [];
     }
 
+    // Expand query with Indonesian stems for broader matching
+    const expandedTerms = [...queryTerms];
+    for (const term of queryTerms) {
+      const stem = indonesianStem(term);
+      if (stem && !expandedTerms.includes(stem)) {
+        expandedTerms.push(stem);
+      }
+    }
+
     const scores = new Map<string, number>();
 
-    for (const term of queryTerms) {
+    for (const term of expandedTerms) {
       const postings = this.invertedIndex.get(term);
       if (!postings) continue;
 

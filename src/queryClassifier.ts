@@ -4,6 +4,7 @@ export interface ClassificationResult {
   category: QueryCategory;
   bm25Weight: number;
   vectorWeight: number;
+  temporalBoost: boolean;
 }
 
 const WEIGHT_MAP: Record<QueryCategory, { bm25Weight: number; vectorWeight: number }> = {
@@ -45,6 +46,20 @@ function hasSpecialCharacters(query: string): boolean {
   return /[*?^$|\\]/.test(query);
 }
 
+/** Detect temporal intent: queries about recent/latest/last versions of something */
+const TEMPORAL_PATTERNS = [
+  /\b(last|latest|most recent|current|newest)\b/i,
+  /\b(today|yesterday|this week|this month|recent)\b/i,
+  // Indonesian temporal patterns
+  /\b(terakhir|terbaru|terkini|sekarang)\b/i,
+  /\b(hari ini|kemarin|minggu ini|bulan ini|baru-baru ini)\b/i,
+  /\b(sebulan ini|seminggu ini|paling baru|paling akhir)\b/i,
+];
+
+function hasTemporalIntent(query: string): boolean {
+  return TEMPORAL_PATTERNS.some(p => p.test(query));
+}
+
 export function classifyQuery(query: string): ClassificationResult {
   let indicatorCount = 0;
 
@@ -63,8 +78,11 @@ export function classifyQuery(query: string): ClassificationResult {
     category = 'semantic';
   }
 
+  const temporalBoost = hasTemporalIntent(query);
+
   return {
     category,
     ...WEIGHT_MAP[category],
+    temporalBoost,
   };
 }

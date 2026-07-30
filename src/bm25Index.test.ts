@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { BM25Index } from './bm25Index';
+import { BM25Index, STOPWORDS } from './bm25Index';
 
 describe('BM25Index.tokenize', () => {
   it('returns empty array for empty string', () => {
@@ -17,7 +17,7 @@ describe('BM25Index.tokenize', () => {
   });
 
   it('splits on whitespace and punctuation', () => {
-    expect(BM25Index.tokenize('hello, world! foo-bar')).toEqual(['hello', 'world', 'foo', 'bar']);
+    expect(BM25Index.tokenize('hello, world! foo-bar')).toEqual(['hello', 'world', 'foo-bar', 'foo', 'bar']);
   });
 
   it('handles unicode characters correctly', () => {
@@ -190,8 +190,10 @@ describe('Feature: hybrid-search, Property 2: BM25 positive score for matching d
         const uniqueDocs = Array.from(new Map(docs.map((d) => [d.id, d])).values());
         if (uniqueDocs.length === 0) return fc.constant(null);
 
-        // Collect all tokens across all documents
-        const allTokens = uniqueDocs.flatMap((d) => BM25Index.tokenize(d.content));
+        // Collect all tokens across all documents, excluding stopwords
+        // (stopwords are filtered from queries so they won't produce results)
+        const allTokens = uniqueDocs.flatMap((d) => BM25Index.tokenize(d.content))
+          .filter(t => !STOPWORDS.has(t));
         if (allTokens.length === 0) return fc.constant(null);
 
         // Pick one token to use as the query
@@ -271,8 +273,10 @@ describe('Feature: hybrid-search, Property 1: Tokenizer produces lowercase token
           // Token must not contain whitespace
           expect(token).not.toMatch(/\s/);
 
-          // Token must not contain Unicode punctuation
-          expect(token).not.toMatch(/\p{P}/u);
+          // Token must not contain Unicode punctuation EXCEPT hyphens in compound words
+          // (e.g., "baru-baru" is a valid compound token)
+          const withoutHyphens = token.replace(/-/g, '');
+          expect(withoutHyphens).not.toMatch(/\p{P}/u);
         }
       }),
       { numRuns: 100 }
