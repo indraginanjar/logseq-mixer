@@ -114,25 +114,61 @@ Then in Logseq:
 
 ## Step 3: Configure Settings
 
-Open **Settings → Plugin Settings → Mixer** and configure:
+Open **Settings → Plugin Settings → Mixer** and configure based on your chosen provider:
+
+### Option A — OpenAI (fastest setup)
 
 | Setting | Value | Notes |
 |---|---|---|
+| **Chat Provider** | `openai` | |
+| **Selected Model** | `gpt-4o` | Or any OpenAI model |
+| **OpenAI API Key** | `sk-...` | Your OpenAI API key |
+| **OpenAI Endpoint** | *(leave empty)* | Uses `https://api.openai.com/v1/chat/completions` by default. Set only if using a compatible third-party API. |
+| **Reasoning Effort** | `high` | Controls thinking depth. Also adjustable from the ⚡ header dropdown. |
+
+### Option B — Ollama (fully local, free)
+
+| Setting | Value | Notes |
+|---|---|---|
+| **Chat Provider** | `ollama` | |
+| **Selected Model** | `llama3.2` | Must be pulled: `ollama pull llama3.2` |
+| **Ollama Endpoint** | *(leave empty)* | Uses `http://localhost:11434/api/chat` by default |
+| **Ollama API Key** | *(leave empty)* | Not needed for local Ollama |
+| **Embedding Provider** | `ollama` | Recommended for fully local setup |
+| **Embedding Model** | `nomic-embed-text` | Pull it: `ollama pull nomic-embed-text` |
+
+### Option C — LiteLLM (100+ providers)
+
+| Setting | Value | Notes |
+|---|---|---|
+| **Chat Provider** | `litellm` | |
 | **Selected Model** | `gpt-4o` | Must match a model name in your LiteLLM config |
-| **API Key** | Your provider's API key | e.g., `sk-...` for OpenAI |
-| **LiteLLM api link** | `http://127.0.0.1:4000/chat/completions` | Default — change if your proxy uses a different port |
-| **Reasoning Effort** | `high` | Controls thinking depth. `low`=fast/cheap, `high`=default, `max`=deepest. Also adjustable from the ⚡ header dropdown. |
+| **LiteLLM API Key** | *(if proxy requires auth)* | Optional — depends on your proxy setup |
+| **LiteLLM Endpoint** | *(leave empty)* | Uses `http://127.0.0.1:4000/chat/completions` by default |
+| **Reasoning Effort** | `high` | Controls thinking depth. Also adjustable from the ⚡ header dropdown. |
+
+> **Tip:** Any OpenAI-compatible endpoint works with the `openai` provider — just set the OpenAI Endpoint to your custom URL. This includes vLLM, LocalAI, text-generation-webui, and many others.
 
 ### Embedding Settings (for RAG search)
 
+Each provider has its own embedding endpoint and API key settings:
+
+| Provider | Endpoint Setting | API Key Setting | Default Endpoint |
+|---|---|---|---|
+| **OpenAI** | OpenAI Embedding Endpoint | OpenAI Embedding API Key | `https://api.openai.com/v1/embeddings` |
+| **Ollama** | Ollama Embedding Endpoint | Ollama Embedding API Key | `http://localhost:11434/api/embeddings` |
+| **LiteLLM** | LiteLLM Embedding Endpoint | LiteLLM Embedding API Key | `http://127.0.0.1:4000/embeddings` |
+
+Leave endpoint settings empty to use the defaults. API key is not needed for local Ollama.
+
 | Setting | Value | Notes |
 |---|---|---|
-| **Embedding Provider** | `openai` or `ollama` | Choose based on your preference |
-| **Embedding Model** | `text-embedding-3-small` | Good balance of quality and cost |
-| **Embedding API Endpoint** | `https://api.openai.com/v1/embeddings` | Or `http://localhost:11434/api/embeddings` for Ollama |
-| **Embedding AI ApiKey** | Your OpenAI key | Not needed for Ollama |
+| **Embedding Provider** | `openai` or `ollama` or `litellm` | Choose based on your preference |
+| **Embedding Model** | `text-embedding-3-small` | Good balance of quality and cost (OpenAI). Use `nomic-embed-text` for Ollama. |
 
-> **Fully local setup:** Use `ollama` as embedding provider with `nomic-embed-text` model + Ollama as the LLM via LiteLLM. Zero data leaves your machine.
+> **Fully local setup:** Use `ollama` as both chat and embedding provider with `nomic-embed-text` as the embedding model. Zero data leaves your machine.
+
+> **Migration from older versions:** The previous shared settings (`API Key`, `Chat API Endpoint`, `Embedding AI ApiKey`, `Embedding API Endpoint`, `LiteLLM api link`) still work as fallbacks. Per-provider settings take priority when set. You can gradually migrate by setting the per-provider values — the old shared settings will be ignored once the new ones are configured.
 
 ---
 

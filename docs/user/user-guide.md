@@ -311,12 +311,20 @@ Open **Settings → Plugin Settings → Mixer**.
 | Setting | Default | Description |
 |---|---|---|
 | **Chat Provider** | `openai` | `openai` \| `ollama` \| `litellm` — controls request format, endpoint default, and model fetching. |
-| **Selected Model** | `gpt-4o` | Model name passed to LiteLLM |
-| **API Key** | — | Your LLM provider API key |
-| **LiteLLM api link** | `http://127.0.0.1:4000/chat/completions` | LiteLLM proxy endpoint |
+| **Selected Model** | `gpt-4o` | Model name passed to the provider |
 | **Reasoning Effort** | `high` | Controls how much thinking the model does. See [Reasoning Effort](#reasoning-effort) below. |
 | **AI prompt** | (default template) | System prompt — customize AI behavior |
 | **Streaming Responses** | `true` | Stream AI responses token-by-token as they are generated. See [Streaming Responses](#streaming-responses) below. |
+
+#### Per-Provider Chat Settings
+
+| Provider | Endpoint Setting | API Key Setting | Default Endpoint |
+|---|---|---|---|
+| **OpenAI** | `openaiEndpoint` | `openaiApiKey` | `https://api.openai.com/v1/chat/completions` |
+| **Ollama** | `ollamaEndpoint` | `ollamaApiKey` | `http://localhost:11434/api/chat` |
+| **LiteLLM** | `litellmEndpoint` | `litellmApiKey` | `http://127.0.0.1:4000/chat/completions` |
+
+Leave endpoint empty to use the default. API key is optional for Ollama.
 
 ### Reasoning Effort
 
@@ -370,12 +378,22 @@ When **Streaming Responses** is enabled (the default), the AI's reply appears pr
 
 | Setting | Default | Description |
 |---|---|---|
-| **Embedding Provider** | `openai` | `openai`, `ollama`, or `litellm` |
-| **Embedding AI ApiKey** | — | API key for embeddings (not needed for Ollama) |
+| **Embedding Provider** | `openai` | `openai` \| `ollama` \| `litellm` |
 | **Embedding Model** | `text-embedding-3-small` | Model for generating vector embeddings |
-| **Embedding API Endpoint** | `https://api.openai.com/v1/embeddings` | Embedding API URL |
 | **Indexing Mode** | `incremental` | `incremental` (only changes) or `full` (rebuild everything) |
 | **Storage Backend** | `sqlite` | `sqlite` (recommended) or `settings` (legacy Orama) |
+
+#### Per-Provider Embedding Settings
+
+| Provider | Endpoint Setting | API Key Setting | Default Endpoint |
+|---|---|---|---|
+| **OpenAI** | `openaiEmbeddingEndpoint` | `openaiEmbeddingApiKey` | `https://api.openai.com/v1/embeddings` |
+| **Ollama** | `ollamaEmbeddingEndpoint` | `ollamaEmbeddingApiKey` | `http://localhost:11434/api/embeddings` |
+| **LiteLLM** | `litellmEmbeddingEndpoint` | `litellmEmbeddingApiKey` | `http://127.0.0.1:4000/embeddings` |
+
+Leave endpoint empty to use the default. API key is not needed for local Ollama.
+
+> **Migration from older versions:** The previous shared settings (`API Key`, `Chat API Endpoint`, `Embedding AI ApiKey`, `Embedding API Endpoint`, `LiteLLM api link`) still work as fallbacks. Per-provider settings take priority when set. You can gradually migrate by setting the per-provider values — the old shared settings will be ignored once the new ones are configured.
 
 ### Auto-Indexing
 
