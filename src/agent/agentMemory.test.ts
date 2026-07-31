@@ -5,6 +5,7 @@ vi.mock('../LLMManager', () => ({
   queryLiteLLM: vi.fn(),
   getContextLimitForModel: () => 100000,
   resolveChatEndpoint: (settings: any) => settings?.chatEndpoint || 'http://localhost:4000/chat/completions',
+  resolveApiKey: (settings: any) => settings?.apiKey || '',
 }));
 
 // Mock ReActLoop

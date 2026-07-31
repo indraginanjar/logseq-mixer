@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../LLMManager', () => ({
   queryLiteLLM: vi.fn(),
   resolveChatEndpoint: (settings: any) => settings?.chatEndpoint || 'http://localhost:4000/chat/completions',
+  resolveApiKey: (settings: any) => settings?.apiKey || '',
 }));
 
 // Mock MCPManager
