@@ -15,6 +15,9 @@ interface IPluginSettings {
   embeddingProvider?: string;
   chatProvider?: string;
   chatEndpoint?: string;
+  openaiEndpoint?: string;
+  ollamaEndpoint?: string;
+  litellmEndpoint?: string;
   reasoningEffort?: string;
   streamingEnabled?: boolean;
   memoryEnabled?: boolean;

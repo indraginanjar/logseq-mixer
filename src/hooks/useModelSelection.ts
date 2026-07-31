@@ -5,6 +5,9 @@ interface Settings {
   selectedModel?: string;
   chatProvider?: string;
   chatEndpoint?: string;
+  openaiEndpoint?: string;
+  ollamaEndpoint?: string;
+  litellmEndpoint?: string;
   LiteLLMLink?: string;
   apiKey?: string;
   reasoningEffort?: string;
@@ -54,7 +57,10 @@ export function useModelSelection(settings: Settings) {
 
     const loadModels = async () => {
       // Resolve the effective endpoint for this provider
-      const endpoint = settings?.chatEndpoint?.trim()
+      const endpoint = (provider === 'openai' ? settings?.openaiEndpoint?.trim() : '')
+        || (provider === 'ollama' ? settings?.ollamaEndpoint?.trim() : '')
+        || (provider === 'litellm' ? settings?.litellmEndpoint?.trim() : '')
+        || settings?.chatEndpoint?.trim()
         || (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : '')
         || (provider === 'ollama' ? 'http://localhost:11434/api/chat' : '')
         || settings?.LiteLLMLink
@@ -78,7 +84,7 @@ export function useModelSelection(settings: Settings) {
       }
     };
     loadModels();
-  }, [settings?.chatProvider, settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey]);
+  }, [settings?.chatProvider, settings?.openaiEndpoint, settings?.ollamaEndpoint, settings?.litellmEndpoint, settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey]);
 
   // Model choices: fetched list if available, otherwise just the current model
   const modelChoices = fetchedModels.length > 0

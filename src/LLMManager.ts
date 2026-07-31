@@ -18,17 +18,41 @@ const DEFAULT_CHAT_ENDPOINTS: Record<string, string> = {
 
 /**
  * Resolve the effective chat endpoint from settings.
- * Priority: chatEndpoint (if non-empty) → provider default → legacy LiteLLMLink fallback.
+ * Priority: per-provider endpoint → legacy chatEndpoint → provider default → LiteLLMLink fallback.
  */
-export function resolveChatEndpoint(settings: { chatEndpoint?: string; chatProvider?: string; LiteLLMLink?: string }): string {
+export function resolveChatEndpoint(settings: {
+  chatEndpoint?: string;
+  chatProvider?: string;
+  openaiEndpoint?: string;
+  ollamaEndpoint?: string;
+  litellmEndpoint?: string;
+  LiteLLMLink?: string;
+}): string {
+  const provider = settings.chatProvider || 'openai';
+
+  // Per-provider endpoint (preferred)
+  const providerEndpoints: Record<string, string | undefined> = {
+    openai: settings.openaiEndpoint,
+    ollama: settings.ollamaEndpoint,
+    litellm: settings.litellmEndpoint,
+  };
+
+  const providerEndpoint = providerEndpoints[provider]?.trim();
+  if (providerEndpoint) {
+    return providerEndpoint;
+  }
+
+  // Legacy single chatEndpoint fallback (deprecated)
   if (settings.chatEndpoint && settings.chatEndpoint.trim()) {
     return settings.chatEndpoint.trim();
   }
-  const provider = settings.chatProvider || 'litellm';
+
+  // Provider defaults
   if (DEFAULT_CHAT_ENDPOINTS[provider]) {
     return DEFAULT_CHAT_ENDPOINTS[provider];
   }
-  // Ultimate fallback for unknown providers: use LiteLLMLink or OpenAI default
+
+  // Ultimate fallback
   return settings.LiteLLMLink || DEFAULT_CHAT_ENDPOINTS.openai;
 }
 

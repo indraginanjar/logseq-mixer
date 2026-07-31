@@ -60,12 +60,34 @@ const settings: SettingSchemaDesc[] = [
     enumChoices: ['openai', 'ollama', 'litellm'],
     enumPicker: 'select',
   },
+  // Deprecated: use per-provider endpoints below
   {
     key: 'chatEndpoint',
     type: 'string',
     title: 'Chat API Endpoint',
     description: 'The chat completions endpoint. OpenAI: https://api.openai.com/v1/chat/completions. Ollama: http://localhost:11434/api/chat. LiteLLM: http://127.0.0.1:4000/chat/completions. Leave empty for the default.',
     default: 'https://api.openai.com/v1/chat/completions',
+  },
+  {
+    key: 'openaiEndpoint',
+    type: 'string',
+    title: 'OpenAI Endpoint',
+    description: 'Chat completions endpoint for OpenAI provider. Leave empty for default (https://api.openai.com/v1/chat/completions). Also works for any OpenAI-compatible API (vLLM, LocalAI, etc.)',
+    default: '',
+  },
+  {
+    key: 'ollamaEndpoint',
+    type: 'string',
+    title: 'Ollama Endpoint',
+    description: 'Chat endpoint for Ollama provider. Leave empty for default (http://localhost:11434/api/chat).',
+    default: '',
+  },
+  {
+    key: 'litellmEndpoint',
+    type: 'string',
+    title: 'LiteLLM Endpoint',
+    description: 'Chat completions endpoint for LiteLLM proxy. Leave empty for default (http://127.0.0.1:4000/chat/completions).',
+    default: '',
   },
   {
     key: 'reasoningEffort',

@@ -19,6 +19,9 @@ interface Settings {
   selectedModel?: string;
   chatProvider?: string;
   chatEndpoint?: string;
+  openaiEndpoint?: string;
+  ollamaEndpoint?: string;
+  litellmEndpoint?: string;
   LiteLLMLink?: string;
   apiKey?: string;
   reasoningEffort?: string;
