@@ -142,7 +142,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-import ChatMessageList, { ChatMessage, transformBareUrls } from './ChatMessageList';
+import ChatMessageList, { ChatMessage } from './ChatMessageList';
+import { transformBareUrls } from '../utils/markdownTransforms';
 
 describe('ChatMessageList integration', () => {
   /**
