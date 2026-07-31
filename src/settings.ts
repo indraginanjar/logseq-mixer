@@ -20,9 +20,9 @@ const settings: SettingSchemaDesc[] = [
   {
     key: 'EmbeddingApiKey',
     type: 'string',
-    title: 'Embedding AI ApiKey',
-    description: 'API key for OpenAI embedding models (used for semantic search over your notes).',
-    default: 'sk-proj-1234',
+    title: '[Deprecated] Embedding API Key',
+    description: '⚠️ DEPRECATED — Use the per-provider embedding API key settings (OpenAI/Ollama/LiteLLM Embedding API Key). This is only used as a fallback.',
+    default: '',
   },
   {
     key: 'openaiEmbeddingApiKey',
@@ -70,9 +70,9 @@ const settings: SettingSchemaDesc[] = [
   {
     key: 'embeddingEndpoint',
     type: 'string',
-    title: 'Embedding API Endpoint',
-    description: 'The URL for embedding API requests. For Ollama: http://localhost:11434/api/embeddings. For LiteLLM: http://127.0.0.1:4000/embeddings. Leave empty to use the default OpenAI endpoint.',
-    default: 'https://api.openai.com/v1/embeddings',
+    title: '[Deprecated] Embedding API Endpoint',
+    description: '⚠️ DEPRECATED — Use the per-provider embedding endpoint settings (OpenAI/Ollama/LiteLLM Embedding Endpoint). This is only used as a fallback.',
+    default: '',
   },
   {
     key: 'openaiEmbeddingEndpoint',
@@ -108,9 +108,9 @@ const settings: SettingSchemaDesc[] = [
   {
     key: 'chatEndpoint',
     type: 'string',
-    title: 'Chat API Endpoint',
-    description: 'The chat completions endpoint. OpenAI: https://api.openai.com/v1/chat/completions. Ollama: http://localhost:11434/api/chat. LiteLLM: http://127.0.0.1:4000/chat/completions. Leave empty for the default.',
-    default: 'https://api.openai.com/v1/chat/completions',
+    title: '[Deprecated] Chat API Endpoint',
+    description: '⚠️ DEPRECATED — Use the per-provider endpoint settings above (OpenAI/Ollama/LiteLLM Endpoint). This is only used as a fallback if no per-provider endpoint is set.',
+    default: '',
   },
   {
     key: 'openaiEndpoint',
@@ -146,8 +146,8 @@ const settings: SettingSchemaDesc[] = [
   {
     key: 'apiKey',
     type: 'string',
-    title: 'API Key',
-    description: 'API key for your chat provider. Not required for Ollama.',
+    title: '[Deprecated] API Key',
+    description: '⚠️ DEPRECATED — Use the per-provider API key settings (OpenAI/Ollama/LiteLLM API Key). This is only used as a fallback if no per-provider key is set.',
     default: '',
   },
   {

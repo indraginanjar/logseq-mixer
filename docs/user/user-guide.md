@@ -393,7 +393,19 @@ When **Streaming Responses** is enabled (the default), the AI's reply appears pr
 
 Leave endpoint empty to use the default. API key is not needed for local Ollama.
 
-> **Migration from older versions:** The previous shared settings (`API Key`, `Chat API Endpoint`, `Embedding AI ApiKey`, `Embedding API Endpoint`, `LiteLLM api link`) still work as fallbacks. Per-provider settings take priority when set. You can gradually migrate by setting the per-provider values — the old shared settings will be ignored once the new ones are configured.
+### Deprecated Settings
+
+These settings are kept for backwards compatibility but will be removed in a future version. Use the per-provider settings above instead.
+
+| Setting | Replaced by |
+|---|---|
+| API Key | OpenAI API Key / Ollama API Key / LiteLLM API Key |
+| Chat API Endpoint | OpenAI Endpoint / Ollama Endpoint / LiteLLM Endpoint |
+| LiteLLM api link | LiteLLM Endpoint |
+| Embedding AI ApiKey | OpenAI Embedding API Key / Ollama Embedding API Key / LiteLLM Embedding API Key |
+| Embedding API Endpoint | OpenAI Embedding Endpoint / Ollama Embedding Endpoint / LiteLLM Embedding Endpoint |
+
+> **Migration from older versions:** The previous shared settings still work as fallbacks. Per-provider settings take priority when set. You can gradually migrate by setting the per-provider values — the old shared settings will be ignored once the new ones are configured.
 
 ### Auto-Indexing
 

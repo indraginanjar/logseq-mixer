@@ -4,8 +4,11 @@ import settings from '../settings';
 interface IPluginSettings {
   selectedModel: string;
   prompt: string;
+  /** @deprecated Use openaiEmbeddingApiKey/ollamaEmbeddingApiKey/litellmEmbeddingApiKey instead */
   EmbeddingApiKey: string;
+  /** @deprecated Use litellmEndpoint instead */
   LiteLLMLink: string;
+  /** @deprecated Use openaiApiKey/ollamaApiKey/litellmApiKey instead */
   apiKey: string;
   embeddingModel: string;
   VectorDBLogseqCopilot: string;
@@ -14,10 +17,13 @@ interface IPluginSettings {
 
   embeddingProvider?: string;
   chatProvider?: string;
+  /** @deprecated Use openaiEndpoint/ollamaEndpoint/litellmEndpoint instead */
   chatEndpoint?: string;
   openaiEndpoint?: string;
   ollamaEndpoint?: string;
   litellmEndpoint?: string;
+  /** @deprecated Use openaiEmbeddingEndpoint/ollamaEmbeddingEndpoint/litellmEmbeddingEndpoint instead */
+  embeddingEndpoint?: string;
   openaiEmbeddingEndpoint?: string;
   ollamaEmbeddingEndpoint?: string;
   litellmEmbeddingEndpoint?: string;

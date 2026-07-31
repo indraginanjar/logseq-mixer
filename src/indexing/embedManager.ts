@@ -568,7 +568,7 @@ export function resolveEndpoint(
     if (providerEp) return providerEp;
   }
 
-  // Legacy single endpoint fallback (deprecated)
+  // Legacy single embeddingEndpoint fallback (@deprecated — will be removed in a future version)
   if (endpoint?.trim()) return endpoint.trim();
 
   // Provider defaults
@@ -600,7 +600,7 @@ export function resolveEmbeddingApiKey(
     if (providerKey) return providerKey;
   }
 
-  // Legacy fallback
+  // Legacy EmbeddingApiKey fallback (@deprecated — will be removed in a future version)
   return apiKey?.trim() || '';
 }
 

@@ -1460,7 +1460,7 @@ describe('Settings schema for Ollama embedding support', () => {
     const setting = settings.find(s => s.key === 'embeddingEndpoint');
     expect(setting).toBeDefined();
     expect(setting!.type).toBe('string');
-    expect(setting!.default).toBe('https://api.openai.com/v1/embeddings');
+    expect(setting!.default).toBe('');
   });
 
   it('embeddingModel enum choices include all 6 models', () => {

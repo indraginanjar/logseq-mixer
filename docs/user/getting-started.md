@@ -168,7 +168,7 @@ Leave endpoint settings empty to use the defaults. API key is not needed for loc
 
 > **Fully local setup:** Use `ollama` as both chat and embedding provider with `nomic-embed-text` as the embedding model. Zero data leaves your machine.
 
-> **Migration from older versions:** The previous shared settings (`API Key`, `Chat API Endpoint`, `Embedding AI ApiKey`, `Embedding API Endpoint`, `LiteLLM api link`) still work as fallbacks. Per-provider settings take priority when set. You can gradually migrate by setting the per-provider values — the old shared settings will be ignored once the new ones are configured.
+> **Migration from older versions:** The previous shared settings (`API Key`, `Chat API Endpoint`, `Embedding AI ApiKey`, `Embedding API Endpoint`, `LiteLLM api link`) are deprecated and will be removed in a future version. They still work as fallbacks, but per-provider settings take priority when set. You can gradually migrate by setting the per-provider values — the old shared settings will be ignored once the new ones are configured.
 
 ---
 

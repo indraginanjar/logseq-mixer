@@ -42,7 +42,7 @@ export function resolveChatEndpoint(settings: {
     return providerEndpoint;
   }
 
-  // Legacy single chatEndpoint fallback (deprecated)
+  // Legacy single chatEndpoint fallback (@deprecated — will be removed in a future version)
   if (settings.chatEndpoint && settings.chatEndpoint.trim()) {
     return settings.chatEndpoint.trim();
   }
@@ -81,7 +81,7 @@ export function resolveApiKey(settings: {
     return providerKey;
   }
 
-  // Legacy single apiKey fallback (deprecated)
+  // Legacy single apiKey fallback (@deprecated — will be removed in a future version)
   return settings.apiKey?.trim() || '';
 }
 
