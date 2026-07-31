@@ -18,6 +18,9 @@ interface IPluginSettings {
   openaiEndpoint?: string;
   ollamaEndpoint?: string;
   litellmEndpoint?: string;
+  openaiApiKey?: string;
+  ollamaApiKey?: string;
+  litellmApiKey?: string;
   reasoningEffort?: string;
   streamingEnabled?: boolean;
   memoryEnabled?: boolean;

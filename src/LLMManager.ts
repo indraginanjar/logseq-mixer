@@ -56,6 +56,35 @@ export function resolveChatEndpoint(settings: {
   return settings.LiteLLMLink || DEFAULT_CHAT_ENDPOINTS.openai;
 }
 
+/**
+ * Resolve the effective API key from settings.
+ * Priority: per-provider key (if non-empty) → legacy apiKey fallback.
+ */
+export function resolveApiKey(settings: {
+  apiKey?: string;
+  chatProvider?: string;
+  openaiApiKey?: string;
+  ollamaApiKey?: string;
+  litellmApiKey?: string;
+}): string {
+  const provider = settings.chatProvider || 'openai';
+
+  // Per-provider API key (preferred)
+  const providerKeys: Record<string, string | undefined> = {
+    openai: settings.openaiApiKey,
+    ollama: settings.ollamaApiKey,
+    litellm: settings.litellmApiKey,
+  };
+
+  const providerKey = providerKeys[provider]?.trim();
+  if (providerKey) {
+    return providerKey;
+  }
+
+  // Legacy single apiKey fallback (deprecated)
+  return settings.apiKey?.trim() || '';
+}
+
 /** Max output tokens per model. Falls back to 4096 for unknown models. */
 const MODEL_MAX_TOKENS: Record<string, number> = {
   'gpt-3.5-turbo': 4096,

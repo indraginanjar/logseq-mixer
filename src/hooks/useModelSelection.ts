@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchModelsForProvider } from '../LLMManager';
+import { fetchModelsForProvider, resolveApiKey } from '../LLMManager';
 
 interface Settings {
   selectedModel?: string;
@@ -10,6 +10,9 @@ interface Settings {
   litellmEndpoint?: string;
   LiteLLMLink?: string;
   apiKey?: string;
+  openaiApiKey?: string;
+  ollamaApiKey?: string;
+  litellmApiKey?: string;
   reasoningEffort?: string;
 }
 
@@ -72,7 +75,7 @@ export function useModelSelection(settings: Settings) {
       }
 
       try {
-        const models = await fetchModelsForProvider(provider, endpoint, settings?.apiKey || '');
+        const models = await fetchModelsForProvider(provider, endpoint, resolveApiKey(settings || {}));
         if (models && models.length > 0) {
           setFetchedModels(models);
         } else {
@@ -84,7 +87,7 @@ export function useModelSelection(settings: Settings) {
       }
     };
     loadModels();
-  }, [settings?.chatProvider, settings?.openaiEndpoint, settings?.ollamaEndpoint, settings?.litellmEndpoint, settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey]);
+  }, [settings?.chatProvider, settings?.openaiEndpoint, settings?.ollamaEndpoint, settings?.litellmEndpoint, settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey, settings?.openaiApiKey, settings?.ollamaApiKey, settings?.litellmApiKey]);
 
   // Model choices: fetched list if available, otherwise just the current model
   const modelChoices = fetchedModels.length > 0

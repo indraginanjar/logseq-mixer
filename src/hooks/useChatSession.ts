@@ -24,6 +24,9 @@ interface Settings {
   litellmEndpoint?: string;
   LiteLLMLink?: string;
   apiKey?: string;
+  openaiApiKey?: string;
+  ollamaApiKey?: string;
+  litellmApiKey?: string;
   reasoningEffort?: string;
   streamingEnabled?: boolean;
   memoryEnabled?: boolean;

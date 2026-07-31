@@ -1,4 +1,4 @@
-import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, resolveApiKey, type ChatMessage } from 'LLMManager';
 import { countTokens } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import type { AgentPlan, AgentStep } from './types';
@@ -75,7 +75,7 @@ export async function generatePlan(
     { role: 'user', content: `Goal: ${goal}\n\nCurrent context:\n${context}` },
   ];
 
-  const result = await queryLiteLLM(messages, ctx.settings.selectedModel, ctx.settings.apiKey, resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+  const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
   const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
   const tokensUsed = countTokens(JSON.stringify(messages)) + countTokens(raw);
 

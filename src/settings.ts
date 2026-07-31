@@ -98,11 +98,33 @@ const settings: SettingSchemaDesc[] = [
     enumChoices: ['low', 'medium', 'high', 'xhigh', 'max'],
     enumPicker: 'select',
   },
+  // Deprecated: use per-provider API keys below
   {
     key: 'apiKey',
     type: 'string',
     title: 'API Key',
     description: 'API key for your chat provider. Not required for Ollama.',
+    default: '',
+  },
+  {
+    key: 'openaiApiKey',
+    type: 'string',
+    title: 'OpenAI API Key',
+    description: 'API key for OpenAI provider (or any OpenAI-compatible API).',
+    default: '',
+  },
+  {
+    key: 'ollamaApiKey',
+    type: 'string',
+    title: 'Ollama API Key',
+    description: 'API key for Ollama provider. Usually not needed for local Ollama.',
+    default: '',
+  },
+  {
+    key: 'litellmApiKey',
+    type: 'string',
+    title: 'LiteLLM API Key',
+    description: 'API key for LiteLLM proxy. Pass-through to the underlying provider configured in LiteLLM.',
     default: '',
   },
 

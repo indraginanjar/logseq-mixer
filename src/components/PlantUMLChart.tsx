@@ -165,6 +165,9 @@ export default React.memo(function PlantUMLChart({ code, onCodeFixed }: PlantUML
         apiKey: settings.apiKey,
         chatEndpoint: settings.chatEndpoint,
         chatProvider: settings.chatProvider,
+        openaiApiKey: settings.openaiApiKey,
+        ollamaApiKey: settings.ollamaApiKey,
+        litellmApiKey: settings.litellmApiKey,
         LiteLLMLink: settings.LiteLLMLink,
       });
 

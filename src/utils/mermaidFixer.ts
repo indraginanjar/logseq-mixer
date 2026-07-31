@@ -1,4 +1,4 @@
-import { queryLiteLLM, resolveChatEndpoint, ChatMessage } from '../LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, resolveApiKey, ChatMessage } from '../LLMManager';
 
 const MERMAID_FIX_SYSTEM_PROMPT = `You are a Mermaid diagram syntax expert. The user will provide a broken Mermaid diagram and the error message from the parser. Your job is to fix the syntax error and return ONLY the corrected Mermaid code.
 
@@ -43,13 +43,16 @@ export async function fixMermaidWithLLM(
     apiKey?: string;
     chatEndpoint?: string;
     chatProvider?: string;
+    openaiApiKey?: string;
+    ollamaApiKey?: string;
+    litellmApiKey?: string;
     LiteLLMLink?: string;
     reasoningEffort?: string;
   }
 ): Promise<string | null> {
   const endpoint = resolveChatEndpoint(settings);
   const model = settings.selectedModel || 'gpt-4o';
-  const apiKey = settings.apiKey || '';
+  const apiKey = resolveApiKey(settings);
   const provider = settings.chatProvider || 'openai';
 
   if (!endpoint) {

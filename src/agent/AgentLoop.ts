@@ -1,4 +1,4 @@
-import { queryLiteLLM, getContextLimitForModel, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, getContextLimitForModel, resolveChatEndpoint, resolveApiKey, type ChatMessage } from 'LLMManager';
 import { countTokens, encode, decode } from 'tokenizer';
 import type { AgentPlan, AgentStep, AgentProgressEvent, StepResult, StepContext } from './types';
 import { generatePlan as generatePlanFn } from './planGenerator';
@@ -283,7 +283,7 @@ RULES:
     ];
 
     try {
-      const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
+      const result = await queryLiteLLM(messages, this.settings.selectedModel, resolveApiKey(this.settings), resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
       const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
       this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
       return raw || null;
@@ -297,7 +297,7 @@ RULES:
       { role: 'system', content: EVAL_SYSTEM_PROMPT },
       { role: 'user', content: `Step intent: ${step.description}\nStep type: ${step.type}\nOutput received:\n${result.output.slice(0, 500)}\n\nWas the intent achieved?` },
     ];
-    const llmResult = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
+    const llmResult = await queryLiteLLM(messages, this.settings.selectedModel, resolveApiKey(this.settings), resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
     const raw = llmResult.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
     try {
@@ -320,7 +320,7 @@ RULES:
       { role: 'user', content: `Goal: ${context.goal}\n\nProgress so far:\n${progressSummary}\n\nRemaining steps:\n${remainingDesc}\n\nShould the remaining plan change?` },
     ];
 
-    const result = await queryLiteLLM(messages, this.settings.selectedModel, this.settings.apiKey, resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
+    const result = await queryLiteLLM(messages, this.settings.selectedModel, resolveApiKey(this.settings), resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
 

@@ -1,4 +1,4 @@
-import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, resolveApiKey, type ChatMessage } from 'LLMManager';
 
 const USER_GUIDE = `
 # Logseq Mixer Quick Help
@@ -133,7 +133,7 @@ export async function answerHelpQuestion(message: string, settings: any): Promis
       },
       { role: 'user', content: topic },
     ];
-    const result = await queryLiteLLM(messages, settings.selectedModel, settings.apiKey, resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider, settings.reasoningEffort);
+    const result = await queryLiteLLM(messages, settings.selectedModel, resolveApiKey(settings), resolveChatEndpoint(settings), undefined, undefined, settings.chatProvider, settings.reasoningEffort);
     return result.choices?.[0]?.message?.content?.trim() || searchGuideManually(topic);
   } catch {
     return searchGuideManually(topic);

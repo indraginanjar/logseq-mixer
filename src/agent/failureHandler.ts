@@ -1,4 +1,4 @@
-import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, resolveApiKey, type ChatMessage } from 'LLMManager';
 import { countTokens } from 'tokenizer';
 import type { AgentStep, StepContext } from './types';
 
@@ -33,7 +33,7 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
         content: `Step: "${step.description}" (type: ${step.type})\nError: ${error}\nGoal: ${context.goal}\nRecent context:\n${recentContext}`,
       },
     ];
-    const result = await queryLiteLLM(messages, ctx.settings.selectedModel, ctx.settings.apiKey, resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+    const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
     const diagnostic = result.choices?.[0]?.message?.content?.trim() ?? '';
     const tokensUsed = countTokens(JSON.stringify(messages)) + countTokens(diagnostic);
     ctx.addTokens(tokensUsed);

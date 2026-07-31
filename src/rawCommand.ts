@@ -4,7 +4,7 @@
  * Only the system prompt and the user's raw message are sent.
  */
 
-import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from './LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, resolveApiKey, type ChatMessage } from './LLMManager';
 
 /**
  * Check if a message is a /raw command.
@@ -48,7 +48,7 @@ export async function sendRawPrompt(
   const result = await queryLiteLLM(
     messages,
     settings.selectedModel,
-    settings.apiKey,
+    resolveApiKey(settings),
     endpoint,
     signal,
     undefined, // no tools

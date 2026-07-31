@@ -1,4 +1,4 @@
-import { queryLiteLLM, getContextLimitForModel, resolveChatEndpoint, type ChatMessage } from 'LLMManager';
+import { queryLiteLLM, getContextLimitForModel, resolveChatEndpoint, resolveApiKey, type ChatMessage } from 'LLMManager';
 import { countTokens, encode, decode } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import { executeOne } from 'blockExecutor';
@@ -148,7 +148,7 @@ export async function executeGatherStep(step: AgentStep, context: StepContext, c
     { role: 'user', content: `Goal: ${context.goal}\nStep description: ${step.description}\n\nPrior context:\n${priorOutputs.slice(0, 4000)}` },
   ];
 
-  const extractResult = await queryLiteLLM(extractMessages, ctx.settings.selectedModel, ctx.settings.apiKey, resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+  const extractResult = await queryLiteLLM(extractMessages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
   const extractRaw = extractResult.choices?.[0]?.message?.content?.trim() ?? '[]';
   totalTokens += countTokens(JSON.stringify(extractMessages)) + countTokens(extractRaw);
 
@@ -210,7 +210,7 @@ export async function executeGatherStep(step: AgentStep, context: StepContext, c
       { role: 'user', content: `Goal: ${context.goal}\nExtraction task: ${step.description}\n\nPages content (batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(pageNames.length / BATCH_SIZE)}):\n${batchContent}\n\nExtract ALL relevant information from these pages. Be comprehensive.` },
     ];
 
-    const batchResult = await queryLiteLLM(summarizeMessages, ctx.settings.selectedModel, ctx.settings.apiKey, resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+    const batchResult = await queryLiteLLM(summarizeMessages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
     const batchSummary = batchResult.choices?.[0]?.message?.content?.trim() ?? '';
     totalTokens += countTokens(JSON.stringify(summarizeMessages)) + countTokens(batchSummary);
 
@@ -287,7 +287,7 @@ RULES:
   let tokens: number;
 
   if (toolAccess === 'none') {
-    const result = await queryLiteLLM(messages, ctx.settings.selectedModel, ctx.settings.apiKey, resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+    const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
     raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
   } else {
@@ -504,7 +504,7 @@ export async function executeStep(step: AgentStep, context: StepContext, ctx: St
     { role: 'user', content: `Goal: ${context.goal}\nPrevious context:\n${contextSummary}${scratchPadContext}${writeContext}\n\nCurrent step (type=${step.type}): ${step.description}\n\n${step.type === 'think' ? 'Using ALL the data above — especially the "Gathered Data (Working Memory)" section if present — produce the COMPLETE output described in this step. Write the actual content (table, analysis, summary, etc.) — not a plan or outline for how to produce it.' : 'Provide the JSON action to execute.'}` },
   ];
 
-  const result = await queryLiteLLM(messages, ctx.settings.selectedModel, ctx.settings.apiKey, resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+  const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
   const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
   const tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
 
