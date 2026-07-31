@@ -455,17 +455,24 @@ LLM responses containing Logseq notation are transformed:
 
 | File | Responsibility |
 |---|---|
-| `src/embedManager.ts` | Block flattening, reference resolution, chunking orchestration, embedding generation |
-| `src/hierarchyChunker.ts` | `buildSubtreeChunks()`, `buildAncestorContext()`, depth weighting |
-| `src/indexManager.ts` | Incremental indexing, auto-index, re-index guard, garbage collection of deleted pages |
+| `src/indexing/embedManager.ts` | Block flattening, reference resolution, chunking orchestration, embedding generation |
+| `src/indexing/hierarchyChunker.ts` | `buildSubtreeChunks()`, `buildAncestorContext()`, depth weighting |
+| `src/indexing/indexManager.ts` | Incremental indexing, auto-index, re-index guard, garbage collection of deleted pages |
+| `src/indexing/chunkMigrationManager.ts` | Schema migration management for chunk format changes |
+| `src/indexing/index.ts` | Public API re-exports for indexing module |
 | `src/storage/SQLiteVectorStore.ts` | Document CRUD, cosine search (fallback), block metadata, IndexedDB persistence |
 | `src/storage/VectorSearchAccelerator.ts` | HNSW index wrapper with auto-fallback |
 | `src/storage/cosineSimilarity.ts` | Embedding BLOB encode/decode, cosine computation |
-| `src/bm25Index.ts` | In-memory BM25 inverted index |
-| `src/queryClassifier.ts` | Heuristic query classification |
-| `src/hybridSearch.ts` | Hybrid search pipeline orchestration |
-| `src/reranker.ts` | `mergeWithRRF()` (dual-list) and `rerankWithRRF()` (legacy single-list) |
-| `src/LLMManager.ts` | LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation |
+| `src/search/bm25Index.ts` | In-memory BM25 inverted index with Indonesian stemming |
+| `src/search/queryClassifier.ts` | Heuristic query classification (keyword/semantic/mixed) |
+| `src/search/hybridSearch.ts` | Hybrid search pipeline orchestration |
+| `src/search/reranker.ts` | `mergeWithRRF()` (dual-list) and `rerankWithRRF()` (legacy single-list) |
+| `src/search/recencyScoring.ts` | Time-decay scoring for journal pages |
+| `src/search/depthWeightedSearch.ts` | Block depth weight adjustment |
+| `src/search/queryRewriter.ts` | LLM-based query rewriting for better retrieval |
+| `src/search/deduplicator.ts` | Cross-page chunk deduplication |
+| `src/search/index.ts` | Public API re-exports for search module |
+| `src/LLMManager.ts` | LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation, retry strategy pipeline |
 | `src/manager.ts` | `handleQuery()` — full pipeline orchestration |
 | `src/editPromptBuilder.ts` | Direct Page Edit system prompt and page context |
 | `src/editCommandParser.ts` | Extract/validate edit commands from json-edit blocks |

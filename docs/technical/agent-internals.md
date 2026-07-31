@@ -18,12 +18,14 @@ graph TD
     React --> Tools[MCP Tools + Logseq Tools]
     React --> Answer[Final Response]
     
-    Agent --> Plan[Generate Plan]
-    Plan --> Approve{Plan-first?}
+    Agent --> PlanGen[planGenerator.ts]
+    PlanGen --> Approve{Plan-first?}
     Approve -->|Yes| Show[Show Plan → Await Approval]
-    Approve -->|No| Exec[Execute Steps]
+    Approve -->|No| Exec[stepExecutors.ts]
     Show --> Exec
     Exec --> SelfCorrect[Self-Correction]
+    SelfCorrect --> FailHandler[failureHandler.ts]
+    SelfCorrect --> CtxCompress[contextCompressor.ts]
     SelfCorrect --> Replan[Dynamic Replanning]
     Replan --> Done[Completion + Memory Storage]
     
@@ -37,7 +39,11 @@ graph TD
 | **Memory** | `src/memory/` | Persistent context across sessions |
 | **Goal Detection** | `src/agent/goalDetector.ts` | Routes queries to appropriate handler |
 | **ReAct Loop** | `src/agent/ReActLoop.ts` | Iterative tool chaining with reasoning |
-| **Agent Loop** | `src/agent/AgentLoop.ts` | Multi-step goal pursuit with planning |
+| **Agent Loop** | `src/agent/AgentLoop.ts` | Orchestrator: delegates to specialized modules |
+| **Plan Generation** | `src/agent/planGenerator.ts` | Generates plans from goals, sanitizes write steps |
+| **Step Execution** | `src/agent/stepExecutors.ts` | Executes individual steps (gather, recall, action, specialist, subgoal) |
+| **Failure Handling** | `src/agent/failureHandler.ts` | Failure diagnosis, rollback, user escalation |
+| **Context Compression** | `src/agent/contextCompressor.ts` | Compresses accumulated context to prevent attention degradation |
 
 ---
 
@@ -264,10 +270,17 @@ The `queryLiteLLMStreaming()` function handles all three providers:
 
 ### Architecture
 
-`AgentLoop.ts` implements the full autonomous pipeline:
+`AgentLoop.ts` is the orchestrator that coordinates the full autonomous pipeline, delegating to specialized modules:
+
+- **`planGenerator.ts`** — `generatePlan()` produces structured step plans from goals; `sanitizeWriteSteps()` validates write operations
+- **`stepExecutors.ts`** — `executeStep()` dispatches to type-specific executors: `executeGatherStep()`, `executeRecallStep()`, `executeAction()`, `executeSpecialistStep()`, `executeSubGoalStep()`
+- **`failureHandler.ts`** — `handleFailure()` manages retries with adapted approaches; `diagnoseFailure()` produces human-readable root cause analysis; `rollback()` reverts failed operations; `resolveEscalation()` manages user interaction
+- **`contextCompressor.ts`** — `compressContext()` reduces accumulated step outputs when they exceed token thresholds
+
+The orchestrator itself handles: `run()`, `evaluate()` (self-correction), `replan()`, and `synthesizeFinalAnswer()`.
 
 ```
-Goal → Plan → [Approve] → Execute Steps → Self-Correct → Replan → Complete
+Goal → planGenerator.generatePlan() → [Approve] → stepExecutors.executeStep() → Self-Correct → Replan → Complete
 ```
 
 ### Plan Generation
@@ -664,14 +677,18 @@ Full management UI:
 
 ```
 src/agent/
-├── types.ts             StepType (10 types), AgentStep, StepOutput, StepContext
-├── AgentLoop.ts         Plan, execute, self-correct, replan, sub-goals, memory
-├── ReActLoop.ts         Iterative tool chaining engine
-├── goalDetector.ts      LLM-based goal classification with regex fallback
-├── logseqTools.ts       Logseq APIs as OpenAI-compatible function tool schemas
-├── modelRouter.ts       Per-step model resolution (fast/quality/explicit)
-├── executionGraph.ts    Topological wave grouping for parallel step execution
-└── outputParser.ts      Structured output classification and metadata extraction
+├── types.ts              StepType (10 types), AgentStep, StepOutput, StepContext
+├── AgentLoop.ts          Orchestrator: run(), evaluate, replan, synthesize
+├── stepExecutors.ts      Step execution (gather, recall, action, specialist, subgoal)
+├── failureHandler.ts     Failure diagnosis, rollback, escalation
+├── contextCompressor.ts  Context window management (adaptive compression)
+├── planGenerator.ts      Plan generation and step sanitization
+├── ReActLoop.ts          Iterative tool chaining (Reason → Act → Observe)
+├── goalDetector.ts       LLM-based goal classification with regex fallback
+├── logseqTools.ts        6 Logseq tools as OpenAI function schemas
+├── modelRouter.ts        Per-step model resolution (fast/quality/explicit)
+├── executionGraph.ts     Topological wave grouping for parallel execution
+└── outputParser.ts       Structured output classification and metadata extraction
 
 src/memory/
 ├── MemoryStore.ts     CRUD on agent_memory SQLite table
@@ -1044,7 +1061,11 @@ Returns up to 5 memories, each truncated to 200 characters.
 ```
 src/agent/
 ├── types.ts              StepType (10 types), AgentStep, StepOutput, StepContext
-├── AgentLoop.ts          Plan → Execute → Self-Correct → Replan → Memory
+├── AgentLoop.ts          Orchestrator: run(), evaluate, replan, synthesize
+├── stepExecutors.ts      Step execution (gather, recall, action, specialist, subgoal)
+├── failureHandler.ts     Failure diagnosis, rollback, escalation
+├── contextCompressor.ts  Context window management (adaptive compression)
+├── planGenerator.ts      Plan generation and step sanitization
 ├── ReActLoop.ts          Iterative tool chaining (Reason → Act → Observe)
 ├── goalDetector.ts       LLM-based goal classification with regex fallback
 ├── logseqTools.ts        6 Logseq tools as OpenAI function schemas

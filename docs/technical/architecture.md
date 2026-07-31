@@ -18,6 +18,10 @@ graph TD
     Manager --> Skills[Skills System]
     
     AgentLoop --> GoalDetect[goalDetector.ts]
+    AgentLoop --> StepExec[stepExecutors.ts]
+    AgentLoop --> PlanGen[planGenerator.ts]
+    AgentLoop --> FailHandle[failureHandler.ts]
+    AgentLoop --> CtxCompress[contextCompressor.ts]
     AgentLoop --> ReAct
     AgentLoop --> Memory
     
@@ -31,10 +35,17 @@ graph TD
     MCP --> MCPClient[MCPClient.ts — SSE Connection]
     MCPClient --> SSEServer[External MCP Servers]
     
-    Manager --> Retrieval[Hybrid Search Pipeline]
-    Retrieval --> BM25[BM25Index — Keyword Search]
-    Retrieval --> Vector[VectorSearchAccelerator — HNSW]
-    Retrieval --> RRF[mergeWithRRF — Fusion]
+    Manager --> Search[search/ — Hybrid Search Pipeline]
+    Search --> BM25[bm25Index.ts — Keyword Search]
+    Search --> Vector[VectorSearchAccelerator — HNSW]
+    Search --> RRF[reranker.ts — RRF Fusion]
+    Search --> QClass[queryClassifier.ts]
+    Search --> QRewrite[queryRewriter.ts]
+    
+    Manager --> Indexing[indexing/ — Embedding Pipeline]
+    Indexing --> EmbedMgr[embedManager.ts]
+    Indexing --> IdxMgr[indexManager.ts]
+    Indexing --> Chunker[hierarchyChunker.ts]
     
     Vector --> SQLite[SQLiteVectorStore — IndexedDB]
     BM25 --> SQLite
@@ -54,71 +65,126 @@ graph TD
 ```
 src/
 ├── main.tsx                    Plugin entry point, lazy initialization
-├── App.tsx                     React root, state management, UI orchestration
-├── manager.ts                  Query orchestrator (handleQuery, indexing, auto-embed)
-├── LLMManager.ts               LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation, reasoning_effort injection, streaming SSE support
+├── App.tsx                     React root — thin shell composing hooks + components
+├── manager.ts                  Query orchestrator (handleQuery, context building)
+├── LLMManager.ts               LLM communication with retry strategy pipeline
+│
+├── hooks/
+│   ├── useChatSession.ts       Chat state, input, streaming, submit dispatcher
+│   ├── chatHandlers.ts         Command handlers (help, raw, tools, chat/agent)
+│   ├── useAgentController.ts   Agent plan/running/escalation state
+│   ├── useIndexing.ts          Indexing state, progress polling, auto-embed
+│   ├── useModelSelection.ts    Model fetching, per-provider model memory
+│   ├── usePanelResize.ts       Panel width persistence and drag resize
+│   ├── useMemoryMonitor.ts     Heap/DOM pressure tracking
+│   ├── useCtrlKey.ts           Ctrl-click link detection
+│   ├── useAppVisible.ts        Plugin visibility state
+│   └── useThemeMode.ts         Dark/light theme detection
 │
 ├── agent/
-│   ├── AgentLoop.ts            Multi-step goal execution with self-correction, sub-goals, and memory
+│   ├── AgentLoop.ts            Orchestrator: run(), evaluate, replan, synthesize
+│   ├── stepExecutors.ts        Step execution (gather, recall, action, specialist, subgoal)
+│   ├── failureHandler.ts       Failure diagnosis, rollback, escalation
+│   ├── contextCompressor.ts    Context window management
+│   ├── planGenerator.ts        Plan generation and step sanitization
 │   ├── ReActLoop.ts            Iterative tool chaining (Reason → Act → Observe)
-│   ├── goalDetector.ts         LLM-based goal classification with regex fallback
-│   ├── logseqTools.ts          Built-in Logseq tools as OpenAI function schemas
-│   ├── types.ts                AgentPlan, AgentStep, StepResult, StepOutput types
-│   ├── modelRouter.ts          Per-step model routing (fast/quality/explicit)
-│   ├── executionGraph.ts       Topological wave grouping for parallel step execution
-│   └── outputParser.ts         Structured output parsing (JSON extraction, metadata detection)
+│   ├── goalDetector.ts         LLM-based goal classification
+│   ├── logseqTools.ts          Built-in Logseq tools as function schemas
+│   ├── modelRouter.ts          Per-step model routing
+│   ├── executionGraph.ts       Topological wave grouping
+│   ├── outputParser.ts         Structured output parsing
+│   └── types.ts                Agent type definitions
+│
+├── search/
+│   ├── bm25Index.ts            In-memory BM25 inverted index with Indonesian stemming
+│   ├── hybridSearch.ts         Hybrid search orchestration (vector + keyword)
+│   ├── reranker.ts             Reciprocal Rank Fusion
+│   ├── recencyScoring.ts       Time-decay scoring for journal pages
+│   ├── depthWeightedSearch.ts  Block depth weight adjustment
+│   ├── queryClassifier.ts      Query type classification (keyword/semantic/mixed)
+│   ├── queryRewriter.ts        LLM-based query rewriting for better retrieval
+│   ├── deduplicator.ts         Cross-page chunk deduplication
+│   └── index.ts                Public API re-exports
+│
+├── indexing/
+│   ├── embedManager.ts         Block flattening, reference resolution, embedding
+│   ├── indexManager.ts         Incremental indexing, auto-index on change
+│   ├── hierarchyChunker.ts     Subtree-based chunking with ancestor context
+│   ├── chunkMigrationManager.ts  Schema migration management
+│   └── index.ts                Public API re-exports
 │
 ├── memory/
 │   ├── MemoryStore.ts          CRUD on agent_memory SQLite table
-│   ├── memoryDetector.ts       "Remember this" trigger phrase detection
-│   ├── sessionSummarizer.ts    LLM-based conversation summarization
-│   └── logseqMemoryWriter.ts   Writes memory to Logseq graph pages
+│   ├── memoryDetector.ts       Trigger phrase detection
+│   ├── sessionSummarizer.ts    Conversation summarization
+│   └── logseqMemoryWriter.ts   Writes memory to Logseq pages
 │
 ├── mcp/
-│   ├── MCPClient.ts            Individual SSE connection to an MCP server
-│   └── MCPManager.ts           Singleton coordinator for multiple MCP clients
+│   ├── MCPClient.ts            Individual SSE connection
+│   └── MCPManager.ts           Singleton coordinator
+│
+├── skills/
+│   ├── SkillStore.ts           Load/save/toggle skills from Logseq pages
+│   ├── skillParser.ts          Skill markdown format parser
+│   ├── skillCatalog.ts         Progressive disclosure prompt builder
+│   ├── skillImporter.ts        GitHub URL import
+│   └── builtinHelpSkill.ts     Built-in mixer-help skill
 │
 ├── storage/
-│   ├── SQLiteVectorStore.ts    Per-document SQLite storage with IndexedDB persistence
-│   ├── VectorSearchAccelerator.ts  In-memory HNSW index (hnswlib-wasm)
-│   ├── VectorSearchAccelerator.types.ts  HNSW configuration
-│   ├── cosineSimilarity.ts     Embedding BLOB encode/decode, cosine similarity
-│   ├── StorageProvider.ts      Storage interface (per-document + legacy)
-│   ├── createStorageProvider.ts  Factory: SQLite vs Settings backend
-│   └── migrateLegacy.ts        Migration from legacy Orama to SQLite
+│   ├── SQLiteVectorStore.ts    Per-document SQLite with IndexedDB persistence
+│   ├── VectorSearchAccelerator.ts  HNSW index (hnswlib-wasm)
+│   ├── cosineSimilarity.ts     Embedding encode/decode
+│   ├── StorageProvider.ts      Storage interface
+│   ├── createStorageProvider.ts  Factory
+│   └── migrateLegacy.ts        Orama → SQLite migration
 │
-├── embedManager.ts             Block flattening, reference resolution, chunking, embedding
-├── indexManager.ts             Incremental indexing, auto-index on change
-├── hierarchyChunker.ts         Subtree-based chunking with ancestor context
-├── bm25Index.ts                In-memory BM25 inverted index
-├── queryClassifier.ts          Query classification (keyword/semantic/mixed)
-├── hybridSearch.ts             Hybrid search orchestration
-├── reranker.ts                 RRF fusion (mergeWithRRF, rerankWithRRF)
-├── tokenizer.ts                Lazy-loaded cl100k_base tokenizer
-│
-├── editPromptBuilder.ts        Direct Page Edit system prompt + page context formatting
-├── editCommandParser.ts        Extracts edit commands from LLM json-edit blocks
-├── blockExecutor.ts            Executes edit commands via Logseq API
-├── blockTreeFormatter.ts       Formats page block trees with UUIDs
-├── blockRefParser.ts           ((uuid)) → clickable link transformation
-│
-├── cooldownManager.ts          Re-index cooldown timer
-├── buttonState.ts              Re-index button state derivation
-├── settings.ts                 Plugin settings schema
+├── utils/
+│   ├── markdownTransforms.ts   Content parsing (tables, URLs, checkboxes, tags)
+│   ├── csvDetector.ts          CSV block detection and parsing
+│   ├── cliCodeBlockDetector.ts CLI output wrapping
+│   ├── mermaidSanitizer.ts     Mermaid syntax fixes
+│   ├── mermaidFixer.ts         LLM-based Mermaid correction
+│   ├── plantumlEncoder.ts      PlantUML encoding
+│   ├── plantumlFixer.ts        LLM-based PlantUML correction
+│   ├── diagramIntentDetector.ts  Diagram request detection
+│   └── urlClassifier.ts        URL type detection
 │
 ├── components/
-│   ├── AgentProgress.tsx       Agent execution progress UI
-│   ├── AgentToggle.tsx         Agent mode toggle
-│   ├── EffortSelector.tsx      Reasoning effort level dropdown (Low/Med/High/XHigh/Max)
-│   ├── ModelSelector.tsx       LLM model selection dropdown with search
-│   ├── MemoryPanel.tsx         Memory management UI
-│   ├── MCPServerPanel.tsx      MCP server management UI
-│   ├── AutoEmbedToggle.tsx     Auto-embed toggle
-│   ├── BlockLink.tsx           Clickable block reference component
-│   └── ChatMessageList.tsx     Chat rendering with link transformation
+│   ├── ChatHeader.tsx          Header bar (model selector, effort, close)
+│   ├── ChatInput.tsx           Input area, toolbar, status bar
+│   ├── ChatMessageList.tsx     Chat rendering with markdown + citations
+│   ├── DatabasePanel.tsx       DB stats, export/import/clear
+│   ├── AgentProgress.tsx       Agent execution progress
+│   ├── MCPServerPanel.tsx      MCP server management
+│   ├── MemoryPanel.tsx         Memory management
+│   ├── SkillPanel.tsx          Skills management
+│   ├── ModelSelector.tsx       Model dropdown with search
+│   ├── EffortSelector.tsx      Reasoning effort level selector
+│   └── ...                     Toggle components, links, charts
 │
-└── types/
-    └── editTypes.ts            Edit command TypeScript types
+├── types/
+│   ├── chatMessage.ts          UIChatMessage + LLMMessage canonical types
+│   └── editTypes.ts            Edit command types
+│
+├── state/
+│   └── settings.ts             Recoil atoms for settings
+│
+└── [root files]
+    ├── intentClassifier.ts     Tool inclusion decision logic
+    ├── editPromptBuilder.ts    Edit mode system prompt
+    ├── editCommandParser.ts    Edit command extraction
+    ├── blockExecutor.ts        Edit command execution
+    ├── blockTreeFormatter.ts   Page block tree formatting
+    ├── blockRefParser.ts       Block reference link transformation
+    ├── pageLinkParser.ts       Page link transformation
+    ├── normalizer.ts           Block content normalization
+    ├── tokenizer.ts            cl100k_base tokenizer
+    ├── cooldownManager.ts      Re-index cooldown
+    ├── buttonState.ts          Index button state
+    ├── helpSystem.ts           /help command handler
+    ├── rawCommand.ts           /raw command handler
+    ├── toolsCommand.ts         /tools command handler
+    └── settings.ts             Plugin settings schema
 ```
 
 ---
