@@ -49,14 +49,18 @@ vi.mock('../utils/diagramIntentDetector', () => ({
 import { queryLiteLLM } from '../LLMManager';
 import { runReActLoop } from './ReActLoop';
 import { AgentLoop } from './AgentLoop';
+import { executeSpecialistStep } from './stepExecutors';
 import type { AgentStep, StepContext } from './types';
 
 const mockQueryLiteLLM = queryLiteLLM as ReturnType<typeof vi.fn>;
 const mockRunReActLoop = runReActLoop as ReturnType<typeof vi.fn>;
 
-// Helper to access the private method via reflection
+// Helper to get the step executor context from AgentLoop and call the extracted function
 function getExecuteSpecialistStep(agentLoop: AgentLoop): (step: AgentStep, context: StepContext) => Promise<any> {
-  return (agentLoop as any).executeSpecialistStep.bind(agentLoop);
+  return (step: AgentStep, context: StepContext) => {
+    const ctx = (agentLoop as any).getStepExecutorCtx();
+    return executeSpecialistStep(step, context, ctx);
+  };
 }
 
 function createAgentLoop(overrides: Partial<{ tokenBudget: number; tokensUsed: number }> = {}): AgentLoop {

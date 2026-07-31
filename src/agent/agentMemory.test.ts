@@ -48,6 +48,7 @@ vi.mock('../utils/diagramIntentDetector', () => ({
 
 import { queryLiteLLM } from '../LLMManager';
 import { AgentLoop } from './AgentLoop';
+import { executeRecallStep } from './stepExecutors';
 
 const mockQueryLiteLLM = queryLiteLLM as ReturnType<typeof vi.fn>;
 
@@ -228,11 +229,11 @@ describe('AgentLoop memory integration', () => {
       onReplanProposed: vi.fn().mockResolvedValue(false),
     });
 
-    // Access private method via reflection
-    const executeRecallStep = (loop as any).executeRecallStep.bind(loop);
+    const ctx = (loop as any).getStepExecutorCtx();
     const result = await executeRecallStep(
       { id: 1, description: 'recall user preferences', type: 'recall', status: 'running' },
       { previousOutputs: [], createdBlockUUIDs: [], createdPages: [], goal: 'test', scratchPad: new Map() },
+      ctx,
     );
 
     expect(result.success).toBe(true);
@@ -256,10 +257,11 @@ describe('AgentLoop memory integration', () => {
       onReplanProposed: vi.fn().mockResolvedValue(false),
     });
 
-    const executeRecallStep = (loop as any).executeRecallStep.bind(loop);
+    const ctx = (loop as any).getStepExecutorCtx();
     const result = await executeRecallStep(
       { id: 1, description: 'recall something', type: 'recall', status: 'running' },
       { previousOutputs: [], createdBlockUUIDs: [], createdPages: [], goal: 'test', scratchPad: new Map() },
+      ctx,
     );
 
     expect(result.success).toBe(true);
@@ -277,10 +279,11 @@ describe('AgentLoop memory integration', () => {
       onReplanProposed: vi.fn().mockResolvedValue(false),
     });
 
-    const executeRecallStep = (loop as any).executeRecallStep.bind(loop);
+    const ctx = (loop as any).getStepExecutorCtx();
     const result = await executeRecallStep(
       { id: 1, description: 'recall something', type: 'recall', status: 'running' },
       { previousOutputs: [], createdBlockUUIDs: [], createdPages: [], goal: 'test', scratchPad: new Map() },
+      ctx,
     );
 
     expect(result.success).toBe(true);
