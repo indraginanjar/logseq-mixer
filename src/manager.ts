@@ -203,13 +203,21 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
     }
   }
 
-  const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined);
+  const result = await checkAndIndexUpdatedPages(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined, {
+    openaiEmbeddingEndpoint: settings.openaiEmbeddingEndpoint,
+    ollamaEmbeddingEndpoint: settings.ollamaEmbeddingEndpoint,
+    litellmEmbeddingEndpoint: settings.litellmEmbeddingEndpoint,
+  });
   resetBM25Index();
   return result;
 }
 
 export async function enableAutoIndexer(settings: any, storageProvider: StorageProvider) {
-  startPageIndexingOnChange(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined);
+  startPageIndexingOnChange(settings.apiKey, undefined, settings.EmbeddingApiKey, settings.embeddingModel, storageProvider, settings.embeddingEndpoint, settings.embeddingProvider, accelerator ?? undefined, {
+    openaiEmbeddingEndpoint: settings.openaiEmbeddingEndpoint,
+    ollamaEmbeddingEndpoint: settings.ollamaEmbeddingEndpoint,
+    litellmEmbeddingEndpoint: settings.litellmEmbeddingEndpoint,
+  });
 }
 
 function truncateToTokens(text: string, maxTokens: number): string {
@@ -221,7 +229,11 @@ function truncateToTokens(text: string, maxTokens: number): string {
 
 async function retrieveVectorContext(query: string, settings: any, storageProvider: StorageProvider): Promise<ScoredChunk[]> {
   try {
-    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider);
+    const queryEmbedding = await useGenerateEmbedding(query, settings.EmbeddingApiKey, settings.embeddingModel, settings.embeddingEndpoint, settings.embeddingProvider, {
+      openaiEmbeddingEndpoint: settings.openaiEmbeddingEndpoint,
+      ollamaEmbeddingEndpoint: settings.ollamaEmbeddingEndpoint,
+      litellmEmbeddingEndpoint: settings.litellmEmbeddingEndpoint,
+    });
     const provider = storageProvider as PerDocumentStorageProvider;
     if (typeof provider.searchByVector !== 'function') {
       console.warn('[retrieveVectorContext] storageProvider has no searchByVector — returning empty');

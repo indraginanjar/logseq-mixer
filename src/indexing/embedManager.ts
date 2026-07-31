@@ -19,6 +19,14 @@ export interface EmbeddingModelConfig {
 export type EmbeddingProvider = 'openai' | 'ollama' | 'litellm';
 
 export const OPENAI_EMBEDDINGS_ENDPOINT = 'https://api.openai.com/v1/embeddings';
+export const OLLAMA_EMBEDDINGS_ENDPOINT = 'http://localhost:11434/api/embeddings';
+export const LITELLM_EMBEDDINGS_ENDPOINT = 'http://127.0.0.1:4000/embeddings';
+
+const DEFAULT_EMBEDDING_ENDPOINTS: Record<string, string> = {
+  openai: OPENAI_EMBEDDINGS_ENDPOINT,
+  ollama: OLLAMA_EMBEDDINGS_ENDPOINT,
+  litellm: LITELLM_EMBEDDINGS_ENDPOINT,
+};
 
 export const EMBEDDING_MODELS: Record<string, EmbeddingModelConfig> = {
   'text-embedding-ada-002': { name: 'text-embedding-ada-002', dimensions: 1536, maxTokens: 8191 },
@@ -538,8 +546,33 @@ export function groupBlocksIntoChunks(
   return finalChunks;
 }
 
-export function resolveEndpoint(endpoint?: string): string {
-  return endpoint?.trim() || OPENAI_EMBEDDINGS_ENDPOINT;
+export function resolveEndpoint(
+  endpoint?: string,
+  provider?: EmbeddingProvider,
+  providerEndpoints?: {
+    openaiEmbeddingEndpoint?: string;
+    ollamaEmbeddingEndpoint?: string;
+    litellmEmbeddingEndpoint?: string;
+  }
+): string {
+  const effectiveProvider = provider || 'openai';
+
+  // Per-provider endpoint (preferred)
+  if (providerEndpoints) {
+    const perProvider: Record<string, string | undefined> = {
+      openai: providerEndpoints.openaiEmbeddingEndpoint,
+      ollama: providerEndpoints.ollamaEmbeddingEndpoint,
+      litellm: providerEndpoints.litellmEmbeddingEndpoint,
+    };
+    const providerEp = perProvider[effectiveProvider]?.trim();
+    if (providerEp) return providerEp;
+  }
+
+  // Legacy single endpoint fallback (deprecated)
+  if (endpoint?.trim()) return endpoint.trim();
+
+  // Provider defaults
+  return DEFAULT_EMBEDDING_ENDPOINTS[effectiveProvider] || OPENAI_EMBEDDINGS_ENDPOINT;
 }
 
 export async function useGenerateEmbedding(
@@ -547,13 +580,18 @@ export async function useGenerateEmbedding(
   apiKey: string,
   model: string = DEFAULT_EMBEDDING_MODEL,
   endpoint: string = OPENAI_EMBEDDINGS_ENDPOINT,
-  provider: EmbeddingProvider = 'openai'
+  provider: EmbeddingProvider = 'openai',
+  providerEndpoints?: {
+    openaiEmbeddingEndpoint?: string;
+    ollamaEmbeddingEndpoint?: string;
+    litellmEmbeddingEndpoint?: string;
+  }
 ): Promise<number[]> {
   if (provider === 'openai' && !apiKey?.trim()) {
     throw new Error('Embedding API key is not configured. Please set your OpenAI API key in the plugin settings.');
   }
 
-  const resolvedEndpoint = resolveEndpoint(endpoint);
+  const resolvedEndpoint = resolveEndpoint(endpoint, provider, providerEndpoints);
 
   // Safety truncation for any single chunk that still exceeds the model's limit
   const config = EMBEDDING_MODELS[model];
@@ -785,7 +823,12 @@ export async function getEmbeddingsForPage(
   linkData?: PageLinkData,
   endpoint?: string,
   provider?: EmbeddingProvider,
-  journalData?: PageJournalData
+  journalData?: PageJournalData,
+  providerEndpoints?: {
+    openaiEmbeddingEndpoint?: string;
+    ollamaEmbeddingEndpoint?: string;
+    litellmEmbeddingEndpoint?: string;
+  }
 ): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[]; chunkDepthMetadata: ChunkDepthMetadata[] }> {
   const { lines: originalLines, metadata: blockMetadata, hasResolvedRef } = await flattenBlocks(blocks, [], pageName);
 
@@ -830,7 +873,7 @@ export async function getEmbeddingsForPage(
       id: chunkId,
       lastUpdated,
       content: subtreeChunks[c].content,
-      embedding: await useGenerateEmbedding(subtreeChunks[c].content, apiKey, model, endpoint, provider)
+      embedding: await useGenerateEmbedding(subtreeChunks[c].content, apiKey, model, endpoint, provider, providerEndpoints)
     };
     embeddings.push(embedding);
     chunkDepthMetadata.push({

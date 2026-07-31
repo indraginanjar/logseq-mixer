@@ -24,6 +24,11 @@ let currentEmbeddingKey = '';
 let currentModel = '';
 let currentEmbeddingEndpoint = '';
 let currentEmbeddingProvider: EmbeddingProvider = 'openai';
+let currentProviderEndpoints: {
+  openaiEmbeddingEndpoint?: string;
+  ollamaEmbeddingEndpoint?: string;
+  litellmEmbeddingEndpoint?: string;
+} | undefined;
 let currentOramaInstance: any;
 let currentStorageProvider: StorageProvider;
 let currentAccelerator: VectorSearchAccelerator | undefined;
@@ -277,7 +282,12 @@ export async function checkAndIndexUpdatedPages(
   storageProvider: StorageProvider,
   embeddingEndpoint?: string,
   embeddingProvider?: EmbeddingProvider,
-  accelerator?: VectorSearchAccelerator
+  accelerator?: VectorSearchAccelerator,
+  providerEndpoints?: {
+    openaiEmbeddingEndpoint?: string;
+    ollamaEmbeddingEndpoint?: string;
+    litellmEmbeddingEndpoint?: string;
+  }
 ): Promise<IndexingResult> {
   if (indexingInProgress) return { outcome: 'completed', pagesProcessed: 0 };
 
@@ -348,7 +358,8 @@ export async function checkAndIndexUpdatedPages(
             linkData,
             embeddingEndpoint,
             embeddingProvider,
-            { isJournal: !!(page as any)['journal?'], journalDay: (page as any).journalDay }
+            { isJournal: !!(page as any)['journal?'], journalDay: (page as any).journalDay },
+            providerEndpoints
           );
 
           // Delete old chunks for this page
@@ -473,7 +484,12 @@ export function startPageIndexingOnChange(
   storageProvider: StorageProvider,
   embeddingEndpoint?: string,
   embeddingProvider?: EmbeddingProvider,
-  accelerator?: VectorSearchAccelerator
+  accelerator?: VectorSearchAccelerator,
+  providerEndpoints?: {
+    openaiEmbeddingEndpoint?: string;
+    ollamaEmbeddingEndpoint?: string;
+    litellmEmbeddingEndpoint?: string;
+  }
 ): void {
   currentApiKey = apiKey;
   currentEmbeddingKey = embeddingApiKey;
@@ -483,6 +499,7 @@ export function startPageIndexingOnChange(
   currentEmbeddingEndpoint = embeddingEndpoint ?? '';
   currentEmbeddingProvider = embeddingProvider ?? 'openai';
   currentAccelerator = accelerator;
+  currentProviderEndpoints = providerEndpoints;
 
   if (hasHooked) return;
   hasHooked = true;
@@ -499,7 +516,7 @@ export function startPageIndexingOnChange(
     debounceTimer = setTimeout(async () => {
       debounceTimer = null;
       try {
-        await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider, currentAccelerator);
+        await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider, currentAccelerator, currentProviderEndpoints);
       } catch (err) {
         console.error('Error indexing updated pages:', err);
       }

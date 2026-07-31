@@ -44,12 +44,34 @@ const settings: SettingSchemaDesc[] = [
     enumChoices: ['openai', 'ollama', 'litellm'],
     enumPicker: 'select',
   },
+  // Deprecated: use per-provider embedding endpoints below
   {
     key: 'embeddingEndpoint',
     type: 'string',
     title: 'Embedding API Endpoint',
     description: 'The URL for embedding API requests. For Ollama: http://localhost:11434/api/embeddings. For LiteLLM: http://127.0.0.1:4000/embeddings. Leave empty to use the default OpenAI endpoint.',
     default: 'https://api.openai.com/v1/embeddings',
+  },
+  {
+    key: 'openaiEmbeddingEndpoint',
+    type: 'string',
+    title: 'OpenAI Embedding Endpoint',
+    description: 'Embedding endpoint for OpenAI provider. Leave empty for default (https://api.openai.com/v1/embeddings).',
+    default: '',
+  },
+  {
+    key: 'ollamaEmbeddingEndpoint',
+    type: 'string',
+    title: 'Ollama Embedding Endpoint',
+    description: 'Embedding endpoint for Ollama provider. Leave empty for default (http://localhost:11434/api/embeddings).',
+    default: '',
+  },
+  {
+    key: 'litellmEmbeddingEndpoint',
+    type: 'string',
+    title: 'LiteLLM Embedding Endpoint',
+    description: 'Embedding endpoint for LiteLLM proxy. Leave empty for default (http://127.0.0.1:4000/embeddings).',
+    default: '',
   },
   {
     key: 'chatProvider',
