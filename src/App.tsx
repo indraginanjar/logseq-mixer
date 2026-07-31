@@ -1,58 +1,30 @@
 import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
-import ChatMessageList, { ChatMessage } from 'components/ChatMessageList';
+import ChatMessageList from 'components/ChatMessageList';
 import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
 import SkillPanel from './components/SkillPanel';
-import ModelSelector from './components/ModelSelector';
-import EffortSelector from './components/EffortSelector';
+import ChatHeader from './components/ChatHeader';
+import ChatInput from './components/ChatInput';
+import DatabasePanel from './components/DatabasePanel';
 import { ensureBuiltinHelpSkill } from './skills/builtinHelpSkill';
 import { loadAllSkills } from './skills/SkillStore';
 import { MCPManager } from 'mcp/MCPManager';
-import { MemoryStore } from './memory/MemoryStore';
-import { setMemoryStore, getLastMemorySaved, setOnThoughtCallback } from './manager';
-import { summarizeSession } from './memory/sessionSummarizer';
-import { writeMemoryPage } from './memory/logseqMemoryWriter';
-import { AgentLoop } from './agent/AgentLoop';
 import AgentProgress from './components/AgentProgress';
-import { pendingAgentGoal, clearPendingAgentGoal } from './manager';
-import type { AgentPlan, AgentProgressEvent, AgentStep } from './agent/types';
 import { useThemeMode } from 'hooks/useThemeMode';
-import type { IndexingResult } from 'indexManager';
-import { cancelAutoIndexDebounce, getIndexingProgress, isIndexingActive, requestPauseIndexing, setAutoEmbedEnabled as setAutoEmbedEnabledIM, setAutoIndexDebounceSeconds } from 'indexManager';
-import { clearConversationHistory, addToConversationHistory, enableAutoIndexer, handleQuery, indexEntireLogSeq } from 'manager';
-import { isHelpCommand, answerHelpQuestion } from './helpSystem';
-import { isToolsCommand, listBuiltInTools } from './toolsCommand';
-import { isRawCommand, extractRawPrompt, sendRawPrompt } from './rawCommand';
-import React, { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { executeAll, verifyAndCorrect } from './blockExecutor';
-import { getActivePageContext } from './blockTreeFormatter';
 import { getButtonState } from './buttonState';
-import { AutoEmbedToggle } from './components/AutoEmbedToggle';
-import { MemoryIndicator, MemoryWarning } from './components/MemoryIndicator';
-import { ChangeSummary } from './components/ChangeSummary';
-import { AgentToggle } from './components/AgentToggle';
-import { EditToggle } from './components/EditToggle';
-import { VerboseToggle } from './components/VerboseToggle';
-import { cancelCooldown, startCooldown } from './cooldownManager';
+import { MemoryWarning } from './components/MemoryIndicator';
 import { useAppVisible } from './hooks/useAppVisible';
 import { useCtrlKey } from './hooks/useCtrlKey';
-import { useMemoryMonitor } from './hooks/useMemoryMonitor';
-import type { MemoryStatus } from './hooks/useMemoryMonitor';
+import { usePanelResize } from './hooks/usePanelResize';
+import { useModelSelection } from './hooks/useModelSelection';
+import { useIndexing } from './hooks/useIndexing';
+import { useAgentController } from './hooks/useAgentController';
+import { useChatSession } from './hooks/useChatSession';
 import { aiEditModeState, settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
-import type { ExecutionResult } from './types/editTypes';
-import { fetchModelsForProvider } from './LLMManager';
-
-function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
 
 // --- Animations ---
 
@@ -97,209 +69,6 @@ const ChatPanel = styled('main', {
   borderLeft: '1px solid $slate6',
 });
 
-const Header = styled('div', {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid $slate6',
-  backgroundColor: '$elevation0',
-});
-
-const HeaderLeft = styled('div', {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-});
-
-const LogoIcon = styled('img', { width: '18px', height: '18px', borderRadius: '4px' });
-
-const Title = styled('h2', {
-  margin: 0,
-  fontSize: '15px',
-  fontWeight: 600,
-  color: '$highContrast',
-});
-
-const CloseButton = styled('button', {
-  background: 'transparent',
-  border: 'none',
-  width: '28px',
-  height: '28px',
-  borderRadius: '6px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  cursor: 'pointer',
-  color: '$slate9',
-  fontSize: '14px',
-  transition: 'all 0.15s',
-  '&:hover': { backgroundColor: '$slate3', color: '$highContrast' },
-});
-
-const HeaderRight = styled('div', {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '4px',
-  overflow: 'hidden',
-  minWidth: 0,
-});
-
-const HeaderButton = styled('button', {
-  background: 'transparent',
-  border: '1px solid $slate6',
-  borderRadius: '6px',
-  padding: '4px 8px',
-  cursor: 'pointer',
-  color: '$slate10',
-  fontSize: '12px',
-  fontWeight: 500,
-  transition: 'all 0.15s',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '4px',
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
-});
-
-const ModelSelect = styled('select', {
-  background: 'transparent',
-  border: '1px solid $slate6',
-  borderRadius: '6px',
-  padding: '4px 24px 4px 8px',
-  cursor: 'pointer',
-  color: '$slate10',
-  fontSize: '12px',
-  fontWeight: 500,
-  transition: 'all 0.15s',
-  outline: 'none',
-  fontFamily: '$sans',
-  appearance: 'none',
-  maxWidth: '140px',
-  minWidth: 0,
-  flexShrink: 1,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 6px center',
-  backgroundSize: '12px',
-  '&:hover': { backgroundColor: '$slate3', borderColor: '$slate8', color: '$highContrast' },
-  '&:focus': { borderColor: '$blue8' },
-  '& option': {
-    backgroundColor: '$elevation0',
-    color: '$highContrast',
-  },
-});
-
-const DbPanel = styled('div', {
-  position: 'absolute',
-  top: '53px',
-  left: 0,
-  right: 0,
-  bottom: 0,
-  backgroundColor: '$elevation0',
-  zIndex: 10,
-  display: 'flex',
-  flexDirection: 'column',
-  padding: '24px 20px',
-  animation: `${fadeIn} 0.2s ease-out`,
-});
-
-const DbPanelHeader = styled('div', {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginBottom: '20px',
-  borderBottom: '1px solid $slate6',
-  paddingBottom: '10px',
-});
-
-const DbPanelTitle = styled('h3', {
-  margin: 0,
-  fontSize: '16px',
-  fontWeight: 600,
-  color: '$highContrast',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-});
-
-const DbStatsList = styled('div', {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '12px',
-  flex: 1,
-  overflowY: 'auto',
-});
-
-const DbStatRow = styled('div', {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '10px 12px',
-  backgroundColor: '$slate3',
-  borderRadius: '8px',
-  border: '1px solid $slate5',
-});
-
-const DbStatLabel = styled('span', {
-  fontSize: '13px',
-  fontWeight: 500,
-  color: '$slate11',
-});
-
-const DbStatValue = styled('span', {
-  fontSize: '13px',
-  fontWeight: 600,
-  color: '$highContrast',
-});
-
-const DbPanelActions = styled('div', {
-  display: 'flex',
-  gap: '10px',
-  marginTop: '20px',
-});
-
-const DbPanelButton = styled('button', {
-  flex: 1,
-  padding: '10px 16px',
-  borderRadius: '8px',
-  fontSize: '13px',
-  fontWeight: 600,
-  cursor: 'pointer',
-  transition: 'all 0.15s',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '6px',
-  fontFamily: '$sans',
-
-  variants: {
-    variant: {
-      primary: {
-        backgroundColor: '$blue9',
-        color: 'white',
-        border: 'none',
-        '&:hover': { backgroundColor: '$blue10' },
-        '&:active': { transform: 'scale(0.98)' },
-      },
-      secondary: {
-        backgroundColor: 'transparent',
-        border: '1px solid $slate6',
-        color: '$slate11',
-        '&:hover': { backgroundColor: '$slate3', color: '$highContrast' },
-        '&:active': { transform: 'scale(0.98)' },
-      },
-    },
-  },
-  defaultVariants: {
-    variant: 'secondary',
-  },
-});
-
 const MessagesContainer = styled('div', {
   flex: 1,
   overflowY: 'auto',
@@ -342,134 +111,6 @@ const RetryButton = styled('button', {
   fontWeight: 500,
   padding: 0,
   '&:hover': { color: '$red12' },
-});
-
-const InputArea = styled('div', {
-  padding: '12px 16px 16px',
-  borderTop: '1px solid $slate6',
-  backgroundColor: '$elevation0',
-});
-
-const InputWrapper = styled('div', {
-  display: 'flex',
-  flexDirection: 'column',
-  border: '1px solid $slate7',
-  borderRadius: '10px',
-  padding: '8px',
-  backgroundColor: '$elevation1',
-  transition: 'border-color 0.15s, box-shadow 0.15s',
-  '&:focus-within': { borderColor: '$blue8', boxShadow: '0 0 0 2px $colors$blue4' },
-});
-
-const InputButtonRow = styled('div', {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginTop: '4px',
-});
-
-const TextArea = styled('textarea', {
-  flex: 1,
-  minHeight: '80px',
-  maxHeight: '160px',
-  resize: 'none',
-  border: 'none',
-  background: 'transparent',
-  padding: 0,
-  fontSize: '14px',
-  fontFamily: 'inherit',
-  lineHeight: 1.5,
-  outline: 'none',
-  color: '$highContrast',
-  overflowY: 'auto',
-  '&::placeholder': { color: '$slate8' },
-  '&:disabled': { opacity: 0.5 },
-  '&::-webkit-scrollbar': { width: '4px' },
-  '&::-webkit-scrollbar-thumb': { background: '$slate6', borderRadius: '2px' },
-});
-
-const SendButton = styled('button', {
-  width: '32px',
-  height: '32px',
-  borderRadius: '8px',
-  border: 'none',
-  backgroundColor: '$blue9',
-  color: 'white',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  transition: 'background-color 0.15s, transform 0.1s',
-  '&:hover:not(:disabled)': { backgroundColor: '$blue10' },
-  '&:active:not(:disabled)': { transform: 'scale(0.95)' },
-  '&:disabled': { opacity: 0.4, cursor: 'default' },
-  svg: { width: '16px', height: '16px', fill: 'currentColor' },
-});
-
-const ToolbarRow = styled('div', {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '6px',
-  marginTop: '8px',
-  flexWrap: 'wrap',
-});
-
-const ImageButton = styled('button', {
-  width: '28px',
-  height: '28px',
-  borderRadius: '6px',
-  border: 'none',
-  backgroundColor: 'transparent',
-  color: '$gray11',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  '&:hover:not(:disabled)': { backgroundColor: '$gray4' },
-  '&:disabled': { opacity: 0.4, cursor: 'default' },
-});
-
-const StatusText = styled('span', {
-  fontSize: '11px',
-  color: '$slate9',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '4px',
-});
-
-const ToolbarButton = styled('button', {
-  padding: '5px 10px',
-  borderRadius: '6px',
-  border: '1px solid $slate6',
-  backgroundColor: '$elevation1',
-  color: '$slate11',
-  fontSize: '12px',
-  fontWeight: 500,
-  cursor: 'pointer',
-  transition: 'all 0.15s',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '4px',
-  '&:hover': { backgroundColor: '$elevation2', borderColor: '$slate8', color: '$highContrast' },
-  variants: {
-    variant: {
-      index: {
-        backgroundColor: '$green3',
-        borderColor: '$green7',
-        color: '$green11',
-        '&:hover': { backgroundColor: '$green4', borderColor: '$green8', color: '$green12' },
-      },
-      pause: {
-        backgroundColor: '$red3',
-        borderColor: '$red7',
-        color: '$red11',
-        '&:hover': { backgroundColor: '$red4', borderColor: '$red8', color: '$red12' },
-      },
-    },
-  },
 });
 
 const TypingIndicator = styled('div', {
@@ -541,13 +182,6 @@ type Props = {
   storageProvider: StorageProvider;
 };
 
-/** Format current time as ISO-like timestamp without seconds for chat message headers. */
-function chatTimestamp(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-}
-
 export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -555,157 +189,76 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isVisible = useAppVisible();
 
-  // Resizable panel width
-  const [panelWidth, setPanelWidth] = useState(() => {
-    try {
-      const saved = localStorage.getItem('logseq-mixer-panel-width');
-      return saved ? Math.max(320, Math.min(Number(saved), window.innerWidth * 0.85)) : 520;
-    } catch { return 520; }
-  });
-  const isResizingRef = useRef(false);
-
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    const startX = e.clientX;
-    const startWidth = panelWidth;
-
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!isResizingRef.current) return;
-      const delta = startX - ev.clientX;
-      const newWidth = Math.max(320, Math.min(startWidth + delta, window.innerWidth * 0.85));
-      setPanelWidth(newWidth);
-    };
-
-    const onMouseUp = () => {
-      isResizingRef.current = false;
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      // Persist width from the panel element's current computed width
-      if (panelRef.current) {
-        const finalWidth = panelRef.current.offsetWidth;
-        try { localStorage.setItem('logseq-mixer-panel-width', String(finalWidth)); } catch {}
-      }
-    };
-
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }, [panelWidth]);
+  const { panelWidth, isResizingRef, handleResizeStart } = usePanelResize(panelRef as React.RefObject<HTMLDivElement>);
   const themeMode = useThemeMode(initialThemeMode);
   const ctrlHeld = useCtrlKey();
   const settings = useRecoilValue(settingsState);
   const [aiEditMode, setAiEditMode] = useRecoilState(aiEditModeState);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastSubmittedMessage, setLastSubmittedMessage] = useState<string>('');
-  const [isIndexing, setIsIndexing] = useState(isIndexingActive());
-  const [editResults, setEditResults] = useState<Map<string | number, ExecutionResult>>(new Map());
+  const { modelChoices, currentModel, handleModelChange, handleEffortChange } = useModelSelection(settings);
+  const indexing = useIndexing(storageProvider, settings, isVisible);
+  const agentCtrl = useAgentController();
+  const chatSession = useChatSession({ settings, storageProvider, aiEditMode, setAiEditMode: setAiEditMode as any, agentController: agentCtrl });
 
-  const [inputHistory, setInputHistory] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('logseq-mixer-input-history');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [savedDraft, setSavedDraft] = useState('');
-  const [imageDataUrls, setImageDataUrls] = useState<{ name: string; content: string }[]>([]);
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; content: string }[]>([]);
+  // Destructure indexing hook
+  const {
+    isIndexing, indexingStatus, isDismissing, progressCount,
+    autoEmbedEnabled, cooldownActive,
+    docCount, setDocCount, pageCount, setPageCount, dbSize, setDbSize,
+    confirmClearDb, setConfirmClearDb,
+    handleIndexDB: handleIndexDBRaw, handleAutoEmbedToggle,
+  } = indexing;
+
+  // Destructure agent controller
+  const {
+    agentPlan, setAgentPlan,
+    agentRunning, setAgentRunning,
+    agentTokensUsed,
+    escalationQuestion, setEscalationQuestion,
+    agentLoopRef, escalationResolverRef,
+    replanReason, setReplanReason, replanSteps, setReplanSteps, replanResolverRef,
+    agentAbortRef,
+    agentModeOn, verboseMode,
+    handleAgentModeToggle, handleVerboseToggle,
+  } = agentCtrl;
+
+  // Destructure chat session
+  const {
+    messages,
+    inputMessage, setInputMessage,
+    loading, error, setError,
+    editResults,
+    thinkingText,
+    imageDataUrls, setImageDataUrls,
+    attachedFiles, setAttachedFiles,
+    inputHistory, setInputHistory, historyIndex,
+    isSummarizing,
+    memoryCount, setMemoryCount,
+    memoryStoreInstance,
+    memoryStatus, handleTrimMessages,
+    handleFile, handlePaste, handleInputChange,
+    handleSubmit: handleSubmitRaw,
+    handleCancel,
+    handleKeyDown: handleKeyDownRaw,
+    handleNewSession,
+  } = chatSession;
+
+  // Local UI state (not extracted to hooks)
   const [activePageName, setActivePageName] = useState<string | null>(null);
   const [activeBlockContent, setActiveBlockContent] = useState<string | null>(null);
-  const imageFileRef = useRef<HTMLInputElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const agentAbortRef = useRef<AbortController | null>(null);
-  const [docCount, setDocCount] = useState<number | null>(null);
-  const [pageCount, setPageCount] = useState<number | null>(null);
-  const [dbSize, setDbSize] = useState<number | null>(null);
-  const [indexingStatus, setIndexingStatus] = useState<IndexingResult | null>(null);
-  const [isDismissing, setIsDismissing] = useState(false);
-  const [progressCount, setProgressCount] = useState(getIndexingProgress);
-  const [autoEmbedEnabled, setAutoEmbedEnabled] = useState(() => (logseq.settings?.autoEmbedEnabled as boolean) ?? true);
-  const [agentModeOn, setAgentModeOn] = useState(() => (logseq.settings?.agentMode as boolean) !== false);
-  const [verboseMode, setVerboseMode] = useState(() => (logseq.settings?.agentVerboseMode as boolean) ?? true);
-  const [cooldownActive, setCooldownActive] = useState(false);
   const [showDbPanel, setShowDbPanel] = useState(false);
   const [showMcpPanel, setShowMcpPanel] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [showSkillPanel, setShowSkillPanel] = useState(false);
-  const [confirmClearDb, setConfirmClearDb] = useState(false);
-  const [memoryCount, setMemoryCount] = useState(0);
   const [skillCount, setSkillCount] = useState(0);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [memoryStoreInstance, setMemoryStoreInstance] = useState<MemoryStore | null>(null);
-  const [thinkingText, setThinkingText] = useState<string | null>(null);
 
-  // Agent state
-  const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
-  const agentPlanRef = useRef<AgentPlan | null>(null);
-  const [agentRunning, setAgentRunning] = useState(false);
-  const [agentTokensUsed, setAgentTokensUsed] = useState(0);
-  const [escalationQuestion, setEscalationQuestion] = useState<string | null>(null);
-  const agentLoopRef = useRef<AgentLoop | null>(null);
-  const escalationResolverRef = useRef<((answer: string) => void) | null>(null);
-  const [replanReason, setReplanReason] = useState<string | null>(null);
-  const [replanSteps, setReplanSteps] = useState<AgentStep[]>([]);
-  const replanResolverRef = useRef<((approved: boolean) => void) | null>(null);
-
-  // Persist input history to localStorage (cap at 100 entries)
-  useEffect(() => {
-    try {
-      const capped = inputHistory.slice(-100);
-      localStorage.setItem('logseq-mixer-input-history', JSON.stringify(capped));
-    } catch { /* ignore quota errors */ }
-  }, [inputHistory]);
-
-  // Memory monitor: tracks heap usage, DOM nodes, and message count
-  const MAX_MESSAGES = 100;
-  const TRIM_TO = 40;
-
-  const handleTrimMessages = useCallback(() => {
-    setMessages(prev => {
-      if (prev.length <= TRIM_TO) return prev;
-      // Keep the most recent TRIM_TO messages
-      const trimmed = prev.slice(-TRIM_TO);
-      console.info(`[MemoryMonitor] Trimmed messages: ${prev.length} → ${trimmed.length}`);
-      return trimmed;
-    });
-  }, []);
-
-  const handlePressureChange = useCallback((pressure: MemoryStatus['pressure'], status: MemoryStatus) => {
-    if (pressure === 'critical') {
-      console.warn(`[MemoryMonitor] CRITICAL memory pressure! Heap: ${(status.heapUsed / 1024 / 1024).toFixed(1)}MB, DOM: ${status.domNodeCount}, Messages: ${status.messageCount}`);
-      // Auto-trim on critical to prevent crash
-      handleTrimMessages();
-    } else if (pressure === 'high') {
-      console.warn(`[MemoryMonitor] High memory pressure. Messages: ${status.messageCount}, DOM: ${status.domNodeCount}`);
-    }
-  }, [handleTrimMessages]);
-
-  const memoryStatus = useMemoryMonitor({
-    messageCount: messages.length,
-    onPressureChange: handlePressureChange,
-    interval: 5000,
-  });
-
-  // Enforce message cap: automatically trim when exceeding MAX_MESSAGES
-  useEffect(() => {
-    if (messages.length > MAX_MESSAGES) {
-      console.info(`[MemoryMonitor] Message cap exceeded (${messages.length}/${MAX_MESSAGES}), auto-trimming.`);
-      setMessages(prev => prev.slice(-TRIM_TO));
-    }
-  }, [messages.length]);
-
-  // Cancel cooldown timer on unmount
-  useEffect(() => {
-    return () => { cancelCooldown(); };
-  }, []);
+  // Wrappers for hook functions that need refs from this component
+  const handleSubmit = () => handleSubmitRaw(textareaRef as React.RefObject<HTMLTextAreaElement>);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => handleKeyDownRaw(e, handleSubmit);
+  const handleIndexDB = async () => {
+    const errMsg = await handleIndexDBRaw();
+    if (errMsg) setError(errMsg);
+  };
 
   // Initialize and lifecycle manage MCPManager
   useEffect(() => {
@@ -720,45 +273,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     };
   }, []);
 
-  // Wire up thought callback for live thinking display
-  useEffect(() => {
-    setOnThoughtCallback((thought) => setThinkingText(thought));
-    return () => setOnThoughtCallback(null);
-  }, []);
-
-  // Initialize MemoryStore from SQLite db
-  useEffect(() => {
-    const provider = storageProvider as any;
-    if (provider?.db) {
-      const store = new MemoryStore(provider.db);
-      setMemoryStoreInstance(store);
-      setMemoryStore(store);
-      setMemoryCount(store.getMemoryCount());
-    }
-    // Re-initialize MemoryStore when graph changes
-    const unlisten = logseq.App.onCurrentGraphChanged(async () => {
-      // Wait for storage provider to reinitialize
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const p = storageProvider as any;
-      if (p?.db) {
-        const newStore = new MemoryStore(p.db);
-        setMemoryStoreInstance(newStore);
-        setMemoryStore(newStore);
-        setMemoryCount(newStore.getMemoryCount());
-      }
-      // Reset UI state for the new graph
-      setMessages([]);
-      setAgentPlan(null);
-      setAgentRunning(false);
-      clearConversationHistory();
-    });
-    return () => { unlisten(); };
-  }, [storageProvider]);
-
   // Initialize built-in skills on mount
   useEffect(() => {
     ensureBuiltinHelpSkill().then(() => {
-      // Refresh skill count after built-in skills are ensured
       loadAllSkills().then(skills => {
         setSkillCount(skills.filter(s => s.enabled).length);
       }).catch(() => {});
@@ -786,711 +303,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  // Poll document, page count, and database size every 10 seconds
-  useEffect(() => {
-    const fetchCount = async () => {
-      if (storageProvider.getDocumentCount) {
-        try {
-          const count = await storageProvider.getDocumentCount();
-          setDocCount(count);
-        } catch { /* ignore */ }
-      }
-      if (storageProvider.getPageCount) {
-        try {
-          const count = await storageProvider.getPageCount();
-          setPageCount(count);
-        } catch { /* ignore */ }
-      }
-      if (storageProvider.getDatabaseSize) {
-        try {
-          const size = await storageProvider.getDatabaseSize();
-          setDbSize(size);
-        } catch { /* ignore */ }
-      }
-    };
-    fetchCount();
-    const interval = setInterval(fetchCount, 10000);
-    return () => clearInterval(interval);
-  }, [storageProvider]);
-
-  useEffect(() => {
-    if (settings) {
-      enableAutoIndexer(settings, storageProvider);
-      // Sync configurable debounce delay from settings
-      const debounce = settings.autoIndexDebounceSeconds;
-      if (typeof debounce === 'number' && debounce > 0) {
-        setAutoIndexDebounceSeconds(debounce);
-      }
-    }
-  }, [settings]);
-
-  // Auto-dismiss success status after 4 seconds
-  useEffect(() => {
-    if (indexingStatus?.outcome !== 'completed') return;
-    const timer = setTimeout(() => {
-      setIsDismissing(true);
-      // Remove from DOM after animation completes
-      setTimeout(() => { setIndexingStatus(null); setIsDismissing(false); }, 200);
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [indexingStatus]);
-
-  // Poll indexing progress every 500ms while indexing is active.
-  // Also detects when auto-indexer finishes (isIndexingActive becomes false).
-  useEffect(() => {
-    if (!isIndexing) return;
-    const interval = setInterval(() => {
-      setProgressCount(getIndexingProgress());
-      // Detect auto-indexer completion
-      if (!manualIndexingRef.current && !isIndexingActive()) {
-        setIsIndexing(false);
-      }
-    }, 500);
-    return () => clearInterval(interval);
-  }, [isIndexing]);
-
-  // Detect auto-indexer activity: poll isIndexingActive() to sync the
-  // React isIndexing state with the module-level indexingInProgress flag.
-  // Polls every 1s when the panel is visible and not during manual indexing.
-  const manualIndexingRef = useRef(false);
-  useEffect(() => {
-    if (!isVisible) return;
-    const interval = setInterval(() => {
-      if (manualIndexingRef.current) return;
-      const active = isIndexingActive();
-      setIsIndexing(prev => {
-        if (active && !prev) return true;
-        return prev;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isVisible]);
-
+  // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, agentPlan, agentTokensUsed]);
-
-  const handleFile = (file: File) => {
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => setImageDataUrls(prev => [...prev, { name: file.name, content: reader.result as string }]);
-      reader.readAsDataURL(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAttachedFiles(prev => [...prev, { name: file.name, content: reader.result as string }]);
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) handleFile(file);
-        break;
-      }
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputMessage(e.target.value);
-    const el = e.target;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
-  };
-
-  const handleSubmit = async () => {
-    const messageToSend = inputMessage.trim() || lastSubmittedMessage;
-    if (!messageToSend) return;
-
-    setInputHistory(prev => [...prev, messageToSend]);
-    setHistoryIndex(-1);
-    setSavedDraft('');
-    setLastSubmittedMessage(messageToSend);
-
-    const isRetry = !inputMessage.trim();
-    if (!isRetry) {
-      const userMessage: ChatMessage = {
-        id: Date.now() + '_user',
-        content: messageToSend,
-        sender: 'user',
-        timestamp: chatTimestamp(),
-        image: imageDataUrls.length > 0 ? imageDataUrls : undefined,
-        file: attachedFiles.length > 0 ? attachedFiles : undefined,
-      };
-      setMessages(prev => [...prev, userMessage]);
-    }
-    setLoading(true);
-    setError(null);
-    setInputMessage('');
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
-
-    // Handle /help commands directly without going through RAG
-    if (isHelpCommand(messageToSend)) {
-      try {
-        const helpResponse = await answerHelpQuestion(messageToSend, settings);
-        setMessages(prev => [...prev, { id: Date.now() + '_help', content: helpResponse, sender: 'assistant', model: settings?.selectedModel, timestamp: chatTimestamp() }]);
-      } catch (err: any) {
-        setError(err.message || 'Help system error');
-      } finally {
-        setLoading(false);
-        setThinkingText(null);
-      }
-      return;
-    }
-
-    // Handle /tools command — list built-in Logseq tools
-    if (isToolsCommand(messageToSend)) {
-      const toolsResponse = listBuiltInTools();
-      setMessages(prev => [...prev, { id: Date.now() + '_tools', content: toolsResponse, sender: 'assistant', timestamp: chatTimestamp() }]);
-      setLoading(false);
-      setThinkingText(null);
-      return;
-    }
-
-    // Handle /raw command — send prompt directly to LLM without RAG/memory/context
-    if (isRawCommand(messageToSend)) {
-      const rawPrompt = extractRawPrompt(messageToSend);
-      try {
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
-        const rawResponse = await sendRawPrompt(rawPrompt, settings, controller.signal);
-        abortControllerRef.current = null;
-        setMessages(prev => [...prev, { id: Date.now() + '_raw', content: rawResponse, sender: 'assistant', model: settings?.selectedModel, timestamp: chatTimestamp() }]);
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
-          setError(err.message || 'Raw command error');
-        }
-      } finally {
-        setLoading(false);
-        setThinkingText(null);
-      }
-      return;
-    }
-
-    try {
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-
-      // When edit mode is on, check for an active page first
-      let effectiveEditMode = aiEditMode || undefined;
-      if (aiEditMode) {
-        const pageCtx = await getActivePageContext();
-        if (!pageCtx) {
-          effectiveEditMode = undefined;
-          setMessages(prev => [...prev, {
-            id: Date.now() + '_warning',
-            content: '⚠️ No active page is open. Edit mode requires an open page to work. Sending query without edit context.',
-            sender: 'assistant',
-            timestamp: chatTimestamp(),
-          }]);
-        }
-      }
-
-      const attachedImages = imageDataUrls;
-      const fileContexts = attachedFiles;
-      setImageDataUrls([]);
-      setAttachedFiles([]);
-      const fileAppendix = fileContexts.length > 0
-        ? '\n\n---\n' + fileContexts.map(f => `Attached file: ${f.name}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
-        : '';
-      const queryWithFile = messageToSend + fileAppendix;
-      const streamingEnabled = settings.streamingEnabled !== false && !effectiveEditMode;
-      const streamingMsgId = Date.now() + '_assistant';
-      let isStreamingStarted = false;
-
-      // Streaming callback: progressively update the assistant message as chunks arrive
-      const onChunk = streamingEnabled ? (chunk: string) => {
-        if (!isStreamingStarted) {
-          isStreamingStarted = true;
-          setLoading(false);
-          setMessages(prev => [...prev, {
-            id: streamingMsgId,
-            content: chunk,
-            sender: 'assistant',
-            model: settings?.selectedModel,
-            timestamp: chatTimestamp(),
-          }]);
-        } else {
-          setMessages(prev => prev.map(m =>
-            m.id === streamingMsgId ? { ...m, content: m.content + chunk } : m
-          ));
-        }
-      } : undefined;
-
-      const resp = await handleQuery(queryWithFile, settings, storageProvider, controller.signal, effectiveEditMode, attachedImages.length > 0 ? attachedImages.map(img => img.content) : undefined, onChunk);
-      abortControllerRef.current = null;
-
-      // Handle agent goal detection
-      if (resp === '__AGENT_GOAL_DETECTED__' && pendingAgentGoal) {
-        const goal = pendingAgentGoal;
-        clearPendingAgentGoal();
-        setLoading(true);
-        const agentController = new AbortController();
-        agentAbortRef.current = agentController;
-        const loop = new AgentLoop({
-          settings,
-          signal: agentController.signal,
-          tokenBudget: settings.agentTokenBudget || 100000,
-          maxRetries: settings.agentMaxRetries || 2,
-          canWrite: aiEditMode,
-          onProgress: (event: AgentProgressEvent) => {
-            setAgentTokensUsed(event.tokensUsed);
-            if (event.step) {
-              setAgentPlan(prev => {
-                const updated = prev ? { ...prev, steps: prev.steps.map(s => s.id === event.step!.id ? event.step! : s) } : prev;
-                agentPlanRef.current = updated;
-                return updated;
-              });
-            }
-
-            // Stream completed step outputs to chat when verbose + persist is on
-            const persistVerbose = verboseMode && (settings.agentPersistVerboseToChat as boolean);
-            if (persistVerbose && event.type === 'step_complete' && event.step?.output) {
-              const badge = event.step.type === 'gather' ? '📥' : event.step.type === 'search' ? '🔍' : event.step.type === 'read' ? '📖' : event.step.type === 'write' ? '✏️' : event.step.type === 'tool' ? '🔧' : '💭';
-              const stepMsg = `${badge} **Step ${event.step.id}** — ${event.step.description}\n\n${event.step.output}`;
-              setMessages(prev => [...prev, {
-                id: `agent_step_${event.step!.id}_${Date.now()}`,
-                content: stepMsg,
-                sender: 'assistant',
-                model: settings?.selectedModel,
-                timestamp: chatTimestamp(),
-              }]);
-            }
-            if (persistVerbose && event.type === 'step_failed' && event.step?.error) {
-              const failMsg = `❌ **Step ${event.step.id} failed** — ${event.step.description}\n\n${event.step.error}`;
-              setMessages(prev => [...prev, {
-                id: `agent_step_${event.step!.id}_fail_${Date.now()}`,
-                content: failMsg,
-                sender: 'assistant',
-                timestamp: chatTimestamp(),
-              }]);
-            }
-            if (persistVerbose && event.type === 'self_correcting' && event.step) {
-              const correctMsg = `↩️ **Correcting step ${event.step.id}** — ${event.message}`;
-              setMessages(prev => [...prev, {
-                id: `agent_correct_${event.step!.id}_${Date.now()}`,
-                content: correctMsg,
-                sender: 'assistant',
-                timestamp: chatTimestamp(),
-              }]);
-            }
-
-            if (event.type === 'complete' || event.type === 'aborted') {
-              setAgentRunning(false);
-              setLoading(false);
-              // Convert completed agent plan to a chat message so it scrolls with history
-              const currentPlan = agentPlanRef.current;
-              if (currentPlan) {
-                const completed = currentPlan.steps.filter(s => s.status === 'done').length;
-                const failed = currentPlan.steps.filter(s => s.status === 'failed').length;
-                const total = currentPlan.steps.length;
-                const isAborted = event.type === 'aborted';
-
-                const stepsSummary = currentPlan.steps.map(s => {
-                  const icon = s.status === 'done' ? '✓' : s.status === 'failed' ? '✗' : s.status === 'skipped' ? '→' : '○';
-                  const badge = s.type === 'gather' ? '📥' : s.type === 'search' ? '🔍' : s.type === 'read' ? '📖' : s.type === 'write' ? '✏️' : s.type === 'tool' ? '🔧' : '💭';
-                  const tokenInfo = persistVerbose && s.tokensUsed ? `  \`${Math.round(s.tokensUsed / 1000)}k tok\`` : '';
-                  return `| ${icon} | ${badge} ${s.description}${tokenInfo} |`;
-                }).join('\n');
-
-                const statusLine = isAborted
-                  ? `⚠️ *Stopped — ${completed}/${total} steps completed*`
-                  : failed > 0
-                    ? `⚠️ *Completed with ${failed} failed step${failed > 1 ? 's' : ''} — ${completed}/${total} succeeded*`
-                    : `✅ *All ${total} steps completed successfully*`;
-
-                const tokenSummary = persistVerbose ? ` • ${Math.round(event.tokensUsed / 1000)}k tokens used` : '';
-
-                // Include the last completed step's output as the final answer
-                const doneSteps = currentPlan.steps.filter(s => s.status === 'done' && s.output);
-                const lastOutput = doneSteps.length > 0 ? doneSteps[doneSteps.length - 1].output : '';
-                const finalAnswer = lastOutput ? `\n\n---\n\n${lastOutput}` : '';
-
-                const messageContent = [
-                  `### 🤖 ${currentPlan.goal}`,
-                  '',
-                  '| | Step |',
-                  '|---|---|',
-                  stepsSummary,
-                  '',
-                  `${statusLine}${tokenSummary}`,
-                  finalAnswer,
-                ].join('\n');
-
-                setMessages(prev => [...prev, {
-                  id: `agent_${Date.now()}`,
-                  content: messageContent,
-                  sender: 'assistant',
-                  model: settings?.selectedModel,
-                  timestamp: chatTimestamp(),
-                }]);
-                // Add to conversation history so follow-up questions have context
-                const historyContent = persistVerbose
-                  ? doneSteps.map(s => `[Step ${s.id} - ${s.type}] ${s.description}:\n${s.output}`).join('\n\n')
-                  : (lastOutput || `Completed goal: ${currentPlan.goal}. ${event.message}`);
-                addToConversationHistory('user', `[Agent goal]: ${currentPlan.goal}`);
-                addToConversationHistory('assistant', historyContent);
-              }
-              setAgentPlan(null);
-              agentPlanRef.current = null;
-              if (event.type === 'complete' && memoryStoreInstance) {
-                memoryStoreInstance.addMemory('task_outcome', `Goal: ${goal}\nResult: ${event.message}`, 'auto');
-              }
-            }
-            if (event.type === 'replan_approved') {
-              setReplanReason(null);
-              setReplanSteps([]);
-            }
-          },
-          onEscalate: (question: string) => new Promise<string>(resolve => {
-            setEscalationQuestion(question);
-            escalationResolverRef.current = resolve;
-          }),
-          onReplanProposed: (reason: string, newSteps: AgentStep[]) => new Promise<boolean>(resolve => {
-            if (settings.agentAutonomy === 'autopilot') {
-              resolve(true);
-            } else {
-              setReplanReason(reason);
-              setReplanSteps(newSteps);
-              replanResolverRef.current = resolve;
-            }
-          }),
-        });
-        agentLoopRef.current = loop;
-        const pageCtx = await getActivePageContext();
-        let ctxStr = '';
-        if (pageCtx) {
-          ctxStr = `Page: ${pageCtx.pageName}\n`;
-          if (pageCtx.selectedBlockUUID) {
-            ctxStr += `Current/Focused Block UUID: ${pageCtx.selectedBlockUUID}\n`;
-            ctxStr += `Current/Focused Block Content: ${pageCtx.selectedBlockContent || ''}\n`;
-            ctxStr += `(When the user says "this block", "current block", or "selected block", they mean the block above. Its sub-blocks are the blocks indented directly beneath it in the tree below.)\n`;
-          }
-          ctxStr += `Block tree (indentation = sub-blocks/children of the parent above):\n${pageCtx.formattedTree || '(empty page)'}`;
-        }
-        const plan = await loop.generatePlan(goal, ctxStr);
-        setAgentPlan(plan);
-        agentPlanRef.current = plan;
-        setLoading(false);
-        if (settings.agentAutonomy === 'autopilot') {
-          setAgentRunning(true);
-          loop.run(plan);
-        }
-        return;
-      }
-
-      if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
-        const editResp = resp;
-        const assistantMsgId = Date.now() + '_assistant';
-
-        // Filter out commands that only contain image placeholders
-        const commands = editResp.commands.filter(c =>
-          !(c.content && /^!\[.*?\]\(\s*\)$/.test(c.content.trim()))
-        );
-
-        // If image commands were filtered and text is minimal, use a better message
-        const filteredCount = editResp.commands.length - commands.length;
-        const displayText = (filteredCount > 0 && editResp.text.trim().length < 5)
-          ? 'Image received. Use the copy-paste instructions below to insert it into your page.'
-          : editResp.text;
-
-        setMessages(prev => [...prev, {
-          id: assistantMsgId,
-          content: displayText,
-          sender: 'assistant',
-          model: settings?.selectedModel,
-          timestamp: chatTimestamp(),
-        }]);
-
-        if (commands.length > 0) {
-          const result = await executeAll(commands);
-
-          // Verify edits actually took effect and retry failures
-          const failures = await verifyAndCorrect(result);
-          if (failures.length > 0) {
-            result.verificationFailures = failures;
-            const lines = failures.map(f => {
-              const action = f.command.action;
-              const status = f.corrected ? '✓ corrected' : '✗ still failing';
-              return `• ${action}: ${f.reason} [${status}]`;
-            });
-            setMessages(prev => [...prev, {
-              id: Date.now() + '_verify',
-              content: `⚠️ Verification found ${failures.length} issue(s):\n${lines.join('\n')}`,
-              sender: 'assistant',
-              timestamp: chatTimestamp(),
-            }]);
-          }
-          setEditResults(prev => new Map(prev).set(assistantMsgId, result));
-        }
-
-        // If user attached an image, show copy-paste instructions
-        if (attachedImages.length > 0) {
-          setMessages(prev => [...prev, {
-            id: Date.now() + '_imgpaste',
-            content: `📷 To insert the image into your page:\n1. Click **"📋 Copy Image"** below\n2. Click the target block in Logseq\n3. Press **Ctrl+V**\n\n` + attachedImages.map(img => `![attached image](${img.content})`).join('\n\n'),
-            sender: 'assistant',
-            timestamp: chatTimestamp(),
-          }]);
-        }
-      } else {
-        const responseText = typeof resp === 'string' ? resp : resp.text;
-        if (!isStreamingStarted) {
-          // Non-streaming path: add the complete response as a new message
-          const assistantMsgId = Date.now() + '_assistant';
-          setMessages(prev => [...prev, {
-            id: assistantMsgId,
-            content: responseText,
-            sender: 'assistant',
-            model: settings?.selectedModel,
-            timestamp: chatTimestamp(),
-            completedTimestamp: chatTimestamp(),
-          }]);
-        }
-        // When streaming was used, the message is already rendered progressively via onChunk
-        if (isStreamingStarted) {
-          setMessages(prev => prev.map(m =>
-            m.id === streamingMsgId ? { ...m, completedTimestamp: chatTimestamp() } : m
-          ));
-        }
-      }
-
-      // Check if a memory was saved during this query
-      if (getLastMemorySaved()) {
-        setMemoryCount(prev => prev + 1);
-        const memMsgId = `memory_saved_${Date.now()}`;
-        setMessages(prev => [...prev, { id: memMsgId, content: '💾 Remembered', sender: 'assistant', timestamp: chatTimestamp() }]);
-        setTimeout(() => setMessages(prev => prev.filter(m => m.id !== memMsgId)), 3000);
-      }
-    } catch (err: any) {
-      abortControllerRef.current = null;
-      if (err.name === 'AbortError') {
-        // User cancelled — don't show error
-        return;
-      }
-      console.error('Error in handleQuery:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-      setThinkingText(null);
-    }
-  };
-
-  const handleCancel = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setLoading(false);
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-      return;
-    }
-    if (e.key === 'ArrowUp' && inputHistory.length > 0) {
-      const ta = e.currentTarget;
-      if (ta.selectionStart === 0 && ta.selectionEnd === 0) {
-        e.preventDefault();
-        if (historyIndex === -1) {
-          setSavedDraft(inputMessage);
-          const idx = inputHistory.length - 1;
-          setHistoryIndex(idx);
-          setInputMessage(inputHistory[idx]);
-        } else if (historyIndex > 0) {
-          const idx = historyIndex - 1;
-          setHistoryIndex(idx);
-          setInputMessage(inputHistory[idx]);
-        }
-      }
-    }
-    if (e.key === 'ArrowDown' && historyIndex >= 0) {
-      const ta = e.currentTarget;
-      if (ta.selectionStart === ta.value.length) {
-        e.preventDefault();
-        if (historyIndex < inputHistory.length - 1) {
-          const idx = historyIndex + 1;
-          setHistoryIndex(idx);
-          setInputMessage(inputHistory[idx]);
-        } else {
-          setHistoryIndex(-1);
-          setInputMessage(savedDraft);
-        }
-      }
-    }
-  };
-
-  const handleIndexDB = async () => {
-    if (isIndexing) {
-      requestPauseIndexing();
-      cancelAutoIndexDebounce();
-      startCooldown(() => setCooldownActive(false));
-      setCooldownActive(true);
-      return;
-    }
-    if (cooldownActive) return;
-    manualIndexingRef.current = true;
-    setIsIndexing(true);
-    setError(null);
-    setIndexingStatus(null);
-    setIsDismissing(false);
-
-    try {
-      const result = await indexEntireLogSeq(settings, storageProvider);
-      if (result.outcome === 'error') {
-        setError(result.errorMessage || 'Indexing failed.');
-      } else {
-        setIndexingStatus(result);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Indexing failed.');
-    } finally {
-      setIsIndexing(false);
-      manualIndexingRef.current = false;
-    }
-  };
-
-  const handleNewSession = () => {
-    const capturedMessages = messages.map(m => ({ role: m.sender === 'user' ? 'user' as const : 'assistant' as const, content: m.content }));
-    setMessages([]);
-    setInputMessage('');
-    setError(null);
-    setAiEditMode(false);
-    setEditResults(new Map());
-    setAgentPlan(null);
-    setAgentRunning(false);
-    setAgentTokensUsed(0);
-    setEscalationQuestion(null);
-    setReplanReason(null);
-    setReplanSteps([]);
-    agentAbortRef.current?.abort();
-    agentAbortRef.current = null;
-    agentLoopRef.current = null;
-    clearConversationHistory();
-
-    if (settings?.memoryEnabled && settings?.autoSummarize && capturedMessages.length >= 4 && memoryStoreInstance) {
-      setIsSummarizing(true);
-      summarizeSession(capturedMessages, settings).then(summary => {
-        if (summary && memoryStoreInstance) {
-          memoryStoreInstance.addMemoryIfUnique('session_summary', summary, 'auto');
-          writeMemoryPage(summary, 'session_summary');
-          setMemoryCount(memoryStoreInstance.getMemoryCount());
-        }
-      }).finally(() => setIsSummarizing(false));
-    }
-  };
-
-  const handleAutoEmbedToggle = () => {
-    const newValue = !autoEmbedEnabled;
-    setAutoEmbedEnabled(newValue);
-    setAutoEmbedEnabledIM(newValue);
-    logseq.updateSettings({ autoEmbedEnabled: newValue });
-    // When disabling auto-embed, also stop any in-progress auto-indexing
-    // and cancel pending debounce timers so the user gets immediate feedback
-    if (!newValue && isIndexing && !manualIndexingRef.current) {
-      requestPauseIndexing();
-      cancelAutoIndexDebounce();
-    }
-  };
-
-  const handleAgentModeToggle = () => {
-    const newMode = !agentModeOn;
-    setAgentModeOn(newMode);
-    logseq.updateSettings({ agentMode: newMode });
-  };
-
-  const handleVerboseToggle = () => {
-    const newValue = !verboseMode;
-    setVerboseMode(newValue);
-    logseq.updateSettings({ agentVerboseMode: newValue });
-  };
-
-  const currentModel = settings?.selectedModel || 'gpt-3.5-turbo';
-  const chatProvider = settings?.chatProvider || 'openai';
-  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
-
-  // Per-provider model memory: remember the last selected model for each provider
-  const providerModelKey = 'logseq-mixer-provider-models';
-  const getProviderModels = (): Record<string, string> => {
-    try {
-      const stored = localStorage.getItem(providerModelKey);
-      return stored ? JSON.parse(stored) : {};
-    } catch { return {}; }
-  };
-  const saveProviderModel = (provider: string, model: string) => {
-    const map = getProviderModels();
-    map[provider] = model;
-    localStorage.setItem(providerModelKey, JSON.stringify(map));
-  };
-
-  // When provider changes, restore the last model used with that provider
-  useEffect(() => {
-    const provider = settings?.chatProvider || 'openai';
-    const providerModels = getProviderModels();
-    const lastModelForProvider = providerModels[provider];
-    if (lastModelForProvider && lastModelForProvider !== settings?.selectedModel) {
-      logseq.updateSettings({ selectedModel: lastModelForProvider });
-    }
-  }, [settings?.chatProvider]);
-
-  // Save current model to per-provider memory when it changes
-  useEffect(() => {
-    const provider = settings?.chatProvider || 'openai';
-    if (settings?.selectedModel) {
-      saveProviderModel(provider, settings.selectedModel);
-    }
-  }, [settings?.selectedModel, settings?.chatProvider]);
-
-  useEffect(() => {
-    const provider = settings?.chatProvider || 'openai';
-
-    const loadModels = async () => {
-      // Resolve the effective endpoint for this provider
-      const endpoint = settings?.chatEndpoint?.trim()
-        || (provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : '')
-        || (provider === 'ollama' ? 'http://localhost:11434/api/chat' : '')
-        || settings?.LiteLLMLink
-        || 'http://127.0.0.1:4000/chat/completions';
-
-      if (!endpoint) {
-        setFetchedModels([]);
-        return;
-      }
-
-      try {
-        const models = await fetchModelsForProvider(provider, endpoint, settings?.apiKey || '');
-        if (models && models.length > 0) {
-          setFetchedModels(models);
-        } else {
-          setFetchedModels([]);
-        }
-      } catch (err) {
-        console.warn(`Failed to fetch models for ${provider}:`, err);
-        setFetchedModels([]);
-      }
-    };
-    loadModels();
-  }, [settings?.chatProvider, settings?.chatEndpoint, settings?.LiteLLMLink, settings?.apiKey]);
-
-  // Model choices: fetched list if available, otherwise just the current model
-  const modelChoices = fetchedModels.length > 0
-    ? (fetchedModels.includes(currentModel) ? fetchedModels : [currentModel, ...fetchedModels])
-    : [currentModel];
-
-  const handleModelChange = (newModel: string) => {
-    logseq.updateSettings({ selectedModel: newModel });
-  };
-
-  const handleEffortChange = (level: string) => {
-    logseq.updateSettings({ reasoningEffort: level });
-  };
 
   const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1503,8 +319,6 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         try {
           if (storageProvider.importFromFile) {
             await storageProvider.importFromFile(buffer);
-            
-            // Reload page and document count statistics
             if (storageProvider.getDocumentCount) {
               const dCount = await storageProvider.getDocumentCount();
               setDocCount(dCount);
@@ -1517,7 +331,6 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               const size = await storageProvider.getDatabaseSize();
               setDbSize(size);
             }
-            
             window.logseq.UI.showMsg('Database imported successfully!', 'success');
           } else {
             window.logseq.UI.showMsg('Import not supported by the current storage backend.', 'error');
@@ -1539,22 +352,13 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowMcpPanel(false);
     setShowDbPanel(true);
     if (storageProvider.getDocumentCount) {
-      try {
-        const count = await storageProvider.getDocumentCount();
-        setDocCount(count);
-      } catch { /* ignore */ }
+      try { const count = await storageProvider.getDocumentCount(); setDocCount(count); } catch { /* ignore */ }
     }
     if (storageProvider.getPageCount) {
-      try {
-        const count = await storageProvider.getPageCount();
-        setPageCount(count);
-      } catch { /* ignore */ }
+      try { const count = await storageProvider.getPageCount(); setPageCount(count); } catch { /* ignore */ }
     }
     if (storageProvider.getDatabaseSize) {
-      try {
-        const size = await storageProvider.getDatabaseSize();
-        setDbSize(size);
-      } catch { /* ignore */ }
+      try { const size = await storageProvider.getDatabaseSize(); setDbSize(size); } catch { /* ignore */ }
     }
   };
 
@@ -1606,23 +410,18 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           onMouseLeave={e => { if (!isResizingRef.current) e.currentTarget.style.background = 'transparent'; }}
           title="Drag to resize"
         />
-        <Header>
-          <HeaderLeft>
-            <LogoIcon src={themeMode === 'dark' ? 'icon-dark-transparent.png' : 'icon.png'} alt="Mixer Logo" />
-            <Title>Mixer</Title>
-          </HeaderLeft>
-          <HeaderRight>
-            <ModelSelector
-              value={currentModel}
-              choices={modelChoices}
-              onChange={handleModelChange}
-            />
-            <EffortSelector value={settings?.reasoningEffort || 'high'} onChange={handleEffortChange} />
-            <HeaderButton onClick={handleNewSession} aria-label="New Session" title="New Session">✨ New</HeaderButton>
-            <MemoryIndicator status={memoryStatus} onTrimMessages={handleTrimMessages} />
-            <CloseButton onClick={() => window.logseq.hideMainUI()} aria-label="Close" title="Close">✕</CloseButton>
-          </HeaderRight>
-        </Header>
+        <ChatHeader
+          themeMode={themeMode}
+          currentModel={currentModel}
+          modelChoices={modelChoices}
+          onModelChange={handleModelChange}
+          effortValue={settings?.reasoningEffort || 'high'}
+          onEffortChange={handleEffortChange}
+          onNewSession={handleNewSession}
+          memoryStatus={memoryStatus}
+          onTrimMessages={handleTrimMessages}
+          onClose={() => window.logseq.hideMainUI()}
+        />
 
         <MessagesContainer id="messages-container" className={ctrlHeld ? 'ctrl-held' : ''}>
           <MemoryWarning status={memoryStatus} onTrimMessages={handleTrimMessages} />
@@ -1664,7 +463,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
               <TypingIndicator>
                 <Dot delay={0} /><Dot delay={1} /><Dot delay={2} />
               </TypingIndicator>
-              {thinkingText && <div style={{ fontSize: 11, color: '#6b7280', padding: '4px 16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>💭 {thinkingText.slice(0, 100)}</div>}
+              {thinkingText && <div style={{ fontSize: 11, color: '#6b7280', padding: '4px 16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{'\uD83D\uDCAD'} {thinkingText.slice(0, 100)}</div>}
             </>
           )}
           <div ref={messagesEndRef} />
@@ -1672,123 +471,54 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
         {error && (
           <ErrorBanner>
-            <span>⚠️</span>
+            <span>{'\u26A0\uFE0F'}</span>
             <span style={{ flex: 1 }}>{error}</span>
             <RetryButton onClick={handleSubmit}>Retry</RetryButton>
           </ErrorBanner>
         )}
 
-        <InputArea>
-          {imageDataUrls.length > 0 && (
-            <div style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {imageDataUrls.map((img, i) => (
-                <span key={i} style={{ position: 'relative', display: 'inline-block' }}>
-                  <img src={img.content} alt={img.name} style={{ maxHeight: 48, maxWidth: 80, borderRadius: 4 }} />
-                  <button onClick={() => setImageDataUrls(prev => prev.filter((_, idx) => idx !== i))} style={{ position: 'absolute', top: -4, right: -4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 16, height: 16, fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                </span>
-              ))}
-            </div>
-          )}
-          {attachedFiles.length > 0 && (
-            <div style={{ padding: '4px 8px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', fontSize: 12 }}>
-              {attachedFiles.map((f, i) => (
-                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'rgba(0,0,0,0.05)', borderRadius: 4, padding: '1px 6px' }}>
-                  📎 {f.name}
-                  <button onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: 0 }}>✕</button>
-                </span>
-              ))}
-            </div>
-          )}
-          <InputWrapper>
-            <input
-              ref={imageFileRef}
-              type="file"
-              accept="*/*"
-              multiple
-              style={{ display: 'none' }}
-              onChange={(e) => { if (e.target.files) { Array.from(e.target.files).forEach(handleFile); } e.target.value = ''; }}
-            />
-            <TextArea
-              ref={textareaRef}
-              placeholder={loading ? 'Thinking...' : 'Ask about your notes...'}
-              value={inputMessage}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              disabled={loading}
-              rows={4}
-            />
-            <InputButtonRow>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <ImageButton onClick={() => imageFileRef.current?.click()} aria-label="Attach file" title="Attach file" disabled={loading}>
-                  <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6h-1v9.5a2 2 0 0 0 4 0V5a3.5 3.5 0 0 0-7 0v12.5a5 5 0 0 0 10 0V6h-1z" fill="currentColor"/></svg>
-                </ImageButton>
-                {inputHistory.length > 0 && (
-                  <ImageButton
-                    onClick={() => { setInputHistory([]); setHistoryIndex(-1); }}
-                    aria-label="Clear input history"
-                    title={`Clear input history (${inputHistory.length} entries)`}
-                    disabled={loading}
-                    css={{ width: '22px', height: '22px', opacity: 0.5, '&:hover:not(:disabled)': { opacity: 1, backgroundColor: '$red4', color: '$red11' } }}
-                  >
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6M10 11v6M14 11v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </ImageButton>
-                )}
-              </div>
-              {loading ? (
-                <SendButton onClick={handleCancel} aria-label="Cancel" title="Cancel" css={{ backgroundColor: '$red9', '&:hover:not(:disabled)': { backgroundColor: '$red10' } }}>
-                  <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
-                </SendButton>
-              ) : (
-                <SendButton onClick={handleSubmit} disabled={!inputMessage.trim()} aria-label="Send" title="Send">
-                  <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
-                </SendButton>
-              )}
-            </InputButtonRow>
-          </InputWrapper>
-          <ToolbarRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AutoEmbedToggle enabled={autoEmbedEnabled} onToggle={handleAutoEmbedToggle} />
-              <EditToggle enabled={aiEditMode} onToggle={() => setAiEditMode(prev => !prev)} />
-              <AgentToggle enabled={agentModeOn} onToggle={handleAgentModeToggle} />
-              <VerboseToggle enabled={verboseMode} onToggle={handleVerboseToggle} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ToolbarButton onClick={handleOpenDbPanel} title="Database">🗄️</ToolbarButton>
-              <ToolbarButton onClick={handleOpenMcpPanel} title="MCP Servers">🔌</ToolbarButton>
-              <ToolbarButton onClick={handleOpenMemoryPanel} title="Memory">
-                🧠{memoryCount > 0 && <span style={{ fontSize: '10px', opacity: 0.7 }}>{memoryCount}</span>}{isSummarizing && <span style={{ marginLeft: '2px' }}>⏳</span>}
-              </ToolbarButton>
-              <ToolbarButton onClick={handleOpenSkillPanel} title="Skills">
-                🧩{skillCount > 0 && <span style={{ fontSize: '10px', opacity: 0.7 }}>{skillCount}</span>}
-              </ToolbarButton>
-              <ToolbarButton
-                variant={buttonProps.variant}
-                onClick={handleIndexDB}
-                disabled={buttonProps.disabled}
-                title="Re-Index"
-                css={buttonProps.disabled ? { opacity: 0.5, cursor: 'default' } : undefined}
-              >
-                {buttonProps.label}
-              </ToolbarButton>
-            </div>
-          </ToolbarRow>
-          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2, paddingLeft: 2 }}>
-            {isIndexing ? (
-              <span>Indexing… {progressCount} pages processed</span>
-            ) : indexingStatus?.outcome === 'completed' ? (
-              <span style={isDismissing ? { opacity: 0 } : undefined}>✓ Indexing complete · {docCount?.toLocaleString()} chunks{pageCount ? ` · ${pageCount.toLocaleString()} pages` : ''}</span>
-            ) : indexingStatus?.outcome === 'paused' ? (
-              <span>⏸ Indexing paused</span>
-            ) : docCount !== null ? (
-              <span>📊 {docCount.toLocaleString()} chunks{pageCount ? ` · ${pageCount.toLocaleString()} pages` : ''}</span>
-            ) : null}
-          </div>
-          <div style={{ fontSize: 11, color: activePageName ? '#6b7280' : '#f59e0b', marginTop: 4, paddingLeft: 2 }}>
-            {activePageName ? `📄 ${activePageName}` : '⚠ No active page'}
-            {activeBlockContent && <span style={{ color: '#9ca3af', marginLeft: '8px' }}>▸ {activeBlockContent}{activeBlockContent.length >= 50 ? '…' : ''}</span>}
-          </div>
-        </InputArea>
+        <ChatInput
+          textareaRef={textareaRef as React.RefObject<HTMLTextAreaElement>}
+          inputMessage={inputMessage}
+          loading={loading}
+          imageDataUrls={imageDataUrls}
+          attachedFiles={attachedFiles}
+          inputHistory={inputHistory}
+          onInputChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onSubmit={handleSubmit}
+          onCancel={handleCancel}
+          onFile={handleFile}
+          onRemoveImage={(i) => setImageDataUrls(prev => prev.filter((_, idx) => idx !== i))}
+          onRemoveFile={(i) => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))}
+          onClearHistory={() => setInputHistory([])}
+          autoEmbedEnabled={autoEmbedEnabled}
+          onAutoEmbedToggle={handleAutoEmbedToggle}
+          aiEditMode={aiEditMode}
+          onEditToggle={() => setAiEditMode(prev => !prev)}
+          agentModeOn={agentModeOn}
+          onAgentModeToggle={handleAgentModeToggle}
+          verboseMode={verboseMode}
+          onVerboseToggle={handleVerboseToggle}
+          onOpenDbPanel={handleOpenDbPanel}
+          onOpenMcpPanel={handleOpenMcpPanel}
+          onOpenMemoryPanel={handleOpenMemoryPanel}
+          onOpenSkillPanel={handleOpenSkillPanel}
+          memoryCount={memoryCount}
+          skillCount={skillCount}
+          isSummarizing={isSummarizing}
+          indexButtonProps={buttonProps}
+          onIndex={handleIndexDB}
+          isIndexing={isIndexing}
+          progressCount={progressCount}
+          indexingStatus={indexingStatus}
+          isDismissing={isDismissing}
+          docCount={docCount}
+          pageCount={pageCount}
+          activePageName={activePageName}
+          activeBlockContent={activeBlockContent}
+        />
 
         {showMcpPanel && <MCPServerPanel onClose={() => setShowMcpPanel(false)} />}
         {showMemoryPanel && (
@@ -1806,96 +536,21 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           />
         )}
         {showDbPanel && (
-          <DbPanel>
-            <DbPanelHeader>
-              <DbPanelTitle>🗄️ Database Center</DbPanelTitle>
-              <CloseButton onClick={() => setShowDbPanel(false)} aria-label="Close Database Panel">✕</CloseButton>
-            </DbPanelHeader>
-
-            <DbStatsList>
-              {dbSize !== null && (
-                <DbStatRow>
-                  <DbStatLabel>Database Size</DbStatLabel>
-                  <DbStatValue>{formatBytes(dbSize)}</DbStatValue>
-                </DbStatRow>
-              )}
-              <DbStatRow>
-                <DbStatLabel>Indexed Pages</DbStatLabel>
-                <DbStatValue>
-                  {pageCount !== null ? pageCount.toLocaleString() : '0'}
-                </DbStatValue>
-              </DbStatRow>
-              <DbStatRow>
-                <DbStatLabel>Indexed Chunks (Vectors)</DbStatLabel>
-                <DbStatValue>
-                  {docCount !== null ? docCount.toLocaleString() : '0'}
-                </DbStatValue>
-              </DbStatRow>
-              <DbStatRow>
-                <DbStatLabel>Embedding Provider</DbStatLabel>
-                <DbStatValue style={{ textTransform: 'capitalize' }}>
-                  {settings?.embeddingProvider || 'OpenAI'}
-                </DbStatValue>
-              </DbStatRow>
-              <DbStatRow>
-                <DbStatLabel>Embedding Model</DbStatLabel>
-                <DbStatValue>
-                  {settings?.embeddingModel || 'text-embedding-3-small'}
-                </DbStatValue>
-              </DbStatRow>
-            </DbStatsList>
-
-            <DbPanelActions>
-              {storageProvider.exportToFile && (
-                <DbPanelButton variant="primary" onClick={() => storageProvider.exportToFile?.()}>
-                  📤 Export SQLite DB
-                </DbPanelButton>
-              )}
-              {storageProvider.importFromFile && (
-                <>
-                  <input
-                    type="file"
-                    accept=".sqlite,.db"
-                    ref={fileInputRef}
-                    onChange={handleImportFileChange}
-                    style={{ display: 'none' }}
-                  />
-                  <DbPanelButton variant="primary" onClick={() => fileInputRef.current?.click()}>
-                    📥 Import SQLite DB
-                  </DbPanelButton>
-                </>
-              )}
-              <DbPanelButton variant="secondary" onClick={() => setShowDbPanel(false)}>
-                Close
-              </DbPanelButton>
-              {!confirmClearDb ? (
-                <DbPanelButton variant="secondary" title="Clear all indexed data" onClick={() => setConfirmClearDb(true)} css={{ borderColor: '$red7', color: '$red11', '&:hover': { backgroundColor: '$red3', borderColor: '$red8', color: '$red11' } }}>
-                  🗑️ Clear Database
-                </DbPanelButton>
-              ) : (
-                <div style={{ display: 'flex', flex: 1, gap: '6px', alignItems: 'center', backgroundColor: '#fee2e2', padding: '8px 12px', borderRadius: '8px', border: '1px solid #fca5a5' }}>
-                  <span style={{ fontSize: '12px', color: '#991b1b', flex: 1 }}>Delete all indexed data?</span>
-                  <DbPanelButton variant="secondary" onClick={async () => {
-                    try {
-                      await storageProvider.clear();
-                      setDocCount(0);
-                      setPageCount(0);
-                      if (storageProvider.getDatabaseSize) setDbSize(await storageProvider.getDatabaseSize());
-                      window.logseq.UI.showMsg('Database cleared successfully. Please re-index.', 'success');
-                    } catch (err: any) {
-                      window.logseq.UI.showMsg(`Failed to clear database: ${err.message}`, 'error');
-                    }
-                    setConfirmClearDb(false);
-                  }} css={{ borderColor: '$red7', color: 'white', backgroundColor: '$red9', '&:hover': { backgroundColor: '$red10' }, flex: 'none' }}>
-                    Yes, clear
-                  </DbPanelButton>
-                  <DbPanelButton variant="secondary" onClick={() => setConfirmClearDb(false)} css={{ flex: 'none' }}>
-                    Cancel
-                  </DbPanelButton>
-                </div>
-              )}
-            </DbPanelActions>
-          </DbPanel>
+          <DatabasePanel
+            storageProvider={storageProvider}
+            settings={settings}
+            docCount={docCount}
+            pageCount={pageCount}
+            dbSize={dbSize}
+            confirmClearDb={confirmClearDb}
+            setConfirmClearDb={setConfirmClearDb}
+            setDocCount={setDocCount}
+            setPageCount={setPageCount}
+            setDbSize={setDbSize}
+            fileInputRef={fileInputRef as React.RefObject<HTMLInputElement>}
+            onImportFileChange={handleImportFileChange}
+            onClose={() => setShowDbPanel(false)}
+          />
         )}
       </ChatPanel>
     </Overlay>
