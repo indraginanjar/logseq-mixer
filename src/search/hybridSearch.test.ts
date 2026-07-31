@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RankedHit } from './reranker';
-import type { SearchResult } from './storage/StorageProvider';
+import type { SearchResult } from '../storage/StorageProvider';
 
 vi.mock('./queryClassifier', () => ({
   classifyQuery: vi.fn(),

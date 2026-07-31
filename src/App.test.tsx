@@ -24,7 +24,7 @@ const flushPromises = () => act(() => new Promise((r) => setTimeout(r, 0)));
 // --- Mock modules BEFORE importing App ---
 
 // Mock indexManager
-vi.mock('./indexManager', () => ({
+vi.mock('./indexing/indexManager', () => ({
   isIndexingActive: vi.fn(() => false),
   requestPauseIndexing: vi.fn(),
   getIndexingProgress: vi.fn(() => 0),
@@ -216,7 +216,7 @@ if (typeof window !== 'undefined') {
 import { App } from './App';
 import { executeAll } from './blockExecutor';
 import { getActivePageContext } from './blockTreeFormatter';
-import { isIndexingActive, requestPauseIndexing } from './indexManager';
+import { isIndexingActive, requestPauseIndexing } from './indexing/indexManager';
 import { handleQuery, indexEntireLogSeq } from './manager';
 
 const mockIsIndexingActive = isIndexingActive as ReturnType<typeof vi.fn>;

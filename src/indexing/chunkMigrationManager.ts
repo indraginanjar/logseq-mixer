@@ -1,5 +1,5 @@
-import type { SQLiteVectorStore } from './storage/SQLiteVectorStore';
-import type { BM25Index } from './bm25Index';
+import type { SQLiteVectorStore } from '../storage/SQLiteVectorStore';
+import type { BM25Index } from '../search/bm25Index';
 
 export interface MigrationState {
   status: 'pending' | 'in-progress' | 'completed';

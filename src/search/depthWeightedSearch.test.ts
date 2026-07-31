@@ -1,6 +1,6 @@
 import { describe, test } from "vitest";
 import fc from "fast-check";
-import { computeDepthWeight } from "./hierarchyChunker";
+import { computeDepthWeight } from "../indexing/hierarchyChunker";
 import { applyDepthWeight } from "./depthWeightedSearch";
 import type { RankedHit } from "./reranker";
 

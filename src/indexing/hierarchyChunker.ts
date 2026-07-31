@@ -5,7 +5,7 @@
 
 import type { BlockLine } from './embedManager';
 import { OVERLAP_FRACTION, MAX_OVERLAP_BUDGET } from './embedManager';
-import { countTokens, encode, decode } from './tokenizer';
+import { countTokens, encode, decode } from '../tokenizer';
 
 /** Default ancestor truncation length when combined context exceeds budget */
 const DEFAULT_ANCESTOR_TRUNCATE_LENGTH = 60;

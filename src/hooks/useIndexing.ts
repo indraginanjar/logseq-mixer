@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { IndexingResult } from 'indexManager';
+import type { IndexingResult } from 'indexing/indexManager';
 import {
   cancelAutoIndexDebounce,
   getIndexingProgress,
@@ -7,7 +7,7 @@ import {
   requestPauseIndexing,
   setAutoEmbedEnabled as setAutoEmbedEnabledIM,
   setAutoIndexDebounceSeconds,
-} from 'indexManager';
+} from 'indexing/indexManager';
 import { enableAutoIndexer, indexEntireLogSeq } from 'manager';
 import { cancelCooldown, startCooldown } from '../cooldownManager';
 import type { StorageProvider } from '../storage/StorageProvider';

@@ -1,0 +1,10 @@
+export { BM25Index, STOPWORDS } from './bm25Index';
+export { hybridSearch } from './hybridSearch';
+export type { HybridSearchOptions } from './hybridSearch';
+export { mergeWithRRF, rerankWithRRF } from './reranker';
+export type { RankedHit, SearchHit } from './reranker';
+export { applyRecencyScoring, extractNoteDate, computeRecencyWeight } from './recencyScoring';
+export { applyDepthWeight } from './depthWeightedSearch';
+export { classifyQuery } from './queryClassifier';
+export { rewriteQueryForRetrieval } from './queryRewriter';
+export { CrossPageDeduplicator, deduplicateBlocks } from './deduplicator';

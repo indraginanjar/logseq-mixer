@@ -1,6 +1,6 @@
-import { CrossPageDeduplicator, deduplicateBlocks } from './deduplicator';
-import { normalizeBlockContent } from './normalizer';
-import { countTokens, decode, encode } from './tokenizer';
+import { CrossPageDeduplicator, deduplicateBlocks } from '../search/deduplicator';
+import { normalizeBlockContent } from '../normalizer';
+import { countTokens, decode, encode } from '../tokenizer';
 import { buildSubtreeChunks } from './hierarchyChunker';
 
 export type VectorDBSchemaDynamic = {

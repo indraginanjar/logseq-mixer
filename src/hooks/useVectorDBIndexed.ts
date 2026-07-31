@@ -1,4 +1,4 @@
-import { DEFAULT_EMBEDDING_MODEL, useGenerateEmbedding } from 'embedManager';
+import { DEFAULT_EMBEDDING_MODEL, useGenerateEmbedding } from 'indexing/embedManager';
 
 /**
  * Check if the vector DB is functional by generating a test embedding.

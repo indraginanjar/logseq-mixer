@@ -4,8 +4,8 @@ import { classifyQuery } from './queryClassifier';
 import { applyRecencyScoring, extractNoteDate, computeRecencyWeight } from './recencyScoring';
 import type { RankedHit, SearchHit } from './reranker';
 import { mergeWithRRF } from './reranker';
-import type { PerDocumentStorageProvider } from './storage/StorageProvider';
-import type { VectorSearchAccelerator } from './storage/VectorSearchAccelerator';
+import type { PerDocumentStorageProvider } from '../storage/StorageProvider';
+import type { VectorSearchAccelerator } from '../storage/VectorSearchAccelerator';
 
 export interface HybridSearchOptions {
   limit?: number;       // max results, default 8

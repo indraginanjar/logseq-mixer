@@ -1,5 +1,5 @@
 import type { RankedHit } from './reranker';
-import { computeDepthWeight } from './hierarchyChunker';
+import { computeDepthWeight } from '../indexing/hierarchyChunker';
 
 /**
  * A search hit with depth-based weighting applied to its RRF score.

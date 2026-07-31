@@ -8,13 +8,13 @@ export interface IndexingResult {
   errorMessage?: string;
 }
 
-import { DEFAULT_EMBEDDING_MODEL, EmbeddingProvider, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "embedManager";
-import { shouldSuppressAutoIndex } from "./cooldownManager";
+import { DEFAULT_EMBEDDING_MODEL, EmbeddingProvider, extractOutgoingLinks, fetchBacklinks, getEmbeddingsForPage, PageLinkData } from "./embedManager";
+import { shouldSuppressAutoIndex } from "../cooldownManager";
 import { ChunkMigrationManager } from "./chunkMigrationManager";
-import type { BM25Index } from "./bm25Index";
-import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "./storage/StorageProvider";
-import type { DocumentRecordWithDepth } from "./storage/SQLiteVectorStore";
-import type { VectorSearchAccelerator } from "./storage/VectorSearchAccelerator";
+import type { BM25Index } from "../search/bm25Index";
+import type { DocumentRecord, PerDocumentStorageProvider, StorageProvider } from "../storage/StorageProvider";
+import type { DocumentRecordWithDepth } from "../storage/SQLiteVectorStore";
+import type { VectorSearchAccelerator } from "../storage/VectorSearchAccelerator";
 
 const BATCH_SIZE = 5;
 

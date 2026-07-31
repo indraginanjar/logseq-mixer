@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { BlockLine } from './embedManager';
 import { buildAncestorContext, buildSubtreeChunks, computeDepthWeight } from './hierarchyChunker';
-import { countTokens } from './tokenizer';
+import { countTokens } from '../tokenizer';
 
 describe('buildAncestorContext', () => {
   const makeBlock = (content: string, depth: number): BlockLine => ({

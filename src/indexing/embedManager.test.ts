@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { BlockLine, buildPageHeader, clearRefCache, createContentPreview, EMBEDDING_MODELS, extractOutgoingLinks, flattenBlocks, getDimensionsForModel, groupBlocksIntoChunks, identifySemanticGroups, isValidEmbeddingModel, MAX_OVERLAP_BUDGET, OPENAI_EMBEDDINGS_ENDPOINT, OVERLAP_FRACTION, PageLinkData, resolveEndpoint, useGenerateEmbedding } from './embedManager';
-import settings from './settings';
-import { countTokens, decode, encode } from './tokenizer';
+import settings from '../settings';
+import { countTokens, decode, encode } from '../tokenizer';
 
 describe('identifySemanticGroups', () => {
   it('returns empty array for empty input', () => {

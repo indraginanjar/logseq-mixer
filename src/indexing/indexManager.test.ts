@@ -1,6 +1,6 @@
 import * as fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DocumentRecord, PerDocumentStorageProvider, SearchResult } from './storage/StorageProvider';
+import type { DocumentRecord, PerDocumentStorageProvider, SearchResult } from '../storage/StorageProvider';
 
 const mockGetEmbeddingsForPage = vi.fn();
 const mockFetchBacklinks = vi.fn();
@@ -18,7 +18,7 @@ vi.mock('./embedManager', () => ({
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 import initSqlJs from 'sql.js';
 import { _resetIndexingState, checkAndIndexUpdatedPages, getIndexingProgress, requestPauseIndexing } from './indexManager';
-import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
+import { SQLiteVectorStore } from '../storage/SQLiteVectorStore';
 
 // Reset module-level indexing state between every test to prevent
 // the indexingInProgress flag from leaking across fast-check iterations.

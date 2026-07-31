@@ -2,8 +2,8 @@ import * as fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import initSqlJs from 'sql.js';
 import { _resetIndexingState, purgeDeletedPages, setIndexManagerBM25 } from './indexManager';
-import { SQLiteVectorStore } from './storage/SQLiteVectorStore';
-import { BM25Index } from './bm25Index';
+import { SQLiteVectorStore } from '../storage/SQLiteVectorStore';
+import { BM25Index } from '../search/bm25Index';
 
 // Mock embedManager to prevent import errors (indexManager imports it)
 vi.mock('./embedManager', () => ({

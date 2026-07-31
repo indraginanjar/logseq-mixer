@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getButtonState } from './buttonState';
 import { cancelCooldown, isCooldownActive, shouldSuppressAutoIndex, startCooldown } from './cooldownManager';
-import { cancelAutoIndexDebounce } from './indexManager';
+import { cancelAutoIndexDebounce } from './indexing/indexManager';
 
 describe('shouldSuppressAutoIndex — property tests', () => {
   beforeEach(() => {

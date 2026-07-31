@@ -13,7 +13,7 @@
  * - Does NOT rewrite the query sent to the LLM for generation — only for retrieval
  */
 
-import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from './LLMManager';
+import { queryLiteLLM, resolveChatEndpoint, type ChatMessage } from '../LLMManager';
 
 /** Patterns that suggest the query references prior conversation context */
 const COREFERENCE_PATTERNS = [

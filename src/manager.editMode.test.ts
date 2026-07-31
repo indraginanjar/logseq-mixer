@@ -9,12 +9,12 @@ vi.mock('./LLMManager', () => ({
   resolveChatEndpoint: (settings: any) => settings?.chatEndpoint || 'http://localhost:4000/chat/completions',
 }));
 
-vi.mock('./embedManager', () => ({
+vi.mock('./indexing/embedManager', () => ({
   useGenerateEmbedding: vi.fn(),
   clearRefCache: vi.fn(),
 }));
 
-vi.mock('./indexManager', () => ({
+vi.mock('./indexing/indexManager', () => ({
   checkAndIndexUpdatedPages: vi.fn(),
   startPageIndexingOnChange: vi.fn(),
 }));
@@ -25,7 +25,7 @@ vi.mock('./storage/SQLiteVectorStore', () => ({
 
 // Import mocked modules via relative paths
 import { queryLiteLLM } from './LLMManager';
-import { useGenerateEmbedding } from './embedManager';
+import { useGenerateEmbedding } from './indexing/embedManager';
 import { clearConversationHistory, handleQuery, type EditQueryResult } from './manager';
 import type { StorageProvider } from './storage/StorageProvider';
 

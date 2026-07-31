@@ -1,6 +1,6 @@
 // File: cooldownManager.ts
 
-import { cancelAutoIndexDebounce } from './indexManager';
+import { cancelAutoIndexDebounce } from './indexing/indexManager';
 
 const COOLDOWN_DURATION_MS = 60_000;
 
