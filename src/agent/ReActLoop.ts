@@ -59,7 +59,6 @@ export async function runReActLoop(
   const skillTools = opts.includeLogseqTools !== false ? SKILL_TOOLS : [];
   const allTools = [...mcpTools, ...logseqToolsFiltered, ...skillTools];
   console.log(`[ReActLoop] allTools=${allTools.length} (mcp=${mcpTools.length}, logseq=${logseqToolsFiltered.length}, skills=${skillTools.length})`);
-
   // Determine whether to use streaming.
   // Stream the final answer only (when no tool_calls are returned).
   const useStreaming = opts.streamingEnabled && !!opts.onChunk;
@@ -94,7 +93,6 @@ export async function runReActLoop(
     throw new Error('No response message received from LiteLLM.');
   }
   console.log(`[ReActLoop] Initial response: hasToolCalls=${!!(assistantMessage.tool_calls?.length)}, toolCallCount=${assistantMessage.tool_calls?.length || 0}, contentLength=${(assistantMessage.content || '').length}`);
-
   // ReAct loop: iterate while the LLM wants to call tools
   while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0 && iterations < maxIterations) {
     iterations++;

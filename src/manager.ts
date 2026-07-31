@@ -741,7 +741,6 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   const hasContext = !!vectorContext;
   const needsTools = shouldIncludeTools(query, hasContext, !!editMode);
   console.log(`[handleQuery] needsTools=${needsTools}, hasContext=${hasContext}, editMode=${!!editMode}, mcpTools=${tools.length}`);
-
   const reactResult = await runReActLoop(messages, {
     settings, signal,
     maxIterations: settings.agentMaxIterations || 25,
