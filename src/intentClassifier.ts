@@ -27,6 +27,20 @@ const DIRECT_INSTRUCTION_PATTERNS: RegExp[] = [
   /^(act as|pretend|you are|imagine)\b/i,
   // Simple greetings or meta
   /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|sure)\b/i,
+
+  // --- Multilingual: Indonesian ---
+  // Creation / generation
+  /^(buatkan|buat|tuliskan|tulis|susun|rancang|karang|hasilkan|bikin)\b/i,
+  // Transformation
+  /^(rangkum|ringkas|terjemahkan|ubah|format|tulis ulang|parafrasa)\b/i,
+  // Explanation
+  /^(jelaskan|deskripsikan|definisikan|uraikan|terangkan)\b/i,
+  // Direct requests for output
+  /^(daftarkan|tampilkan|berikan|sediakan|tunjukkan|sebutkan)\b/i,
+  // Math / calculation
+  /^(hitung|kalkulasi|hitungkan)\b/i,
+  // Simple greetings or meta
+  /^(halo|hai|terima kasih|makasih|oke|ya|tidak|baik|sip)\b/i,
 ];
 
 /**
@@ -40,6 +54,13 @@ const NOTES_REFERENCE_PATTERNS: RegExp[] = [
   /\b(what did i|when did i|where did i|have i)\b/i,
   /\b(find|search|look up|look for|recall)\b.*\b(my|notes|pages|graph|journal)\b/i,
   /\[\[.+\]\]/,  // contains [[page link]] references
+
+  // --- Multilingual: Indonesian ---
+  /\b(catatan saya|grafik saya|halaman saya|jurnal saya|blok saya)\b/i,
+  /\b(di logseq|di catatan|dari catatan|dari grafik)\b/i,
+  /\b(saya tulis|saya catat|saya sebutkan|pernah saya)\b/i,
+  /\b(apa yang saya|kapan saya|dimana saya|apakah saya)\b/i,
+  /\b(cari|temukan|carikan)\b.*\b(catatan|halaman|grafik|jurnal)\b/i,
   /\(\(.+\)\)/,  // contains ((block ref)) references
 ];
 
