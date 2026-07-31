@@ -1,7 +1,13 @@
 
-export type MessageContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } };
+export type { MessageContentPart } from './types/chatMessage';
+import type { LLMMessage, MessageContentPart } from './types/chatMessage';
+export { LLMMessage };
+
+/** @deprecated Use LLMMessage from 'types/chatMessage' directly. Kept for backwards compatibility. */
+export type ChatMessage = LLMMessage;
+
+import { retryStrategies, modelsRequiringMaxCompletionTokens } from './llmRetryStrategies';
+import type { RetryHelpers } from './llmRetryStrategies';
 
 /** Default chat endpoints per provider. Used when chatEndpoint is empty. */
 const DEFAULT_CHAT_ENDPOINTS: Record<string, string> = {
@@ -25,14 +31,6 @@ export function resolveChatEndpoint(settings: { chatEndpoint?: string; chatProvi
   // Ultimate fallback for unknown providers: use LiteLLMLink or OpenAI default
   return settings.LiteLLMLink || DEFAULT_CHAT_ENDPOINTS.openai;
 }
-
-export type ChatMessage = {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content?: string | MessageContentPart[];
-  name?: string;
-  tool_call_id?: string;
-  tool_calls?: any[];
-};
 
 /** Max output tokens per model. Falls back to 4096 for unknown models. */
 const MODEL_MAX_TOKENS: Record<string, number> = {
@@ -97,13 +95,6 @@ export function getContextLimitForModel(model: string): number {
 }
 
 /**
- * Set of model names (lowercased) that have been discovered at runtime to require
- * `max_completion_tokens` instead of `max_tokens`. Persists for the session so
- * the retry only happens once per model.
- */
-const _modelsRequiringMaxCompletionTokens = new Set<string>();
-
-/**
  * Determine whether a model requires `max_completion_tokens` instead of `max_tokens`.
  * Covers OpenAI reasoning models (o-series) and future models, plus any models
  * discovered at runtime via error recovery.
@@ -111,7 +102,7 @@ const _modelsRequiringMaxCompletionTokens = new Set<string>();
 export function shouldUseMaxCompletionTokens(model: string): boolean {
   const normalized = model.toLowerCase();
   // Runtime-discovered models
-  if (_modelsRequiringMaxCompletionTokens.has(normalized)) return true;
+  if (modelsRequiringMaxCompletionTokens.has(normalized)) return true;
   // OpenAI o-series reasoning models: o1, o1-mini, o3, o3-mini, o4-mini, etc.
   if (/^o\d/.test(normalized)) return true;
   // Future GPT-5+
@@ -209,80 +200,12 @@ export async function queryLiteLLM(
       errorBody = await response.text();
     } catch { /* ignore read errors */ }
 
-    if (
-      !useMaxCompletionTokens &&
-      response.status === 400 &&
-      errorBody.includes('max_tokens') &&
-      errorBody.includes('max_completion_tokens')
-    ) {
-      // Retry with max_completion_tokens instead of max_tokens
-      console.info(`[queryLiteLLM] Model "${model}" rejected max_tokens, retrying with max_completion_tokens.`);
-      // Remember this model for future requests
-      _modelsRequiringMaxCompletionTokens.add(model.toLowerCase());
-      delete requestBody.max_tokens;
-      requestBody.max_completion_tokens = getMaxTokensForModel(model);
-
-      const retryResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-        signal,
-      });
-
-      if (!retryResponse.ok) {
-        throw new Error(`LLM request failed: ${retryResponse.status} ${retryResponse.statusText}`);
-      }
-
-      const retryData = await retryResponse.json();
-      if (chatProvider === 'ollama' && retryData.message && !retryData.choices) {
-        return { choices: [{ message: retryData.message }] };
-      }
-      return retryData;
-    }
-
-    // Detect reasoning_effort incompatibility (model doesn't support it)
-    if (
-      response.status === 400 &&
-      requestBody.reasoning_effort &&
-      errorBody.includes('reasoning_effort')
-    ) {
-      console.info(`[queryLiteLLM] Model "${model}" rejected reasoning_effort, retrying without it.`);
-      delete requestBody.reasoning_effort;
-
-      const retryResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-        signal,
-      });
-
-      if (!retryResponse.ok) {
-        let retryErrorBody = '';
-        try { retryErrorBody = await retryResponse.text(); } catch { /* ignore */ }
-        throw new Error(`LLM request failed: ${retryResponse.status} ${retryResponse.statusText}${retryErrorBody ? ' — ' + retryErrorBody : ''}`);
-      }
-
-      const retryData = await retryResponse.json();
-      if (chatProvider === 'ollama' && retryData.message && !retryData.choices) {
-        return { choices: [{ message: retryData.message }] };
-      }
-      return retryData;
-    }
-
-    // Detect context_length_exceeded — reduce max_tokens to fit
-    if (
-      response.status === 400 &&
-      errorBody.includes('context_length_exceeded')
-    ) {
-      // Parse the context limit from the error if possible, otherwise halve max_tokens
-      const contextLimit = getContextLimitForModel(model);
-      const currentMaxTokens = requestBody.max_tokens || requestBody.max_completion_tokens || DEFAULT_MAX_TOKENS;
-      // Estimate input tokens from error or use a safe fraction
-      const reducedMaxTokens = Math.max(512, Math.floor(contextLimit * 0.4));
-      if (reducedMaxTokens < currentMaxTokens) {
-        console.info(`[queryLiteLLM] Model "${model}" context_length_exceeded, reducing max_tokens from ${currentMaxTokens} to ${reducedMaxTokens}.`);
-        if (requestBody.max_tokens) requestBody.max_tokens = reducedMaxTokens;
-        if (requestBody.max_completion_tokens) requestBody.max_completion_tokens = reducedMaxTokens;
+    // Try each retry strategy in order
+    for (const strategy of retryStrategies) {
+      if (strategy.shouldRetry(response.status, errorBody, requestBody)) {
+        strategy.log(model);
+        const helpers: RetryHelpers = { getMaxTokensForModel, getContextLimitForModel };
+        strategy.fix(requestBody, errorBody, model, helpers);
 
         const retryResponse = await fetch(endpoint, {
           method: 'POST',
@@ -419,30 +342,34 @@ export async function queryLiteLLMStreaming(
       errorBody = await response.text();
     } catch { /* ignore read errors */ }
 
-    // Detect reasoning_effort incompatibility (model doesn't support it)
-    if (
-      response.status === 400 &&
-      requestBody.reasoning_effort &&
-      errorBody.includes('reasoning_effort')
-    ) {
-      console.info(`[queryLiteLLMStreaming] Model "${model}" rejected reasoning_effort, retrying without it.`);
-      delete requestBody.reasoning_effort;
+    // Try each retry strategy in order
+    let retried = false;
+    for (const strategy of retryStrategies) {
+      if (strategy.shouldRetry(response.status, errorBody, requestBody)) {
+        strategy.log(model);
+        const helpers: RetryHelpers = { getMaxTokensForModel, getContextLimitForModel };
+        strategy.fix(requestBody, errorBody, model, helpers);
 
-      const retryResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-        signal,
-      });
+        const retryResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+          signal,
+        });
 
-      if (!retryResponse.ok) {
-        let retryErrorBody = '';
-        try { retryErrorBody = await retryResponse.text(); } catch { /* ignore */ }
-        throw new Error(`LLM streaming request failed: ${retryResponse.status} ${retryResponse.statusText}${retryErrorBody ? ' — ' + retryErrorBody : ''}`);
+        if (!retryResponse.ok) {
+          let retryErrorBody = '';
+          try { retryErrorBody = await retryResponse.text(); } catch { /* ignore */ }
+          throw new Error(`LLM streaming request failed: ${retryResponse.status} ${retryResponse.statusText}${retryErrorBody ? ' — ' + retryErrorBody : ''}`);
+        }
+
+        response = retryResponse;
+        retried = true;
+        break;
       }
+    }
 
-      response = retryResponse;
-    } else {
+    if (!retried) {
       throw new Error(`LLM streaming request failed: ${response.status} ${response.statusText}${errorBody ? ' — ' + errorBody : ''}`);
     }
   }
