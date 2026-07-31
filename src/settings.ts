@@ -16,12 +16,34 @@ const settings: SettingSchemaDesc[] = [
     description: 'This text is input in front of every query.\n("context" is variables passed to the ai, leave it in the prompt so the AI knows what to do with your data)',
     default: 'You are a knowledge assistant embedded in Logseq. The user\'s notes are organized as pages containing hierarchical blocks (bullet points). Each block may have sub-blocks (children) nested beneath it, forming a tree structure. A sub-block is any block indented one level deeper under a parent block — it represents a detail, elaboration, or child item of that parent. Blocks may reference other pages via [[page links]] or other blocks via ((block refs)). Journal pages are daily entries named by date.\n\nLOGSEQ BLOCK HIERARCHY:\n- Every page contains top-level blocks.\n- Each block can have sub-blocks (children) indented beneath it.\n- Sub-blocks are identified by deeper indentation in the block tree.\n- When asked about "sub-blocks" or "children" of a block, look for blocks indented one level deeper directly under that block.\n- Example: if block A is at indent level 0, its sub-blocks are at indent level 1 directly below it (before the next block at level 0).\n\nCRITICAL FORMATTING RULES (you MUST follow these):\n- ALWAYS wrap page names in double brackets: [[page name]]. Never write a page name without brackets. Examples: [[Project Notes]], [[2026-04-14 tuesday]], [[logseq-mixer]].\n- When citing a specific block, use ((block-uuid)) notation with a UUID from the [block:uuid] annotations in the context. Do NOT fabricate UUIDs.\n  Example: According to ((64a1b2c3-d4e5-6789-abcd-ef0123456789)), the project deadline is next Friday.\n\nPRIORITY RULE:\n- The user\'s direct question or instruction ALWAYS takes priority over any retrieved context.\n- If the user asks you to create, generate, write, or produce something, do EXACTLY what they ask regardless of what context is provided.\n- Only use the retrieved context if it is clearly relevant to the user\'s request.\n- If the context appears unrelated to what the user is asking, IGNORE it entirely and respond based solely on the user\'s instruction.\n\nWhen answering questions about the user\'s notes:\n- Synthesize information from the provided context blocks, even if spread across multiple pages or journal entries.\n- Treat indented child blocks as details or elaborations of their parent block.\n- Pay attention to page names (note_name) and dates — journal entries contain time-specific knowledge.\n- If the context contains relevant blocks from different dates, combine them chronologically.\n- Quote or reference specific blocks when they directly answer the question.\n- If the context is insufficient, say so honestly rather than guessing.',
   },
+  // Deprecated: use per-provider embedding API keys below
   {
     key: 'EmbeddingApiKey',
     type: 'string',
     title: 'Embedding AI ApiKey',
     description: 'API key for OpenAI embedding models (used for semantic search over your notes).',
     default: 'sk-proj-1234',
+  },
+  {
+    key: 'openaiEmbeddingApiKey',
+    type: 'string',
+    title: 'OpenAI Embedding API Key',
+    description: 'API key for OpenAI embedding models. Leave empty to use the main OpenAI API key.',
+    default: '',
+  },
+  {
+    key: 'ollamaEmbeddingApiKey',
+    type: 'string',
+    title: 'Ollama Embedding API Key',
+    description: 'API key for Ollama embedding provider. Usually not needed for local Ollama.',
+    default: '',
+  },
+  {
+    key: 'litellmEmbeddingApiKey',
+    type: 'string',
+    title: 'LiteLLM Embedding API Key',
+    description: 'API key for LiteLLM embedding proxy.',
+    default: '',
   },
   {
     key: 'embeddingModel',

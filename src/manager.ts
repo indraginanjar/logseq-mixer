@@ -207,6 +207,10 @@ export async function indexEntireLogSeq(settings: any, storageProvider: StorageP
     openaiEmbeddingEndpoint: settings.openaiEmbeddingEndpoint,
     ollamaEmbeddingEndpoint: settings.ollamaEmbeddingEndpoint,
     litellmEmbeddingEndpoint: settings.litellmEmbeddingEndpoint,
+  }, {
+    openaiEmbeddingApiKey: settings.openaiEmbeddingApiKey,
+    ollamaEmbeddingApiKey: settings.ollamaEmbeddingApiKey,
+    litellmEmbeddingApiKey: settings.litellmEmbeddingApiKey,
   });
   resetBM25Index();
   return result;
@@ -217,6 +221,10 @@ export async function enableAutoIndexer(settings: any, storageProvider: StorageP
     openaiEmbeddingEndpoint: settings.openaiEmbeddingEndpoint,
     ollamaEmbeddingEndpoint: settings.ollamaEmbeddingEndpoint,
     litellmEmbeddingEndpoint: settings.litellmEmbeddingEndpoint,
+  }, {
+    openaiEmbeddingApiKey: settings.openaiEmbeddingApiKey,
+    ollamaEmbeddingApiKey: settings.ollamaEmbeddingApiKey,
+    litellmEmbeddingApiKey: settings.litellmEmbeddingApiKey,
   });
 }
 
@@ -233,6 +241,10 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
       openaiEmbeddingEndpoint: settings.openaiEmbeddingEndpoint,
       ollamaEmbeddingEndpoint: settings.ollamaEmbeddingEndpoint,
       litellmEmbeddingEndpoint: settings.litellmEmbeddingEndpoint,
+    }, {
+      openaiEmbeddingApiKey: settings.openaiEmbeddingApiKey,
+      ollamaEmbeddingApiKey: settings.ollamaEmbeddingApiKey,
+      litellmEmbeddingApiKey: settings.litellmEmbeddingApiKey,
     });
     const provider = storageProvider as PerDocumentStorageProvider;
     if (typeof provider.searchByVector !== 'function') {

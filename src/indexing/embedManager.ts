@@ -575,6 +575,35 @@ export function resolveEndpoint(
   return DEFAULT_EMBEDDING_ENDPOINTS[effectiveProvider] || OPENAI_EMBEDDINGS_ENDPOINT;
 }
 
+/**
+ * Resolve the effective embedding API key.
+ * Priority: per-provider key (if non-empty) → legacy EmbeddingApiKey fallback.
+ */
+export function resolveEmbeddingApiKey(
+  apiKey: string,
+  provider?: EmbeddingProvider,
+  providerKeys?: {
+    openaiEmbeddingApiKey?: string;
+    ollamaEmbeddingApiKey?: string;
+    litellmEmbeddingApiKey?: string;
+  }
+): string {
+  const effectiveProvider = provider || 'openai';
+
+  if (providerKeys) {
+    const perProvider: Record<string, string | undefined> = {
+      openai: providerKeys.openaiEmbeddingApiKey,
+      ollama: providerKeys.ollamaEmbeddingApiKey,
+      litellm: providerKeys.litellmEmbeddingApiKey,
+    };
+    const providerKey = perProvider[effectiveProvider]?.trim();
+    if (providerKey) return providerKey;
+  }
+
+  // Legacy fallback
+  return apiKey?.trim() || '';
+}
+
 export async function useGenerateEmbedding(
   inputText: string,
   apiKey: string,
@@ -585,9 +614,16 @@ export async function useGenerateEmbedding(
     openaiEmbeddingEndpoint?: string;
     ollamaEmbeddingEndpoint?: string;
     litellmEmbeddingEndpoint?: string;
+  },
+  providerKeys?: {
+    openaiEmbeddingApiKey?: string;
+    ollamaEmbeddingApiKey?: string;
+    litellmEmbeddingApiKey?: string;
   }
 ): Promise<number[]> {
-  if (provider === 'openai' && !apiKey?.trim()) {
+  const resolvedApiKey = resolveEmbeddingApiKey(apiKey, provider, providerKeys);
+
+  if (provider === 'openai' && !resolvedApiKey) {
     throw new Error('Embedding API key is not configured. Please set your OpenAI API key in the plugin settings.');
   }
 
@@ -607,7 +643,7 @@ export async function useGenerateEmbedding(
     body = JSON.stringify({ model, prompt: text });
   } else {
     // OpenAI and LiteLLM both use the OpenAI-compatible format
-    if (apiKey?.trim()) headers['Authorization'] = `Bearer ${apiKey}`;
+    if (resolvedApiKey) headers['Authorization'] = `Bearer ${resolvedApiKey}`;
     body = JSON.stringify({ model, input: text });
   }
 
@@ -828,6 +864,11 @@ export async function getEmbeddingsForPage(
     openaiEmbeddingEndpoint?: string;
     ollamaEmbeddingEndpoint?: string;
     litellmEmbeddingEndpoint?: string;
+  },
+  providerKeys?: {
+    openaiEmbeddingApiKey?: string;
+    ollamaEmbeddingApiKey?: string;
+    litellmEmbeddingApiKey?: string;
   }
 ): Promise<{ embeddings: VectorDBSchemaDynamic[]; blockMetadata: BlockMetadataEntry[]; chunkDepthMetadata: ChunkDepthMetadata[] }> {
   const { lines: originalLines, metadata: blockMetadata, hasResolvedRef } = await flattenBlocks(blocks, [], pageName);
@@ -873,7 +914,7 @@ export async function getEmbeddingsForPage(
       id: chunkId,
       lastUpdated,
       content: subtreeChunks[c].content,
-      embedding: await useGenerateEmbedding(subtreeChunks[c].content, apiKey, model, endpoint, provider, providerEndpoints)
+      embedding: await useGenerateEmbedding(subtreeChunks[c].content, apiKey, model, endpoint, provider, providerEndpoints, providerKeys)
     };
     embeddings.push(embedding);
     chunkDepthMetadata.push({

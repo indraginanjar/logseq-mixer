@@ -8,6 +8,7 @@ export {
   getEmbeddingsForPage,
   getDimensionsForModel,
   isValidEmbeddingModel,
+  resolveEmbeddingApiKey,
   resolveEndpoint,
   OPENAI_EMBEDDINGS_ENDPOINT,
   OLLAMA_EMBEDDINGS_ENDPOINT,

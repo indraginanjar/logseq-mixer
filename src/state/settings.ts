@@ -21,6 +21,9 @@ interface IPluginSettings {
   openaiEmbeddingEndpoint?: string;
   ollamaEmbeddingEndpoint?: string;
   litellmEmbeddingEndpoint?: string;
+  openaiEmbeddingApiKey?: string;
+  ollamaEmbeddingApiKey?: string;
+  litellmEmbeddingApiKey?: string;
   openaiApiKey?: string;
   ollamaApiKey?: string;
   litellmApiKey?: string;

@@ -29,6 +29,11 @@ let currentProviderEndpoints: {
   ollamaEmbeddingEndpoint?: string;
   litellmEmbeddingEndpoint?: string;
 } | undefined;
+let currentProviderKeys: {
+  openaiEmbeddingApiKey?: string;
+  ollamaEmbeddingApiKey?: string;
+  litellmEmbeddingApiKey?: string;
+} | undefined;
 let currentOramaInstance: any;
 let currentStorageProvider: StorageProvider;
 let currentAccelerator: VectorSearchAccelerator | undefined;
@@ -287,6 +292,11 @@ export async function checkAndIndexUpdatedPages(
     openaiEmbeddingEndpoint?: string;
     ollamaEmbeddingEndpoint?: string;
     litellmEmbeddingEndpoint?: string;
+  },
+  providerKeys?: {
+    openaiEmbeddingApiKey?: string;
+    ollamaEmbeddingApiKey?: string;
+    litellmEmbeddingApiKey?: string;
   }
 ): Promise<IndexingResult> {
   if (indexingInProgress) return { outcome: 'completed', pagesProcessed: 0 };
@@ -359,7 +369,8 @@ export async function checkAndIndexUpdatedPages(
             embeddingEndpoint,
             embeddingProvider,
             { isJournal: !!(page as any)['journal?'], journalDay: (page as any).journalDay },
-            providerEndpoints
+            providerEndpoints,
+            providerKeys
           );
 
           // Delete old chunks for this page
@@ -489,6 +500,11 @@ export function startPageIndexingOnChange(
     openaiEmbeddingEndpoint?: string;
     ollamaEmbeddingEndpoint?: string;
     litellmEmbeddingEndpoint?: string;
+  },
+  providerKeys?: {
+    openaiEmbeddingApiKey?: string;
+    ollamaEmbeddingApiKey?: string;
+    litellmEmbeddingApiKey?: string;
   }
 ): void {
   currentApiKey = apiKey;
@@ -500,6 +516,7 @@ export function startPageIndexingOnChange(
   currentEmbeddingProvider = embeddingProvider ?? 'openai';
   currentAccelerator = accelerator;
   currentProviderEndpoints = providerEndpoints;
+  currentProviderKeys = providerKeys;
 
   if (hasHooked) return;
   hasHooked = true;
@@ -516,7 +533,7 @@ export function startPageIndexingOnChange(
     debounceTimer = setTimeout(async () => {
       debounceTimer = null;
       try {
-        await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider, currentAccelerator, currentProviderEndpoints);
+        await checkAndIndexUpdatedPages(currentApiKey, currentOramaInstance, currentEmbeddingKey, currentModel, currentStorageProvider, currentEmbeddingEndpoint, currentEmbeddingProvider, currentAccelerator, currentProviderEndpoints, currentProviderKeys);
       } catch (err) {
         console.error('Error indexing updated pages:', err);
       }
