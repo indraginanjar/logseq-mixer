@@ -422,6 +422,22 @@ These settings are kept for backwards compatibility but will be removed in a fut
 | **Auto-summarize Sessions** | `true` | Summarize conversations on "New Session" |
 | **Memory Token Budget (%)** | `10` | Percentage of context window allocated for memories (1-25) |
 
+### Conversation Context
+
+Each message sent to the AI includes multiple context layers:
+
+| Layer | Budget | Description |
+|-------|--------|-------------|
+| System prompt | Fixed | Base instructions from settings |
+| Conversation history | ~20% of context | Last 6 messages from current session |
+| Page context | ~25% of context | Block tree of active page |
+| Memory | Configurable (default 10%) | Preferences, summaries, facts |
+| RAG context | Remaining budget | Relevant chunks from indexed graph |
+
+**Important:** The timestamps shown in the chat UI (e.g., `[2026-08-03T09:23:06 U]`) are display-only — they are **not** sent to the AI. The AI cannot reference messages by their timestamp. If you need to refer to earlier content that has been trimmed from history, copy-paste it into your new message.
+
+The conversation history is limited to the last 6 messages to stay within token budgets. When you click **✨ New**, the session is summarized and stored in memory before being cleared — so key facts persist even across fresh sessions.
+
 ### Agent
 
 | Setting | Default | Description |

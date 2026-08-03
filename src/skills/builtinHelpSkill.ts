@@ -122,6 +122,37 @@ Logseq Mixer is a plugin that adds AI capabilities to Logseq:
 - Edit or delete individual entries
 - Budget: configurable % of context window (default 10%)
 
+## Conversation Context
+
+### How context is built:
+Each message you send includes multiple context layers assembled into the LLM prompt:
+
+| Layer | Budget | Description |
+|-------|--------|-------------|
+| System prompt | Fixed | Base instructions from settings |
+| Conversation history | ~20% | Last 6 messages (user + assistant) |
+| Page context | ~25% | Active page block tree |
+| Memory | ~10% | Relevant memories (preferences, summaries) |
+| RAG context | Remaining | Retrieved chunks from your graph |
+
+### Conversation history:
+- The AI receives the **last 6 messages** from the current session
+- Older messages are trimmed and no longer accessible to the AI
+- History is cleared when you click ✨ New (fresh session)
+- The /raw command bypasses history entirely (sends only your prompt)
+
+### Important limitations:
+- Timestamps shown in the chat UI (e.g., [2026-08-03T09:23:06 U]) are NOT sent to the AI
+- The AI cannot reference messages by their timestamp or ID
+- If a message has been trimmed from history (older than 6 messages), the AI cannot see it
+- To reference old content, copy-paste the relevant text into your new message
+
+### Tips for long conversations:
+- Keep important context within the last 6 messages
+- If you need to reference earlier content, paste it again
+- Use ✨ New to start fresh (session gets auto-summarized to memory)
+- Memory system preserves key facts across sessions even after history is cleared
+
 ## Skills System
 
 ### What skills are:

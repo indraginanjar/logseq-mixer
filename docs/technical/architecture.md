@@ -222,6 +222,19 @@ sequenceDiagram
     end
 ```
 
+### Context Assembly Budget
+
+The available context window (after system prompt) is allocated as follows:
+
+| Layer | Allocation | Source |
+|-------|-----------|--------|
+| Conversation history | 20% | Last 6 messages (configurable via `MAX_HISTORY_LENGTH`) |
+| Page context | 25% | Active page block tree via `fetchPageContext()` |
+| Memory | 10% (configurable) | `memoryBudgetPercent` setting |
+| RAG chunks | Remaining | Vector + BM25 hybrid search results |
+
+History is assembled newest-first until the budget is exhausted. Older messages are dropped if they exceed the token limit.
+
 ---
 
 ## Data Flow: Indexing Pipeline
