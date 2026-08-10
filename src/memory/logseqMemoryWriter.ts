@@ -45,6 +45,73 @@ export async function writeMemoryPage(content: string, category: string): Promis
 }
 
 /**
+ * Delete the Logseq page/blocks corresponding to a memory entry.
+ * For session_summary: deletes the entire `Mixer/Memory/Session-{timestamp}` page.
+ * For preference/fact: finds and removes matching blocks from the shared page.
+ */
+export async function deleteMemoryPage(category: string, content: string, createdAt: number): Promise<void> {
+  try {
+    if (category === 'session_summary') {
+      const date = new Date(createdAt);
+      const stamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}-${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`;
+      const pageName = `Mixer/Memory/Session-${stamp}`;
+      const page = await logseq.Editor.getPage(pageName);
+      if (page) {
+        await logseq.Editor.deletePage(pageName);
+      }
+    } else {
+      const pageName = category === 'preference' ? 'Mixer/Memory/Preferences' : 'Mixer/Memory/Facts';
+      const blocks = await logseq.Editor.getPageBlocksTree(pageName);
+      if (blocks) {
+        // Search all blocks (including children) for content that matches
+        const contentStart = content.trim().slice(0, 60);
+        for (const block of blocks) {
+          await removeMatchingBlocks(block, contentStart);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[deleteMemoryPage] Failed:', err);
+  }
+}
+
+/**
+ * Recursively search and remove blocks whose content matches the memory text.
+ */
+async function removeMatchingBlocks(block: any, contentStart: string): Promise<void> {
+  // Check children first (depth-first) so removal doesn't affect iteration
+  if (block.children) {
+    for (const child of block.children) {
+      await removeMatchingBlocks(child, contentStart);
+    }
+  }
+  // Match if the block content starts with the same text (first 60 chars)
+  if (block.content && block.content.trim().startsWith(contentStart)) {
+    await logseq.Editor.removeBlock(block.uuid);
+  }
+}
+
+/**
+ * Delete all Logseq memory pages (Mixer/Memory/*).
+ * Called when "Clear All" is used in the Memory Manager.
+ */
+export async function deleteAllMemoryPages(): Promise<void> {
+  try {
+    const allPages = await logseq.Editor.getAllPages();
+    if (allPages) {
+      const memoryPages = allPages.filter((p: any) =>
+        p.name?.toLowerCase().startsWith('mixer/memory/')
+      );
+      for (const page of memoryPages) {
+        await logseq.Editor.deletePage(page.name);
+      }
+    }
+  } catch (err) {
+    console.error('[deleteAllMemoryPages] Failed:', err);
+  }
+}
+
+/**
  * Split LLM-generated summary content into individual block-safe lines.
  * Handles markdown bullet points, numbered lists, and headings — each
  * becomes its own block so Logseq doesn't show the "multiple unordered

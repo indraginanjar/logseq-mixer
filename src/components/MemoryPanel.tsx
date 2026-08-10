@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { styled, keyframes } from '../stitches.config';
 import type { MemoryStore, MemoryEntry } from '../memory/MemoryStore';
+import { deleteMemoryPage, deleteAllMemoryPages } from '../memory/logseqMemoryWriter';
 
 const fadeIn = keyframes({ '0%': { opacity: 0 }, '100%': { opacity: 1 } });
 const slideDown = keyframes({ '0%': { opacity: 0, transform: 'translateY(-4px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } });
@@ -332,6 +333,10 @@ export default function MemoryPanel({ onClose, memoryStore, memoryEnabled, onCou
 
   const handleDelete = (id: string) => {
     if (!memoryStore) return;
+    const mem = memories.find(m => m.id === id);
+    if (mem) {
+      deleteMemoryPage(mem.category, mem.content, mem.createdAt);
+    }
     memoryStore.deleteMemory(id);
     setDeletingId(null);
     loadMemories();
@@ -341,6 +346,7 @@ export default function MemoryPanel({ onClose, memoryStore, memoryEnabled, onCou
   const handleClearAll = () => {
     if (!memoryStore) return;
     if (window.confirm('Are you sure you want to delete ALL memories? This cannot be undone.')) {
+      deleteAllMemoryPages();
       memoryStore.deleteAll();
       loadMemories();
       notifyCount();
