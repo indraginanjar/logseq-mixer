@@ -89,6 +89,7 @@ export function useChatSession({ settings, storageProvider, aiEditMode, setAiEdi
   const [editResults, setEditResults] = useState<Map<string | number, ExecutionResult>>(new Map());
   const [thinkingText, setThinkingText] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const graphPathRef = useRef<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [memoryCount, setMemoryCount] = useState(0);
   const [memoryStoreInstance, setMemoryStoreInstance] = useState<MemoryStore | null>(null);
@@ -100,6 +101,46 @@ export function useChatSession({ settings, storageProvider, aiEditMode, setAiEdi
       localStorage.setItem('logseq-mixer-input-history', JSON.stringify(capped));
     } catch { /* ignore quota errors */ }
   }, [inputHistory]);
+
+  // Persist last 3 chat message pairs to localStorage keyed by graph path
+  useEffect(() => {
+    if (!graphPathRef.current || messages.length === 0) return;
+    try {
+      // Extract last 3 user+assistant pairs from the end
+      const pairs: ChatMessage[] = [];
+      for (let i = messages.length - 1; i >= 0 && pairs.length < 6; i--) {
+        pairs.unshift(messages[i]);
+      }
+      // Only persist text content (strip images/files to keep storage small)
+      const toStore = pairs.map(m => ({
+        id: m.id,
+        content: m.content,
+        sender: m.sender,
+        model: m.model,
+        timestamp: m.timestamp,
+      }));
+      const key = `logseq-mixer-chat-history-${graphPathRef.current}`;
+      localStorage.setItem(key, JSON.stringify(toStore));
+    } catch { /* ignore quota errors */ }
+  }, [messages]);
+
+  // Restore chat messages from localStorage for the current graph on initial load
+  useEffect(() => {
+    logseq.App.getCurrentGraph().then(graph => {
+      if (!graph?.path) return;
+      graphPathRef.current = graph.path;
+      try {
+        const key = `logseq-mixer-chat-history-${graph.path}`;
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const restored: ChatMessage[] = JSON.parse(stored);
+          if (Array.isArray(restored) && restored.length > 0) {
+            setMessages(restored);
+          }
+        }
+      } catch { /* ignore parse errors */ }
+    });
+  }, []);
 
   // Wire up thought callback for live thinking display
   useEffect(() => {
@@ -128,10 +169,32 @@ export function useChatSession({ settings, storageProvider, aiEditMode, setAiEdi
         setMemoryCount(newStore.getMemoryCount());
       }
       // Reset UI state for the new graph
-      setMessages([]);
       setAgentPlan(null);
       setAgentRunning(false);
       clearConversationHistory();
+      // Restore chat history from the new graph's localStorage
+      const newGraph = await logseq.App.getCurrentGraph();
+      if (newGraph?.path) {
+        graphPathRef.current = newGraph.path;
+        try {
+          const key = `logseq-mixer-chat-history-${newGraph.path}`;
+          const stored = localStorage.getItem(key);
+          if (stored) {
+            const restored: ChatMessage[] = JSON.parse(stored);
+            if (Array.isArray(restored) && restored.length > 0) {
+              setMessages(restored);
+            } else {
+              setMessages([]);
+            }
+          } else {
+            setMessages([]);
+          }
+        } catch {
+          setMessages([]);
+        }
+      } else {
+        setMessages([]);
+      }
     });
     return () => { unlisten(); };
   }, [storageProvider]);
