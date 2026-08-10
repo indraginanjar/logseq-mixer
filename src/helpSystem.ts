@@ -5,7 +5,7 @@ const USER_GUIDE = `
 
 ## Chat Window Toggles
 - 📇 Auto-Embed: auto-indexes pages when you edit them
-- ✏️ Direct Page Edit: allows AI to create/edit/delete blocks on your current page (OFF = chat-only responses)
+- ✏️ Allow Graph Edits: allows AI to create/edit/delete blocks on your current page (OFF = chat-only responses)
 - 🤖 Agent: enables autonomous multi-step goal pursuit
 
 ## Action Buttons
@@ -15,7 +15,7 @@ const USER_GUIDE = `
 - 🧩 Skills: manage agent skills (enable/disable, import, create)
 - Re-Index: trigger incremental re-indexing of your graph
 
-## How to Use Direct Page Edit
+## How to Use Allow Graph Edits
 1. Toggle ✏️ ON
 2. Click into the target block/page in Logseq
 3. Confirm the page indicator shows the correct target
@@ -84,7 +84,7 @@ const USER_GUIDE = `
 
 ## Troubleshooting
 - "No active page": click into a block first
-- Direct Page Edit not working: ensure ✏️ is ON and page indicator shows target
+- Allow Graph Edits not working: ensure ✏️ is ON and page indicator shows target
 - Agent too aggressive: increase confidence threshold in settings
 - Models not in dropdown: check LiteLLM proxy is running
 `;
@@ -116,7 +116,7 @@ export async function answerHelpQuestion(message: string, settings: any): Promis
 
   if (!topic) {
     // Return the quick reference
-    return `**Logseq Mixer Help** — Type \`/help <topic>\` for specific help.\n\nAvailable topics: page edit, agent, memory, mcp tools, settings, attachments, charts, shortcuts, troubleshooting\n\nOr ask a question: \`/help how do I use Direct Page Edit?\``;
+    return `**Logseq Mixer Help** — Type \`/help <topic>\` for specific help.\n\nAvailable topics: page edit, agent, memory, mcp tools, settings, attachments, charts, shortcuts, troubleshooting\n\nOr ask a question: \`/help how do I use Allow Graph Edits?\``;
   }
 
   // Use LLM to answer based on the embedded guide

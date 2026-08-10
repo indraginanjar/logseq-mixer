@@ -18,7 +18,7 @@ You are answering questions about Logseq Mixer — an autonomous AI agent that l
 Logseq Mixer is a plugin that adds AI capabilities to Logseq:
 - **Chat interface**: A resizable side panel for conversing with AI about your notes
 - **RAG retrieval**: Hybrid search (vector + BM25) over indexed graph content
-- **Direct Page Edit**: AI can create/edit/delete blocks on the active page
+- **Allow Graph Edits**: AI can create/edit/delete blocks on the active page
 - **Autonomous Agent**: Multi-step goal planning and execution
 - **Memory**: Persistent preferences and session summaries across conversations
 - **Skills**: Specialized instruction sets for specific tasks (agentskills.io compatible)
@@ -33,7 +33,7 @@ Logseq Mixer is a plugin that adds AI capabilities to Logseq:
 
 ### Toggles (Left side of toolbar)
 - **📇 Auto-Embed**: Auto-indexes pages when edited
-- **✏️ Direct Page Edit**: Allows AI to modify blocks on the active page
+- **✏️ Allow Graph Edits**: Allows AI to modify blocks on the active page
 - **🤖 Agent**: Enables autonomous multi-step execution
 - **📢 Verbose**: Shows detailed agent step outputs
 
@@ -60,7 +60,7 @@ Logseq Mixer is a plugin that adds AI capabilities to Logseq:
 | /skill <name> <message> | Activate skill and process message |
 | /raw <prompt> | Send directly to LLM (no RAG/memory/context) |
 
-## Direct Page Edit
+## Allow Graph Edits
 
 ### How to use:
 1. Toggle ✏️ ON
@@ -262,7 +262,7 @@ Skills can instruct the AI to use mixer_run_subtask for complex sub-tasks that b
 | Problem | Solution |
 |---------|----------|
 | "No active page" warning | Click into a block in Logseq first |
-| Direct Page Edit not working | Ensure ✏️ is ON and page indicator shows target |
+| Allow Graph Edits not working | Ensure ✏️ is ON and page indicator shows target |
 | Agent too aggressive | Increase confidence threshold in settings |
 | Agent not triggering | Lower confidence threshold, or ensure 🤖 is ON |
 | Models not in dropdown | Check LiteLLM proxy is running |

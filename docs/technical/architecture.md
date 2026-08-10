@@ -50,7 +50,7 @@ graph TD
     Vector --> SQLite[SQLiteVectorStore — IndexedDB]
     BM25 --> SQLite
     
-    Manager --> EditMode[Direct Page Edit Pipeline]
+    Manager --> EditMode[Allow Graph Edits Pipeline]
     EditMode --> EditParser[editCommandParser.ts]
     EditMode --> BlockExec[blockExecutor.ts]
     BlockExec --> LogseqAPI[Logseq Editor API]

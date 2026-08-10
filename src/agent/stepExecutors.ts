@@ -83,7 +83,7 @@ export async function executeAction(type: string, action: any, context: StepCont
     }
     case 'write': {
       if (!ctx.canWrite) {
-        return `[Direct Page Edit OFF] Would ${action.action}: ${action.content || action.pageName || 'block operation'}`;
+        return `[Allow Graph Edits OFF] Would ${action.action}: ${action.content || action.pageName || 'block operation'}`;
       }
       if (action.action === 'createPage') {
         const page = await logseq.Editor.createPage(action.pageName, {}, { journal: false, redirect: false });

@@ -56,7 +56,7 @@ export async function generatePlan(
     ? `\nAvailable MCP tools: ${tools.map((t: any) => t.function.name).join(', ')}`
     : '';
   const writeConstraint = !ctx.canWrite
-    ? '\n\nIMPORTANT: Direct Page Edit mode is OFF. Do NOT create pages or write/insert/update blocks in Logseq. Only gather information and present the results as text output. All output should be delivered in the chat response, not written to the graph.'
+    ? '\n\nIMPORTANT: Allow Graph Edits mode is OFF. Do NOT create pages or write/insert/update blocks in Logseq. Only gather information and present the results as text output. All output should be delivered in the chat response, not written to the graph.'
     : '';
 
   // Build environment context for the planner

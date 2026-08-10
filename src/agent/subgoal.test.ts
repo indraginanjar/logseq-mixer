@@ -234,7 +234,7 @@ describe('executeSubGoalStep — recursive sub-goal spawning', () => {
       // The first queryLiteLLM call is generatePlan — check that it includes write constraint
       const planCall = mockQueryLiteLLM.mock.calls[0];
       const systemPrompt = planCall[0][0].content; // messages[0].content (system)
-      expect(systemPrompt).toContain('Direct Page Edit mode is OFF');
+      expect(systemPrompt).toContain('Allow Graph Edits mode is OFF');
     });
 
     it('passes subgoalConfig.canWrite=true to child', async () => {
@@ -258,7 +258,7 @@ describe('executeSubGoalStep — recursive sub-goal spawning', () => {
       // The first queryLiteLLM call (generatePlan) should NOT contain write constraint
       const planCall = mockQueryLiteLLM.mock.calls[0];
       const systemPrompt = planCall[0][0].content;
-      expect(systemPrompt).not.toContain('Direct Page Edit mode is OFF');
+      expect(systemPrompt).not.toContain('Allow Graph Edits mode is OFF');
     });
   });
 

@@ -133,7 +133,7 @@ vi.mock('./components/EditToggle', () => ({
     role: 'switch',
     'aria-checked': props.enabled,
     onClick: props.onToggle,
-  }, 'Direct Page Edit'),
+  }, 'Allow Graph Edits'),
 }));
 
 // Mock VerboseToggle

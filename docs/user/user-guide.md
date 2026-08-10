@@ -45,7 +45,7 @@ These control what the AI *can do* in response to your messages.
 | Toggle | Icon | Effect |
 |---|---|---|
 | **Auto-Embed** | 📇 | Automatically indexes pages you edit in the background. Turn off for manual-only indexing. |
-| **Direct Page Edit** | ✏️ | The AI can directly insert, update, and delete blocks on your current page. Off = chat-only responses. |
+| **Allow Graph Edits** | ✏️ | The AI can directly insert, update, and delete blocks on your current page. Off = chat-only responses. |
 | **Agent** | 🤖 | Complex multi-step requests trigger the autonomous agent (planning, execution, self-correction). Off = single-turn chat only. |
 | **Verbose** | 📋 | Show detailed agent progress: step type badges, token usage, correction reasoning, and error details. On by default. |
 
@@ -73,7 +73,7 @@ These control what the AI *can do* in response to your messages.
 | **🗑️** | Clear input history — removes all saved previous inputs (only appears when history exists) |
 | **Text Area** | Type your message. Enter sends, Shift+Enter for newline, Arrow Up/Down navigates input history. |
 | **Send ▶** | Send message. Transforms to Cancel while AI is responding. |
-| **Page/Block Indicator** | Shows the active page (📄) and focused block (▸). This page's full content is always included as context in every AI request, ensuring the model has full awareness of what you're looking at. Also serves as the target for Direct Page Edit commands. |
+| **Page/Block Indicator** | Shows the active page (📄) and focused block (▸). This page's full content is always included as context in every AI request, ensuring the model has full awareness of what you're looking at. Also serves as the target for Allow Graph Edits commands. |
 
 ### Persistent Input History
 
@@ -102,7 +102,7 @@ Each message displays a header showing timestamp, role, and model in bracket for
 
 ---
 
-## Direct Page Edit Mode
+## Allow Graph Edits Mode
 
 Turn your AI into a co-author that directly modifies your graph.
 
@@ -137,7 +137,7 @@ Turn your AI into a co-author that directly modifies your graph.
 
 ### Inserting Images into Pages
 
-When using Direct Page Edit with an attached image:
+When using Allow Graph Edits with an attached image:
 1. The image appears in chat with a **"📋 Copy Image"** button
 2. Click to copy to clipboard
 3. Click the target block in Logseq and press **Ctrl+V**
@@ -241,7 +241,7 @@ Type `/help` for instant documentation without consuming RAG context:
 |---|---|
 | `/help` | List available help topics |
 | `/help <topic>` | Get help on a specific feature |
-| `/help page edit` | How Direct Page Edit works |
+| `/help page edit` | How Allow Graph Edits works |
 | `/help agent` | Autonomous agent usage |
 | `/help mcp tools` | MCP tool setup |
 | `/help settings` | Settings quick reference |
@@ -370,7 +370,7 @@ When **Streaming Responses** is enabled (the default), the AI's reply appears pr
 - You prefer responses to appear all at once for copy-paste workflows.
 
 **Technical notes:**
-- Streaming is automatically disabled during **Direct Page Edit** mode (✏️) because edit commands need to be parsed as a complete response before execution.
+- Streaming is automatically disabled during **Allow Graph Edits** mode (✏️) because edit commands need to be parsed as a complete response before execution.
 - When tools are being used (ReAct loop), intermediate tool-calling steps are not streamed. Only the final answer is streamed to the chat.
 - If your provider returns a non-streaming response despite the streaming request (unsupported endpoint), the plugin gracefully falls back to displaying the complete response at once.
 
@@ -473,7 +473,7 @@ The conversation history is limited to the last 6 messages to stay within token 
 **Cause:** You're on the journal home view without clicking into a block.
 **Fix:** Click into any block — the page indicator will update. The active page's full content is always sent as context to the AI, so clicking into the relevant page helps the AI understand what you're working on.
 
-### Direct Page Edit doesn't do anything
+### Allow Graph Edits doesn't do anything
 
 **Cause:** ✏️ toggle is OFF, or the AI couldn't determine what to edit.
 **Fix:** Ensure ✏️ is ON, confirm the page indicator is correct, and be specific in your instruction.

@@ -240,7 +240,7 @@ You may chain multiple tool calls iteratively until you have enough information 
 | `logseq_update_block` | Update block content | Yes |
 | `logseq_create_page` | Create a new page | Yes |
 
-**Write tool gating:** Write tools (`logseq_insert_block`, `logseq_update_block`, `logseq_create_page`) are only included when `includeLogseqWriteTools` is `true`. In normal chat mode with Direct Page Edit off, only read-only Logseq tools are available to the ReAct loop. The agent loop always gets full write access regardless of the edit toggle.
+**Write tool gating:** Write tools (`logseq_insert_block`, `logseq_update_block`, `logseq_create_page`) are only included when `includeLogseqWriteTools` is `true`. In normal chat mode with Allow Graph Edits off, only read-only Logseq tools are available to the ReAct loop. The agent loop always gets full write access regardless of the edit toggle.
 
 **MCP tools** (external): Whatever SSE servers the user has configured — dynamically discovered at connection time.
 

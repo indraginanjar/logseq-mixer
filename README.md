@@ -162,7 +162,7 @@ Under the hood: HNSW-accelerated vector search (sub-5ms across 20,000+ chunks), 
 
 ## Edits your graph directly
 
-Toggle **Direct Page Edit** and the AI becomes a co-author. It reads the full block tree of your active page, then inserts, updates, or deletes blocks using Logseq's native API.
+Toggle **Allow Graph Edits** and the AI becomes a co-author. It reads the full block tree of your active page, then inserts, updates, or deletes blocks using Logseq's native API.
 
 - **Insert** — Create nested blocks under any existing block
 - **Update** — Rewrite content or properties of existing blocks

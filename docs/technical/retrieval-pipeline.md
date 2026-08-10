@@ -380,7 +380,7 @@ The LLM prompt is assembled in message order:
 
 ---
 
-## Direct Page Edit Mode
+## Allow Graph Edits Mode
 
 When the ✏️ toggle is enabled:
 
@@ -474,7 +474,7 @@ LLM responses containing Logseq notation are transformed:
 | `src/search/index.ts` | Public API re-exports for search module |
 | `src/LLMManager.ts` | LLM communication (OpenAI, Ollama, LiteLLM), model token limits, dynamic model discovery, max_tokens parameter negotiation, retry strategy pipeline |
 | `src/manager.ts` | `handleQuery()` — full pipeline orchestration |
-| `src/editPromptBuilder.ts` | Direct Page Edit system prompt and page context |
+| `src/editPromptBuilder.ts` | Allow Graph Edits system prompt and page context |
 | `src/editCommandParser.ts` | Extract/validate edit commands from json-edit blocks |
 | `src/blockExecutor.ts` | Execute edit commands via Logseq API |
 | `src/blockTreeFormatter.ts` | Format page block trees with UUIDs |

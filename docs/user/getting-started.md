@@ -205,7 +205,7 @@ If Mixer returns relevant content with `((block-uuid))` citations you can click 
 
 ## Next Steps
 
-- **Enable Direct Page Edit** — Toggle ✏️ to let the AI modify your current page directly
+- **Enable Allow Graph Edits** — Toggle ✏️ to let the AI modify your current page directly
 - **Enable the Agent** — Toggle 🤖 for autonomous multi-step task execution
 - **Add MCP tools** — Connect web search, browser control, or file system access
 

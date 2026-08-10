@@ -90,7 +90,7 @@ export function EditToggle({ enabled, onToggle }: EditToggleProps) {
   };
 
   return (
-    <Container title="Direct Page Edit">
+    <Container title="Allow Graph Edits">
       <Track
         role="switch"
         aria-checked={enabled}

@@ -143,7 +143,7 @@ const NO_TOOLS_PATTERNS: RegExp[] = [
  *
  * @param query - The user's message
  * @param hasRetrievedContext - Whether RAG context was successfully retrieved
- * @param editMode - Whether Direct Page Edit mode is active (always needs tools)
+ * @param editMode - Whether Allow Graph Edits mode is active (always needs tools)
  */
 export function shouldIncludeTools(query: string, hasRetrievedContext: boolean, editMode: boolean): boolean {
   // Edit mode always needs write tools
