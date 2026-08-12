@@ -531,10 +531,23 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   lastMemorySaved = false;
   pendingAgentGoal = null;
 
+  // Detect explicit memory triggers early — before goal detection — so that
+  // "Remember this: ..." messages are never misrouted to the agent loop.
+  let earlyMemoryDetected = false;
+  if (settings.memoryEnabled && memoryStore) {
+    const detected = detectExplicitMemory(query);
+    if (detected) {
+      memoryStore.addMemoryIfUnique(detected.category, detected.content, 'explicit');
+      lastMemorySaved = true;
+      earlyMemoryDetected = true;
+    }
+  }
+
   // Detect multi-step goals and route to agent loop
   // Skip goal detection when an image is attached — images need the multipart message path
   // Skip goal detection when edit mode is on — edit mode handles write requests directly
-  if (settings.agentMode !== false && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
+  // Skip goal detection when an explicit memory was just stored — let it flow through as a normal chat
+  if (!earlyMemoryDetected && settings.agentMode !== false && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
     pendingAgentGoal = query;
     return '__AGENT_GOAL_DETECTED__';
   }
@@ -783,8 +796,8 @@ export async function handleQuery(query: string, settings: any, storageProvider:
     conversationHistory.splice(0, conversationHistory.length - MAX_HISTORY_LENGTH * 2);
   }
 
-  // Detect and store explicit memory
-  if (settings.memoryEnabled && memoryStore) {
+  // Detect and store explicit memory (skip if already handled before goal detection)
+  if (!earlyMemoryDetected && settings.memoryEnabled && memoryStore) {
     const detected = detectExplicitMemory(query);
     if (detected) { memoryStore.addMemoryIfUnique(detected.category, detected.content, 'explicit'); lastMemorySaved = true; }
   }
