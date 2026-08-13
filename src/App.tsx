@@ -3,6 +3,7 @@ import ChatMessageList from 'components/ChatMessageList';
 import MCPServerPanel from 'components/MCPServerPanel';
 import MemoryPanel from './components/MemoryPanel';
 import SkillPanel from './components/SkillPanel';
+import TokenUsagePanel from './components/TokenUsagePanel';
 import ChatHeader from './components/ChatHeader';
 import ChatInput from './components/ChatInput';
 import DatabasePanel from './components/DatabasePanel';
@@ -250,6 +251,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [showMcpPanel, setShowMcpPanel] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [showSkillPanel, setShowSkillPanel] = useState(false);
+  const [showTokenUsagePanel, setShowTokenUsagePanel] = useState(false);
   const [skillCount, setSkillCount] = useState(0);
 
   // Wrappers for hook functions that need refs from this component
@@ -350,6 +352,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   const handleOpenDbPanel = async () => {
     setShowMcpPanel(false);
+    setShowMemoryPanel(false);
+    setShowSkillPanel(false);
+    setShowTokenUsagePanel(false);
     setShowDbPanel(true);
     if (storageProvider.getDocumentCount) {
       try { const count = await storageProvider.getDocumentCount(); setDocCount(count); } catch { /* ignore */ }
@@ -366,6 +371,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowDbPanel(false);
     setShowMemoryPanel(false);
     setShowSkillPanel(false);
+    setShowTokenUsagePanel(false);
     setShowMcpPanel(prev => !prev);
   };
 
@@ -373,6 +379,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowDbPanel(false);
     setShowMcpPanel(false);
     setShowSkillPanel(false);
+    setShowTokenUsagePanel(false);
     setShowMemoryPanel(prev => !prev);
   };
 
@@ -380,7 +387,16 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowDbPanel(false);
     setShowMcpPanel(false);
     setShowMemoryPanel(false);
+    setShowTokenUsagePanel(false);
     setShowSkillPanel(prev => !prev);
+  };
+
+  const handleOpenTokenUsagePanel = () => {
+    setShowDbPanel(false);
+    setShowMcpPanel(false);
+    setShowMemoryPanel(false);
+    setShowSkillPanel(false);
+    setShowTokenUsagePanel(prev => !prev);
   };
 
   if (!isVisible) return null;
@@ -505,6 +521,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           onOpenMcpPanel={handleOpenMcpPanel}
           onOpenMemoryPanel={handleOpenMemoryPanel}
           onOpenSkillPanel={handleOpenSkillPanel}
+          onOpenTokenUsagePanel={handleOpenTokenUsagePanel}
           memoryCount={memoryCount}
           skillCount={skillCount}
           isSummarizing={isSummarizing}
@@ -552,6 +569,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
             onClose={() => setShowDbPanel(false)}
           />
         )}
+        {showTokenUsagePanel && <TokenUsagePanel onClose={() => setShowTokenUsagePanel(false)} />}
       </ChatPanel>
     </Overlay>
   );

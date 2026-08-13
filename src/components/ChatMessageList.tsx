@@ -1234,6 +1234,23 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
               opacity: 0.7,
             }}>
               ✓ {msg.completedTimestamp}
+              {msg.promptTokens != null && msg.completionTokens != null && (
+                <span style={{ marginLeft: '8px', color: '#6b7280' }}>
+                  ↑{msg.promptTokens.toLocaleString()} ↓{msg.completionTokens.toLocaleString()}
+                </span>
+              )}
+            </div>
+          )}
+          {msg.sender === 'assistant' && !msg.completedTimestamp && msg.promptTokens != null && msg.completionTokens != null && (
+            <div style={{
+              fontSize: '10px',
+              color: '#6b7280',
+              marginTop: '3px',
+              fontFamily: 'monospace',
+              letterSpacing: '0.02em',
+              opacity: 0.7,
+            }}>
+              ↑{msg.promptTokens.toLocaleString()} ↓{msg.completionTokens.toLocaleString()}
             </div>
           )}
         </div>

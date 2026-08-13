@@ -7,6 +7,8 @@ import settings from './settings';
 import { createStorageProvider } from './storage/createStorageProvider';
 import type { StorageProvider } from './storage/StorageProvider';
 import { ensureInitialized as ensureTokenizerReady } from './tokenizer';
+import { TokenUsageStore } from './storage/TokenUsageStore';
+import { setTokenUsageStore } from './storage/tokenUsageInstance';
 
 /**
  * Lazy storage provider wrapper. Defers the heavy SQLite WASM initialization
@@ -26,6 +28,11 @@ function createLazyStorageProvider(): StorageProvider {
         await ensureTokenizerReady();
         const p = await createStorageProvider();
         realProvider = p;
+        // Initialize token usage tracking
+        const db = (p as any).db;
+        if (db) {
+          setTokenUsageStore(new TokenUsageStore(db));
+        }
         return p;
       })();
     }

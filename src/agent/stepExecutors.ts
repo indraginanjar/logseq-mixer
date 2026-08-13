@@ -5,6 +5,7 @@ import { executeOne } from 'blockExecutor';
 import { runReActLoop } from './ReActLoop';
 import { isDiagramIntent, DIAGRAM_RULES } from '../utils/diagramIntentDetector';
 import type { AgentStep, StepResult, StepContext, ProgressEventType } from './types';
+import { logTokenUsage } from '../storage/logTokenUsage';
 
 const STEP_SYSTEM_PROMPT = `You are an execution agent for Logseq. Execute the given step and return the ACTUAL result — not a plan or description of what to do.
 Available Logseq APIs: getPage(name), getPageBlocksTree(nameOrUuid), getAllPages(), insertBlock(parentUUID, content, {sibling:false}), updateBlock(uuid, content), removeBlock(uuid), createPage(name, {}, {journal:false, redirect:false}).
@@ -149,6 +150,7 @@ export async function executeGatherStep(step: AgentStep, context: StepContext, c
   ];
 
   const extractResult = await queryLiteLLM(extractMessages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+  logTokenUsage(extractResult, ctx.settings.selectedModel, ctx.settings.chatProvider || 'litellm');
   const extractRaw = extractResult.choices?.[0]?.message?.content?.trim() ?? '[]';
   totalTokens += countTokens(JSON.stringify(extractMessages)) + countTokens(extractRaw);
 
@@ -211,6 +213,7 @@ export async function executeGatherStep(step: AgentStep, context: StepContext, c
     ];
 
     const batchResult = await queryLiteLLM(summarizeMessages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+    logTokenUsage(batchResult, ctx.settings.selectedModel, ctx.settings.chatProvider || 'litellm');
     const batchSummary = batchResult.choices?.[0]?.message?.content?.trim() ?? '';
     totalTokens += countTokens(JSON.stringify(summarizeMessages)) + countTokens(batchSummary);
 
@@ -288,6 +291,7 @@ RULES:
 
   if (toolAccess === 'none') {
     const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+    logTokenUsage(result, ctx.settings.selectedModel, ctx.settings.chatProvider || 'litellm');
     raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
   } else {
@@ -505,6 +509,7 @@ export async function executeStep(step: AgentStep, context: StepContext, ctx: St
   ];
 
   const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+  logTokenUsage(result, ctx.settings.selectedModel, ctx.settings.chatProvider || 'litellm');
   const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
   const tokens = countTokens(JSON.stringify(messages)) + countTokens(raw);
 

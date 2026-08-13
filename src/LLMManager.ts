@@ -3,6 +3,12 @@ export type { MessageContentPart } from './types/chatMessage';
 import type { LLMMessage, MessageContentPart } from './types/chatMessage';
 export { LLMMessage };
 
+export interface LLMUsageInfo {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 /** @deprecated Use LLMMessage from 'types/chatMessage' directly. Kept for backwards compatibility. */
 export type ChatMessage = LLMMessage;
 
@@ -275,7 +281,14 @@ export async function queryLiteLLM(
 
         const retryData = await retryResponse.json();
         if (chatProvider === 'ollama' && retryData.message && !retryData.choices) {
-          return { choices: [{ message: retryData.message }] };
+          return {
+            choices: [{ message: retryData.message }],
+            usage: retryData.prompt_eval_count != null ? {
+              prompt_tokens: retryData.prompt_eval_count,
+              completion_tokens: retryData.eval_count || 0,
+              total_tokens: (retryData.prompt_eval_count || 0) + (retryData.eval_count || 0),
+            } : undefined,
+          };
         }
         return retryData;
       }
@@ -292,6 +305,11 @@ export async function queryLiteLLM(
       choices: [{
         message: data.message,
       }],
+      usage: data.prompt_eval_count != null ? {
+        prompt_tokens: data.prompt_eval_count,
+        completion_tokens: data.eval_count || 0,
+        total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+      } : undefined,
     };
   }
 
@@ -361,6 +379,7 @@ export async function queryLiteLLMStreaming(
       model: model,
       messages: messages,
       stream: true,
+      stream_options: { include_usage: true },
     };
     if (chatProvider === 'litellm') {
       requestBody.api_key = apiKey;
@@ -452,6 +471,7 @@ export async function queryLiteLLMStreaming(
   let fullContent = '';
   let toolCallsAccumulator: any[] = [];
   let buffer = '';
+  let usageData: any = null;
 
   try {
     while (true) {
@@ -483,6 +503,13 @@ export async function queryLiteLLMStreaming(
               fullContent += content;
               onChunk(content);
             }
+            if (parsed.done && parsed.prompt_eval_count != null) {
+              usageData = {
+                prompt_tokens: parsed.prompt_eval_count,
+                completion_tokens: parsed.eval_count || 0,
+                total_tokens: (parsed.prompt_eval_count || 0) + (parsed.eval_count || 0),
+              };
+            }
           } else {
             // OpenAI/LiteLLM streaming format: { choices: [{ delta: { content, tool_calls } }] }
             const delta = parsed.choices?.[0]?.delta;
@@ -506,6 +533,13 @@ export async function queryLiteLLMStreaming(
                 if (tc.function?.arguments) toolCallsAccumulator[idx].function.arguments += tc.function.arguments;
               }
             }
+            if (parsed.usage) {
+              usageData = parsed.usage;
+              console.info('[LLMManager] Stream usage received:', parsed.usage);
+            } else if (parsed.x_groq?.usage) {
+              usageData = parsed.x_groq.usage;
+              console.info('[LLMManager] Stream usage received (x_groq):', parsed.x_groq.usage);
+            }
           }
         } catch {
           // Skip unparseable lines (heartbeats, comments, etc.)
@@ -521,7 +555,7 @@ export async function queryLiteLLMStreaming(
   if (toolCallsAccumulator.length > 0) {
     message.tool_calls = toolCallsAccumulator;
   }
-  return { choices: [{ message }] };
+  return { choices: [{ message }], ...(usageData ? { usage: usageData } : {}) };
 }
 
 export async function fetchLiteLLMModels(endpoint: string, apiKey: string): Promise<string[]> {

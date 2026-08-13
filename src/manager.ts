@@ -23,6 +23,7 @@ import { runReActLoop } from './agent/ReActLoop';
 import { setSubtaskSettings } from './agent/logseqTools';
 import { loadAllSkills, getSkillBody, buildSkillCatalogPrompt, buildSkillActivationContext } from './skills';
 import type { SkillEntry, SkillCatalogEntry } from './skills';
+import { resetQueryTokenAccumulator, getQueryTokenUsage } from './storage/logTokenUsage';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -530,6 +531,7 @@ const GROUNDING_INSTRUCTIONS = `
 export async function handleQuery(query: string, settings: any, storageProvider: StorageProvider, signal?: AbortSignal, editMode?: boolean, imageDataUrl?: string | string[], onChunk?: (chunk: string) => void): Promise<string | EditQueryResult> {
   lastMemorySaved = false;
   pendingAgentGoal = null;
+  resetQueryTokenAccumulator();
 
   // Detect explicit memory triggers early — before goal detection — so that
   // "Remember this: ..." messages are never misrouted to the agent loop.

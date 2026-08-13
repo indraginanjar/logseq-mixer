@@ -5,6 +5,7 @@ import { generatePlan as generatePlanFn } from './planGenerator';
 import { executeStep as executeStepFn, setAgentLoopFactory } from './stepExecutors';
 import { handleFailure as handleFailureFn, diagnoseFailure as diagnoseFailureFn, rollbackLastRun as rollbackLastRunFn } from './failureHandler';
 import { compressContext as compressContextFn } from './contextCompressor';
+import { logTokenUsage } from '../storage/logTokenUsage';
 
 const EVAL_SYSTEM_PROMPT = `Evaluate whether the step output achieved the intended goal. Respond with ONLY valid JSON:
 {"adequate":true,"reason":"...","suggestion":"alternative approach if inadequate"}
@@ -284,6 +285,7 @@ RULES:
 
     try {
       const result = await queryLiteLLM(messages, this.settings.selectedModel, resolveApiKey(this.settings), resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
+      logTokenUsage(result, this.settings.selectedModel, this.settings.chatProvider || 'litellm');
       const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
       this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
       return raw || null;
@@ -298,6 +300,7 @@ RULES:
       { role: 'user', content: `Step intent: ${step.description}\nStep type: ${step.type}\nOutput received:\n${result.output.slice(0, 500)}\n\nWas the intent achieved?` },
     ];
     const llmResult = await queryLiteLLM(messages, this.settings.selectedModel, resolveApiKey(this.settings), resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
+    logTokenUsage(llmResult, this.settings.selectedModel, this.settings.chatProvider || 'litellm');
     const raw = llmResult.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
     try {
@@ -321,6 +324,7 @@ RULES:
     ];
 
     const result = await queryLiteLLM(messages, this.settings.selectedModel, resolveApiKey(this.settings), resolveChatEndpoint(this.settings), this.signal, undefined, this.settings.chatProvider, this.settings.reasoningEffort);
+    logTokenUsage(result, this.settings.selectedModel, this.settings.chatProvider || 'litellm');
     const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
     this.tokensUsed += countTokens(JSON.stringify(messages)) + countTokens(raw);
 

@@ -2,6 +2,7 @@ import { queryLiteLLM, resolveChatEndpoint, resolveApiKey, type ChatMessage } fr
 import { countTokens } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import type { AgentPlan, AgentStep } from './types';
+import { logTokenUsage } from '../storage/logTokenUsage';
 
 const PLAN_SYSTEM_PROMPT = `You are a planning agent for a Logseq knowledge management system. Break down the user's goal into atomic steps.
 
@@ -76,6 +77,7 @@ export async function generatePlan(
   ];
 
   const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+  logTokenUsage(result, ctx.settings.selectedModel, ctx.settings.chatProvider || 'litellm');
   const raw = result.choices?.[0]?.message?.content?.trim() ?? '';
   const tokensUsed = countTokens(JSON.stringify(messages)) + countTokens(raw);
 

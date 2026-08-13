@@ -157,6 +157,7 @@ interface ChatInputProps {
   onOpenMcpPanel: () => void;
   onOpenMemoryPanel: () => void;
   onOpenSkillPanel: () => void;
+  onOpenTokenUsagePanel: () => void;
   memoryCount: number;
   skillCount: number;
   isSummarizing: boolean;
@@ -184,7 +185,7 @@ export function ChatInput(props: ChatInputProps) {
     aiEditMode, onEditToggle,
     agentModeOn, onAgentModeToggle,
     verboseMode, onVerboseToggle,
-    onOpenDbPanel, onOpenMcpPanel, onOpenMemoryPanel, onOpenSkillPanel,
+    onOpenDbPanel, onOpenMcpPanel, onOpenMemoryPanel, onOpenSkillPanel, onOpenTokenUsagePanel,
     memoryCount, skillCount, isSummarizing,
     indexButtonProps, onIndex,
     isIndexing, progressCount, indexingStatus, isDismissing,
@@ -278,6 +279,7 @@ export function ChatInput(props: ChatInputProps) {
           <ToolbarButton onClick={onOpenSkillPanel} title="Skills">
             &#x1F9E9;{skillCount > 0 && <span style={{ fontSize: '10px', opacity: 0.7 }}>{skillCount}</span>}
           </ToolbarButton>
+          <ToolbarButton onClick={onOpenTokenUsagePanel} title="Token Usage">&#x1F4CA;</ToolbarButton>
           <ToolbarButton
             variant={indexButtonProps.variant as any}
             onClick={onIndex}

@@ -2,6 +2,7 @@ import { queryLiteLLM, queryLiteLLMStreaming, resolveChatEndpoint, resolveApiKey
 import { countTokens } from 'tokenizer';
 import { MCPManager } from 'mcp/MCPManager';
 import { executeLogseqTool, LOGSEQ_TOOLS, SKILL_TOOLS } from './logseqTools';
+import { logTokenUsage } from '../storage/logTokenUsage';
 
 export interface ReActOptions {
   settings: any;
@@ -83,8 +84,10 @@ export async function runReActLoop(
   if (useStreaming && !hasTools) {
     // Simple Q&A with no tools: stream directly
     llmOutput = await queryLiteLLMStreaming(messages, settings.selectedModel, resolveApiKey(settings), resolveChatEndpoint(settings), opts.onChunk!, signal, undefined, settings.chatProvider, settings.reasoningEffort);
+    logTokenUsage(llmOutput, settings.selectedModel, settings.chatProvider || 'litellm', messages);
   } else {
     llmOutput = await queryLiteLLM(messages, settings.selectedModel, resolveApiKey(settings), resolveChatEndpoint(settings), signal, allTools.length > 0 ? allTools : undefined, settings.chatProvider, settings.reasoningEffort);
+    logTokenUsage(llmOutput, settings.selectedModel, settings.chatProvider || 'litellm', messages);
   }
   let assistantMessage = llmOutput.choices?.[0]?.message;
   tokensUsed += estimateTokens(messages, assistantMessage?.content || '', allTools);
@@ -176,6 +179,7 @@ export async function runReActLoop(
       llmOutput = await queryLiteLLMStreaming(messages, settings.selectedModel, resolveApiKey(settings), resolveChatEndpoint(settings), (chunk) => {
         pendingChunks.push(chunk);
       }, signal, allTools, settings.chatProvider, settings.reasoningEffort);
+      logTokenUsage(llmOutput, settings.selectedModel, settings.chatProvider || 'litellm', messages);
       assistantMessage = llmOutput.choices?.[0]?.message;
       // If this was the final answer (no tool_calls), flush accumulated chunks to the UI
       if (!assistantMessage?.tool_calls || assistantMessage.tool_calls.length === 0) {
@@ -185,6 +189,7 @@ export async function runReActLoop(
       }
     } else {
       llmOutput = await queryLiteLLM(messages, settings.selectedModel, resolveApiKey(settings), resolveChatEndpoint(settings), signal, allTools, settings.chatProvider, settings.reasoningEffort);
+      logTokenUsage(llmOutput, settings.selectedModel, settings.chatProvider || 'litellm', messages);
       assistantMessage = llmOutput.choices?.[0]?.message;
     }
     tokensUsed += estimateTokens([], assistantMessage?.content || '');

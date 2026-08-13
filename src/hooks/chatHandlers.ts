@@ -13,6 +13,7 @@ import type { StorageProvider } from '../storage/StorageProvider';
 import type { ExecutionResult } from '../types/editTypes';
 import type { AgentController } from './useAgentController';
 import { getLastMemorySaved } from '../manager';
+import { getQueryTokenUsage } from '../storage/logTokenUsage';
 
 interface Settings {
   selectedModel?: string;
@@ -382,6 +383,7 @@ export async function handleChatQuery(params: ChatQueryParams): Promise<void> {
     if (aiEditMode && typeof resp === 'object' && resp !== null && 'text' in resp) {
       const editResp = resp;
       const assistantMsgId = Date.now() + '_assistant';
+      const tokenUsage = getQueryTokenUsage();
 
       const commands = editResp.commands.filter((c: any) =>
         !(c.content && /^!\[.*?\]\(\s*\)$/.test(c.content.trim()))
@@ -398,6 +400,8 @@ export async function handleChatQuery(params: ChatQueryParams): Promise<void> {
         sender: 'assistant',
         model: settings?.selectedModel,
         timestamp: chatTimestamp(),
+        promptTokens: tokenUsage.promptTokens || undefined,
+        completionTokens: tokenUsage.completionTokens || undefined,
       }]);
 
       if (commands.length > 0) {
@@ -431,6 +435,7 @@ export async function handleChatQuery(params: ChatQueryParams): Promise<void> {
       }
     } else {
       const responseText = typeof resp === 'string' ? resp : (resp as any).text;
+      const tokenUsage = getQueryTokenUsage();
       if (!isStreamingStarted) {
         const assistantMsgId = Date.now() + '_assistant';
         setMessages(prev => [...prev, {
@@ -440,11 +445,13 @@ export async function handleChatQuery(params: ChatQueryParams): Promise<void> {
           model: settings?.selectedModel,
           timestamp: chatTimestamp(),
           completedTimestamp: chatTimestamp(),
+          promptTokens: tokenUsage.promptTokens || undefined,
+          completionTokens: tokenUsage.completionTokens || undefined,
         }]);
       }
       if (isStreamingStarted) {
         setMessages(prev => prev.map(m =>
-          m.id === streamingMsgId ? { ...m, completedTimestamp: chatTimestamp() } : m
+          m.id === streamingMsgId ? { ...m, completedTimestamp: chatTimestamp(), promptTokens: tokenUsage.promptTokens || undefined, completionTokens: tokenUsage.completionTokens || undefined } : m
         ));
       }
     }

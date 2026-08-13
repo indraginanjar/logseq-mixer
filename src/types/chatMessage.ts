@@ -15,6 +15,10 @@ export type UIChatMessage = {
   completedTimestamp?: string;
   image?: { name: string; content: string }[];
   file?: { name: string; content: string }[];
+  /** Actual prompt (input) tokens reported by the LLM API for this message. */
+  promptTokens?: number;
+  /** Actual completion (output) tokens reported by the LLM API for this message. */
+  completionTokens?: number;
 };
 
 /** Multimodal content part for LLM messages. */

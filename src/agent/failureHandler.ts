@@ -1,6 +1,7 @@
 import { queryLiteLLM, resolveChatEndpoint, resolveApiKey, type ChatMessage } from 'LLMManager';
 import { countTokens } from 'tokenizer';
 import type { AgentStep, StepContext } from './types';
+import { logTokenUsage } from '../storage/logTokenUsage';
 
 export interface FailureHandlerContext {
   settings: any;
@@ -34,6 +35,7 @@ Be concise and specific. Do not repeat the raw error verbatim — translate it i
       },
     ];
     const result = await queryLiteLLM(messages, ctx.settings.selectedModel, resolveApiKey(ctx.settings), resolveChatEndpoint(ctx.settings), ctx.signal, undefined, ctx.settings.chatProvider, ctx.settings.reasoningEffort);
+    logTokenUsage(result, ctx.settings.selectedModel, ctx.settings.chatProvider || 'litellm');
     const diagnostic = result.choices?.[0]?.message?.content?.trim() ?? '';
     const tokensUsed = countTokens(JSON.stringify(messages)) + countTokens(diagnostic);
     ctx.addTokens(tokensUsed);
