@@ -110,6 +110,8 @@ Three built-in providers — **no proxy required** for the simplest setups:
 
 **Control reasoning depth:** Use the ⚡ Effort selector in the header to dial reasoning up or down — from fast/cheap (`Low`) to maximum capability (`Max`). Works across all providers. Reasoning models think deeper; standard models gracefully ignore it.
 
+**Track token usage:** Every AI response shows real-time token counts (↑ input, ↓ output). Click the 📊 button to open the Token Usage analytics panel with daily, weekly, monthly, yearly, and all-time breakdowns. All LLM API calls are automatically tracked with persistent storage across sessions. Works with all providers — uses actual API-reported tokens when available, falls back to local estimation for providers that don't report usage.
+
 ---
 
 ## Autonomous agent

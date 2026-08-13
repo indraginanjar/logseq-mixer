@@ -16,7 +16,7 @@ Click the Mixer toolbar icon in Logseq to open the chat panel:
 │  (Chat messages appear here)                                │
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
-│  [📇][✏️][🤖]           [🗄️][🔌][🧠][🧩][Re-Index]         │
+│  [📇][✏️][🤖]        [🗄️][🔌][🧠][🧩][📊][Re-Index]       │
 │  📄 Page Name ▸ Block preview...                            │
 ├─────────────────────────────────────────────────────────────┤
 │  [📎]  Type your message...              [Send ▶]          │
@@ -61,6 +61,7 @@ These control what the AI *can do* in response to your messages.
 | **🔌** | **MCP Servers** — Manage external tool connections (web search, file system, browser) |
 | **🧠** | **Memory Manager** — View, edit, and delete stored memories. Badge shows memory count. |
 | **🧩** | **Skills Manager** — Enable/disable skills, import from GitHub, create new skills. Badge shows active skill count. See [Agent Skills](skills.md). |
+| **📊** | **Token Usage** — View token consumption stats across all conversations. See [Token Usage Tracking](#token-usage-tracking) below. |
 | **Re-Index** | Triggers incremental re-indexing. Only processes new/changed pages; automatically purges stale entries from deleted pages. Becomes "Stop" during active indexing. |
 
 ---
@@ -90,6 +91,8 @@ Your chat inputs are automatically saved and persist across sessions — even af
 
 Each message displays a header showing timestamp, role, and model in bracket format: `[2026-07-19T14:32:05 AI gpt-4o]` or `[2026-07-19T14:31:21 U]`.
 
+Assistant messages also show a completion footer with token usage: `✓ 2026-08-13T12:53:26  ↑1,234 ↓567` — where ↑ is input tokens sent and ↓ is output tokens received. This appears automatically for every AI response.
+
 ---
 
 ## Status Indicators
@@ -99,6 +102,63 @@ Each message displays a header showing timestamp, role, and model in bracket for
 | **💭 ...** | The AI is reasoning through a ReAct tool chain (thinking → acting → observing) |
 | **⏳ Summarizing** | Background session summarization in progress (after clicking "New") |
 | **💾 Remembered** | The AI just stored an explicit memory |
+
+---
+
+## Token Usage Tracking
+
+Mixer automatically tracks token consumption across all LLM API calls, giving you visibility into how much context you're using and what it costs.
+
+### Per-Message Token Display
+
+Every assistant message shows token counts in the completion footer:
+
+```
+✓ 2026-08-13T12:53:26  ↑1,234 ↓567
+```
+
+| Symbol | Meaning |
+|---|---|
+| **↑** | Input tokens — the total prompt size sent to the model (system prompt + context + your message) |
+| **↓** | Output tokens — the number of tokens the model generated in its response |
+
+These counts come directly from the API response when available. For providers that don't return usage data, Mixer falls back to local token estimation.
+
+### Token Usage Panel
+
+Click **📊** in the right-side toolbar to open the Token Usage panel. It provides a comprehensive breakdown of your LLM consumption:
+
+**All-time summary (top of panel):**
+- Total input tokens consumed
+- Total output tokens generated
+- Total API calls made
+
+**Tabbed period views:**
+
+| Tab | Shows |
+|---|---|
+| **Daily** | Usage for each day |
+| **Weekly** | Usage aggregated by week |
+| **Monthly** | Usage aggregated by month |
+| **Yearly** | Usage aggregated by year |
+| **All Time** | Cumulative totals |
+
+Each period row displays:
+- Input tokens
+- Output tokens
+- Total tokens (input + output)
+- API call count
+
+**Clear All** — Resets all stored usage data. This is irreversible.
+
+### How Tracking Works
+
+- **Automatic** — Every LLM API call (chat completions, embeddings are excluded) is logged without any configuration.
+- **Accurate** — Uses actual token counts reported by the provider's API response (`usage.prompt_tokens`, `usage.completion_tokens`). When the API doesn't return usage data (some Ollama models, custom endpoints), Mixer estimates counts locally.
+- **Persistent** — Token usage is stored in the same SQLite database as the vector index, persisted across sessions via IndexedDB. Your data survives browser restarts, Logseq reloads, and plugin updates.
+- **Per-provider** — All providers (OpenAI, Ollama, LiteLLM) are tracked through the same system.
+
+> **Tip:** Use the token display to understand your context budget. If ↑ numbers are consistently high, consider trimming your system prompt or reducing the memory token budget in settings.
 
 ---
 
