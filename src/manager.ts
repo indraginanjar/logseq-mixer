@@ -24,6 +24,8 @@ import { setSubtaskSettings } from './agent/logseqTools';
 import { loadAllSkills, getSkillBody, buildSkillCatalogPrompt, buildSkillActivationContext } from './skills';
 import type { SkillEntry, SkillCatalogEntry } from './skills';
 import { resetQueryTokenAccumulator, getQueryTokenUsage } from './storage/logTokenUsage';
+import { getActiveAgent } from './agents/AgentConfigStore';
+import { resolveSettings } from './agents/resolveAgentSettings';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -533,6 +535,10 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   pendingAgentGoal = null;
   resetQueryTokenAccumulator();
 
+  // Resolve active agent config into effective settings
+  const activeAgent = getActiveAgent();
+  const resolvedSettings = resolveSettings(settings, activeAgent);
+
   // Detect explicit memory triggers early — before goal detection — so that
   // "Remember this: ..." messages are never misrouted to the agent loop.
   let earlyMemoryDetected = false;
@@ -613,7 +619,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   const vectorContext = relevantChunks.map(c => c.content).join('\n\n');
 
   // Build system message
-  let systemMessage = settings.prompt;
+  let systemMessage = resolvedSettings.prompt;
 
   // Inject environment context (date, timezone, locale, Logseq preferences)
   const now = new Date();
@@ -772,7 +778,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Execute via ReAct loop
   const tools = MCPManager.getInstance().getEnabledTools();
   const streamingEnabled = settings.streamingEnabled !== false && !editMode;
-  setSubtaskSettings(settings);
+  setSubtaskSettings(resolvedSettings);
 
   // Determine if tools are needed for this query.
   // Simple Q&A with RAG context doesn't need tools — prevents weaker models
@@ -781,7 +787,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   const needsTools = shouldIncludeTools(query, hasContext, !!editMode);
   console.log(`[handleQuery] needsTools=${needsTools}, hasContext=${hasContext}, editMode=${!!editMode}, mcpTools=${tools.length}`);
   const reactResult = await runReActLoop(messages, {
-    settings, signal,
+    settings: resolvedSettings, signal,
     maxIterations: settings.agentMaxIterations || 25,
     tokenBudget: 0,
     tools: needsTools ? tools : [],

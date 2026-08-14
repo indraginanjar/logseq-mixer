@@ -12,16 +12,22 @@ export interface MemoryEntry {
 
 export class MemoryStore {
   private db: Database;
+  private agentId: string;
 
-  constructor(db: Database) {
+  constructor(db: Database, agentId: string = 'default') {
     this.db = db;
+    this.agentId = agentId;
+  }
+
+  getAgentId(): string {
+    return this.agentId;
   }
 
   addMemory(category: string, content: string, source?: string, metadata?: string): string {
     const id = crypto.randomUUID();
     this.db.run(
-      'INSERT INTO agent_memory (id, category, content, created_at, last_accessed, source, metadata) VALUES (?, ?, ?, ?, NULL, ?, ?)',
-      [id, category, content, Date.now(), source ?? null, metadata ?? null]
+      'INSERT INTO agent_memory (id, category, content, created_at, last_accessed, source, metadata, agent_id) VALUES (?, ?, ?, ?, NULL, ?, ?, ?)',
+      [id, category, content, Date.now(), source ?? null, metadata ?? null, this.agentId]
     );
     return id;
   }
@@ -40,10 +46,10 @@ export class MemoryStore {
   }
 
   getMemories(filter?: { category?: string }): MemoryEntry[] {
-    let sql = 'SELECT id, category, content, created_at, last_accessed, source, metadata FROM agent_memory';
-    const params: any[] = [];
+    let sql = 'SELECT id, category, content, created_at, last_accessed, source, metadata FROM agent_memory WHERE agent_id = ?';
+    const params: any[] = [this.agentId];
     if (filter?.category) {
-      sql += ' WHERE category = ?';
+      sql += ' AND category = ?';
       params.push(filter.category);
     }
     sql += ' ORDER BY created_at DESC';
@@ -58,8 +64,8 @@ export class MemoryStore {
   }
 
   searchMemories(query: string): MemoryEntry[] {
-    const stmt = this.db.prepare('SELECT id, category, content, created_at, last_accessed, source, metadata FROM agent_memory WHERE content LIKE ? ORDER BY created_at DESC');
-    stmt.bind([`%${query}%`]);
+    const stmt = this.db.prepare('SELECT id, category, content, created_at, last_accessed, source, metadata FROM agent_memory WHERE agent_id = ? AND content LIKE ? ORDER BY created_at DESC');
+    stmt.bind([this.agentId, `%${query}%`]);
     const results: MemoryEntry[] = [];
     while (stmt.step()) {
       results.push(this.rowToEntry(stmt.get()));
@@ -69,20 +75,20 @@ export class MemoryStore {
   }
 
   updateMemory(id: string, content: string): void {
-    this.db.run('UPDATE agent_memory SET content = ? WHERE id = ?', [content, id]);
+    this.db.run('UPDATE agent_memory SET content = ? WHERE id = ? AND agent_id = ?', [content, id, this.agentId]);
   }
 
   deleteMemory(id: string): void {
-    this.db.run('DELETE FROM agent_memory WHERE id = ?', [id]);
+    this.db.run('DELETE FROM agent_memory WHERE id = ? AND agent_id = ?', [id, this.agentId]);
   }
 
   deleteAll(): void {
-    this.db.run('DELETE FROM agent_memory');
+    this.db.run('DELETE FROM agent_memory WHERE agent_id = ?', [this.agentId]);
   }
 
   getRecentMemories(limit: number): MemoryEntry[] {
-    const stmt = this.db.prepare('SELECT id, category, content, created_at, last_accessed, source, metadata FROM agent_memory ORDER BY created_at DESC LIMIT ?');
-    stmt.bind([limit]);
+    const stmt = this.db.prepare('SELECT id, category, content, created_at, last_accessed, source, metadata FROM agent_memory WHERE agent_id = ? ORDER BY created_at DESC LIMIT ?');
+    stmt.bind([this.agentId, limit]);
     const results: MemoryEntry[] = [];
     while (stmt.step()) {
       results.push(this.rowToEntry(stmt.get()));
@@ -92,7 +98,7 @@ export class MemoryStore {
   }
 
   getMemoryCount(): number {
-    const result = this.db.exec('SELECT COUNT(*) as cnt FROM agent_memory');
+    const result = this.db.exec('SELECT COUNT(*) as cnt FROM agent_memory WHERE agent_id = ?', [this.agentId]);
     return result.length > 0 ? (result[0].values[0][0] as number) : 0;
   }
 
@@ -100,8 +106,8 @@ export class MemoryStore {
     if (ids.length === 0) return;
     const placeholders = ids.map(() => '?').join(',');
     this.db.run(
-      `UPDATE agent_memory SET last_accessed = ? WHERE id IN (${placeholders})`,
-      [Date.now(), ...ids]
+      `UPDATE agent_memory SET last_accessed = ? WHERE id IN (${placeholders}) AND agent_id = ?`,
+      [Date.now(), ...ids, this.agentId]
     );
   }
 

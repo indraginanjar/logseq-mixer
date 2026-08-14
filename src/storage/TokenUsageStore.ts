@@ -31,7 +31,8 @@ export class TokenUsageStore {
         provider TEXT NOT NULL,
         prompt_tokens INTEGER NOT NULL,
         completion_tokens INTEGER NOT NULL,
-        total_tokens INTEGER NOT NULL
+        total_tokens INTEGER NOT NULL,
+        agent_id TEXT DEFAULT 'default'
       )
     `);
     this.db.run(
@@ -39,25 +40,35 @@ export class TokenUsageStore {
     );
   }
 
-  logUsage(model: string, provider: string, promptTokens: number, completionTokens: number): string {
+  logUsage(model: string, provider: string, promptTokens: number, completionTokens: number, agentId: string = 'default'): string {
     const id = crypto.randomUUID();
     const totalTokens = promptTokens + completionTokens;
     this.db.run(
-      'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, Date.now(), model, provider, promptTokens, completionTokens, totalTokens]
+      'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens, agent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, Date.now(), model, provider, promptTokens, completionTokens, totalTokens, agentId]
     );
     return id;
   }
 
-  getDaily(date?: Date): TokenUsageAggregate[] {
+  getDaily(date?: Date, agentId?: string): TokenUsageAggregate[] {
     let sql = 'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage';
     const params: any[] = [];
+    const conditions: string[] = [];
 
     if (date) {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
       const endOfDay = startOfDay + 86400000;
-      sql += ' WHERE timestamp >= ? AND timestamp < ?';
+      conditions.push('timestamp >= ? AND timestamp < ?');
       params.push(startOfDay, endOfDay);
+    }
+
+    if (agentId) {
+      conditions.push('agent_id = ?');
+      params.push(agentId);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
     }
 
     sql += ' ORDER BY timestamp DESC';
@@ -84,12 +95,20 @@ export class TokenUsageStore {
     return Array.from(groups.values());
   }
 
-  getWeekly(weeksBack: number = 12): TokenUsageAggregate[] {
+  getWeekly(weeksBack: number = 12, agentId?: string): TokenUsageAggregate[] {
     const cutoff = Date.now() - weeksBack * 7 * 86400000;
-    const stmt = this.db.prepare(
-      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ? ORDER BY timestamp DESC'
-    );
-    stmt.bind([cutoff]);
+    let sql = 'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ?';
+    const params: any[] = [cutoff];
+
+    if (agentId) {
+      sql += ' AND agent_id = ?';
+      params.push(agentId);
+    }
+
+    sql += ' ORDER BY timestamp DESC';
+
+    const stmt = this.db.prepare(sql);
+    stmt.bind(params);
 
     const groups = new Map<string, TokenUsageAggregate>();
 
@@ -110,15 +129,23 @@ export class TokenUsageStore {
     return Array.from(groups.values());
   }
 
-  getMonthly(monthsBack: number = 12): TokenUsageAggregate[] {
+  getMonthly(monthsBack: number = 12, agentId?: string): TokenUsageAggregate[] {
     const now = new Date();
     const cutoffDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
     const cutoff = cutoffDate.getTime();
 
-    const stmt = this.db.prepare(
-      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ? ORDER BY timestamp DESC'
-    );
-    stmt.bind([cutoff]);
+    let sql = 'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ?';
+    const params: any[] = [cutoff];
+
+    if (agentId) {
+      sql += ' AND agent_id = ?';
+      params.push(agentId);
+    }
+
+    sql += ' ORDER BY timestamp DESC';
+
+    const stmt = this.db.prepare(sql);
+    stmt.bind(params);
 
     const groups = new Map<string, TokenUsageAggregate>();
 
@@ -140,10 +167,19 @@ export class TokenUsageStore {
     return Array.from(groups.values());
   }
 
-  getYearly(): TokenUsageAggregate[] {
-    const stmt = this.db.prepare(
-      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage ORDER BY timestamp DESC'
-    );
+  getYearly(agentId?: string): TokenUsageAggregate[] {
+    let sql = 'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage';
+    const params: any[] = [];
+
+    if (agentId) {
+      sql += ' WHERE agent_id = ?';
+      params.push(agentId);
+    }
+
+    sql += ' ORDER BY timestamp DESC';
+
+    const stmt = this.db.prepare(sql);
+    if (params.length) stmt.bind(params);
 
     const groups = new Map<string, TokenUsageAggregate>();
 
@@ -164,10 +200,16 @@ export class TokenUsageStore {
     return Array.from(groups.values());
   }
 
-  getAllTime(): TokenUsageAggregate {
-    const result = this.db.exec(
-      'SELECT COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(total_tokens), 0), COUNT(*) FROM token_usage'
-    );
+  getAllTime(agentId?: string): TokenUsageAggregate {
+    let sql = 'SELECT COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(total_tokens), 0), COUNT(*) FROM token_usage';
+    const params: any[] = [];
+
+    if (agentId) {
+      sql += ' WHERE agent_id = ?';
+      params.push(agentId);
+    }
+
+    const result = this.db.exec(sql, params);
 
     if (result.length === 0 || result[0].values.length === 0) {
       return { periodLabel: 'all', promptTokens: 0, completionTokens: 0, totalTokens: 0, callCount: 0 };
@@ -183,11 +225,20 @@ export class TokenUsageStore {
     };
   }
 
-  getRecentEntries(limit: number = 50): TokenUsageEntry[] {
-    const stmt = this.db.prepare(
-      'SELECT id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens FROM token_usage ORDER BY timestamp DESC LIMIT ?'
-    );
-    stmt.bind([limit]);
+  getRecentEntries(limit: number = 50, agentId?: string): TokenUsageEntry[] {
+    let sql = 'SELECT id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens FROM token_usage';
+    const params: any[] = [];
+
+    if (agentId) {
+      sql += ' WHERE agent_id = ?';
+      params.push(agentId);
+    }
+
+    sql += ' ORDER BY timestamp DESC LIMIT ?';
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    stmt.bind(params);
 
     const results: TokenUsageEntry[] = [];
     while (stmt.step()) {
@@ -207,8 +258,16 @@ export class TokenUsageStore {
     return results;
   }
 
-  getTotalCount(): number {
-    const result = this.db.exec('SELECT COUNT(*) FROM token_usage');
+  getTotalCount(agentId?: string): number {
+    let sql = 'SELECT COUNT(*) FROM token_usage';
+    const params: any[] = [];
+
+    if (agentId) {
+      sql += ' WHERE agent_id = ?';
+      params.push(agentId);
+    }
+
+    const result = this.db.exec(sql, params);
     return result.length > 0 ? (result[0].values[0][0] as number) : 0;
   }
 

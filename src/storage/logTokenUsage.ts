@@ -1,5 +1,6 @@
 import { getTokenUsageStore } from './tokenUsageInstance';
 import { countTokens } from '../tokenizer';
+import { getActiveAgentId } from '../agents/AgentConfigStore';
 
 /** Accumulated token usage for the current query (reset per handleQuery call). */
 let _queryPromptTokens = 0;
@@ -66,7 +67,8 @@ export function logTokenUsage(response: any, model: string, provider: string, me
   const store = getTokenUsageStore();
   if (!store) return;
   try {
-    store.logUsage(model, provider, prompt_tokens || 0, completion_tokens || 0);
+    const agentId = getActiveAgentId() || 'default';
+    store.logUsage(model, provider, prompt_tokens || 0, completion_tokens || 0, agentId);
   } catch (err) {
     console.warn('[TokenUsage] Failed to log usage:', err);
   }

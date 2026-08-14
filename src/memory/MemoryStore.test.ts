@@ -15,7 +15,8 @@ describe('MemoryStore', () => {
       created_at INTEGER NOT NULL,
       last_accessed INTEGER,
       source TEXT,
-      metadata TEXT
+      metadata TEXT,
+      agent_id TEXT DEFAULT 'default'
     )`);
     store = new MemoryStore(db);
   });
@@ -106,5 +107,51 @@ describe('MemoryStore', () => {
     const result = store.addMemoryIfUnique('fact', 'The project uses React');
     expect(result).not.toBeNull();
     expect(store.getMemoryCount()).toBe(2);
+  });
+
+  it('isolates memories between agents', async () => {
+    const SQL = await initSqlJs();
+    const db = new SQL.Database();
+    db.run(`CREATE TABLE IF NOT EXISTS agent_memory (
+      id TEXT PRIMARY KEY,
+      category TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_accessed INTEGER,
+      source TEXT,
+      metadata TEXT,
+      agent_id TEXT DEFAULT 'default'
+    )`);
+
+    const storeA = new MemoryStore(db, 'agent-alpha');
+    const storeB = new MemoryStore(db, 'agent-beta');
+
+    storeA.addMemory('fact', 'Alpha secret');
+    storeB.addMemory('fact', 'Beta secret');
+    storeB.addMemory('preference', 'Beta pref');
+
+    // Each agent only sees its own memories
+    expect(storeA.getMemories()).toHaveLength(1);
+    expect(storeA.getMemories()[0].content).toBe('Alpha secret');
+    expect(storeB.getMemories()).toHaveLength(2);
+
+    // Search is scoped
+    expect(storeA.searchMemories('secret')).toHaveLength(1);
+    expect(storeA.searchMemories('secret')[0].content).toBe('Alpha secret');
+    expect(storeB.searchMemories('secret')).toHaveLength(1);
+    expect(storeB.searchMemories('secret')[0].content).toBe('Beta secret');
+
+    // Count is scoped
+    expect(storeA.getMemoryCount()).toBe(1);
+    expect(storeB.getMemoryCount()).toBe(2);
+
+    // Delete all from one agent doesn't affect the other
+    storeA.deleteAll();
+    expect(storeA.getMemoryCount()).toBe(0);
+    expect(storeB.getMemoryCount()).toBe(2);
+
+    // getAgentId returns the correct id
+    expect(storeA.getAgentId()).toBe('agent-alpha');
+    expect(storeB.getAgentId()).toBe('agent-beta');
   });
 });

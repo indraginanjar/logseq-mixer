@@ -86,15 +86,15 @@ describe('TokenUsageStore', () => {
       yesterday.setDate(yesterday.getDate() - 1);
 
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id1', today.getTime(), 'gpt-4o', 'openai', 100, 50, 150]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id2', today.getTime() + 1000, 'gpt-4o', 'openai', 200, 80, 280]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id3', yesterday.getTime(), 'gpt-4o', 'openai', 50, 25, 75]
       );
 
@@ -126,11 +126,11 @@ describe('TokenUsageStore', () => {
       yesterday.setDate(yesterday.getDate() - 1);
 
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id1', today.getTime(), 'gpt-4o', 'openai', 100, 50, 150]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id2', yesterday.getTime(), 'gpt-4o', 'openai', 200, 100, 300]
       );
 
@@ -151,15 +151,15 @@ describe('TokenUsageStore', () => {
       const oneWeekAgo = now - 7 * 86400000;
 
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id1', now, 'gpt-4o', 'openai', 100, 50, 150]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id2', now - 1000, 'gpt-4o', 'openai', 200, 80, 280]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id3', oneWeekAgo, 'gpt-4o', 'openai', 50, 25, 75]
       );
 
@@ -177,11 +177,11 @@ describe('TokenUsageStore', () => {
       const longAgo = now - 20 * 7 * 86400000; // 20 weeks ago
 
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id1', now, 'gpt-4o', 'openai', 100, 50, 150]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id2', longAgo, 'gpt-4o', 'openai', 200, 100, 300]
       );
 
@@ -207,15 +207,15 @@ describe('TokenUsageStore', () => {
       const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15).getTime();
 
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id1', thisMonth, 'gpt-4o', 'openai', 100, 50, 150]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id2', thisMonth + 86400000, 'gpt-4o', 'openai', 200, 80, 280]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id3', lastMonth, 'gpt-4o', 'openai', 50, 25, 75]
       );
 
@@ -241,11 +241,11 @@ describe('TokenUsageStore', () => {
       const lastYear = new Date(2025, 5, 15).getTime();
 
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id1', thisYear, 'gpt-4o', 'openai', 100, 50, 150]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id2', lastYear, 'gpt-4o', 'openai', 200, 100, 300]
       );
 
@@ -270,15 +270,15 @@ describe('TokenUsageStore', () => {
     it('returns entries in descending timestamp order', () => {
       const db = (store as any).db;
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id1', 1000, 'gpt-4o', 'openai', 100, 50, 150]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id2', 2000, 'gpt-4o', 'openai', 200, 100, 300]
       );
       db.run(
-        'INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO token_usage (id, timestamp, model, provider, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ['id3', 3000, 'llama3', 'ollama', 300, 150, 450]
       );
 
