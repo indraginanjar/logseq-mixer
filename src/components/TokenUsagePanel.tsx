@@ -325,6 +325,12 @@ export default function TokenUsagePanel({ onClose }: TokenUsagePanelProps) {
     loadData();
   }, [store, activeTab]);
 
+  // Auto-refresh every 5 seconds while panel is open
+  useEffect(() => {
+    const interval = setInterval(loadData, 5000);
+    return () => clearInterval(interval);
+  }, [store, activeTab]);
+
   useEffect(() => {
     const handleKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') onClose();

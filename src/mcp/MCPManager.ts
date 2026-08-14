@@ -25,6 +25,9 @@ export class MCPManager {
   // Mapping of generated function names to their corresponding server and tool details
   private functionMapping = new Map<string, { serverName: string; originalToolName: string }>();
   
+  // Track servers that have already shown their first-connect notification
+  private notifiedServers = new Set<string>();
+  
   public configError: string | null = null;
   private onClientsChangeCallbacks = new Set<() => void>();
 
@@ -47,6 +50,18 @@ export class MCPManager {
   }
 
   private notifyClientsChange() {
+    // Check for newly connected servers with tools that haven't been notified yet
+    this.clients.forEach((client, serverName) => {
+      if (
+        client.status === 'connected' &&
+        client.tools.length > 0 &&
+        !this.notifiedServers.has(serverName) &&
+        !this.hasToolStatesForServer(serverName)
+      ) {
+        this.notifiedServers.add(serverName);
+        this.notifyNewServerTools(serverName, client.tools);
+      }
+    });
     this.onClientsChangeCallbacks.forEach((cb) => cb());
   }
 
@@ -80,6 +95,52 @@ export class MCPManager {
     this.toolStates[key] = enabled;
     this.saveToolStates();
     this.notifyClientsChange();
+  }
+
+  /** Enable or disable all tools for a given server at once. */
+  public setAllToolsEnabled(serverName: string, enabled: boolean): void {
+    const client = this.clients.get(serverName);
+    if (!client) return;
+    for (const tool of client.tools) {
+      const key = `${serverName}:${tool.name}`;
+      this.toolStates[key] = enabled;
+    }
+    this.saveToolStates();
+    this.notifyClientsChange();
+  }
+
+  /** Check if a server has any tools with prior toggle state saved (i.e. not first connect). */
+  public hasToolStatesForServer(serverName: string): boolean {
+    const prefix = `${serverName}:`;
+    return Object.keys(this.toolStates).some(key => key.startsWith(prefix));
+  }
+
+  /**
+   * Notify the user about a newly connected MCP server's tools.
+   * Highlights potentially dangerous tools (write, delete, execute, etc).
+   */
+  public notifyNewServerTools(serverName: string, tools: MCPTool[]): void {
+    if (tools.length === 0) return;
+
+    // Patterns indicating potentially dangerous operations
+    const DANGEROUS_PATTERNS = /\b(delete|remove|write|create|execute|run|exec|kill|drop|truncate|modify|update|send|post|put|patch|push|deploy|install|uninstall)\b/i;
+
+    const dangerousTools = tools.filter(t => {
+      const text = `${t.name} ${t.description || ''}`;
+      return DANGEROUS_PATTERNS.test(text);
+    });
+
+    let msg = `🔌 MCP "${serverName}" connected — ${tools.length} tool${tools.length > 1 ? 's' : ''} available.`;
+    if (dangerousTools.length > 0) {
+      msg += `\n⚠️ ${dangerousTools.length} tool${dangerousTools.length > 1 ? 's' : ''} can modify data: ${dangerousTools.slice(0, 5).map(t => t.name).join(', ')}${dangerousTools.length > 5 ? '…' : ''}.`;
+      msg += `\nReview in MCP panel.`;
+    }
+
+    try {
+      window.logseq?.UI?.showMsg(msg, dangerousTools.length > 0 ? 'warning' : 'success', { timeout: dangerousTools.length > 0 ? 8000 : 5000 });
+    } catch {
+      console.info('[MCPManager]', msg);
+    }
   }
 
   public getServers(): MCPClient[] {

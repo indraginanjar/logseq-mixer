@@ -60,7 +60,7 @@ export class TokenUsageStore {
       params.push(startOfDay, endOfDay);
     }
 
-    sql += ' ORDER BY timestamp ASC';
+    sql += ' ORDER BY timestamp DESC';
 
     const stmt = this.db.prepare(sql);
     if (params.length) stmt.bind(params);
@@ -87,7 +87,7 @@ export class TokenUsageStore {
   getWeekly(weeksBack: number = 12): TokenUsageAggregate[] {
     const cutoff = Date.now() - weeksBack * 7 * 86400000;
     const stmt = this.db.prepare(
-      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ? ORDER BY timestamp ASC'
+      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ? ORDER BY timestamp DESC'
     );
     stmt.bind([cutoff]);
 
@@ -116,7 +116,7 @@ export class TokenUsageStore {
     const cutoff = cutoffDate.getTime();
 
     const stmt = this.db.prepare(
-      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ? ORDER BY timestamp ASC'
+      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage WHERE timestamp >= ? ORDER BY timestamp DESC'
     );
     stmt.bind([cutoff]);
 
@@ -142,7 +142,7 @@ export class TokenUsageStore {
 
   getYearly(): TokenUsageAggregate[] {
     const stmt = this.db.prepare(
-      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage ORDER BY timestamp ASC'
+      'SELECT timestamp, prompt_tokens, completion_tokens, total_tokens FROM token_usage ORDER BY timestamp DESC'
     );
 
     const groups = new Map<string, TokenUsageAggregate>();

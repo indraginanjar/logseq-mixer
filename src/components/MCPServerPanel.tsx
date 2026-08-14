@@ -601,25 +601,60 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
                         {client.tools.length === 0 ? (
                           <EmptyToolState>No tools declared by this server.</EmptyToolState>
                         ) : (
-                          client.tools.map((tool) => {
-                            const isEnabled = manager.isToolEnabled(client.name, tool.name);
-                            return (
-                              <ToolItem key={tool.name}>
-                                <ToolDetails>
-                                  <ToolName>{tool.name}</ToolName>
-                                  {tool.description && <ToolDesc>{tool.description}</ToolDesc>}
-                                </ToolDetails>
-                                <SwitchContainer>
-                                  <SwitchInput
-                                    type="checkbox"
-                                    checked={isEnabled}
-                                    onChange={(e) => handleToggleTool(client.name, tool.name, e.target.checked)}
-                                  />
-                                  <SwitchSlider active={isEnabled} />
-                                </SwitchContainer>
-                              </ToolItem>
-                            );
-                          })
+                          <>
+                            {/* Mass toggle header */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 0 10px 0',
+                              borderBottom: '1px solid var(--colors-slate5, #e2e8f0)',
+                              marginBottom: '4px',
+                            }}>
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--colors-slate10, #64748b)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                {enabledCount}/{totalCount} tools enabled
+                              </span>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                {enabledCount < totalCount && (
+                                  <button
+                                    onClick={() => manager.setAllToolsEnabled(client.name, true)}
+                                    style={{ background: 'none', border: '1px solid #94a3b8', borderRadius: '4px', fontSize: '10px', padding: '2px 7px', cursor: 'pointer', color: '#64748b' }}
+                                    title="Enable all tools"
+                                  >
+                                    Enable all
+                                  </button>
+                                )}
+                                {enabledCount > 0 && (
+                                  <button
+                                    onClick={() => manager.setAllToolsEnabled(client.name, false)}
+                                    style={{ background: 'none', border: '1px solid #94a3b8', borderRadius: '4px', fontSize: '10px', padding: '2px 7px', cursor: 'pointer', color: '#64748b' }}
+                                    title="Disable all tools"
+                                  >
+                                    Disable all
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {client.tools.map((tool) => {
+                              const isEnabled = manager.isToolEnabled(client.name, tool.name);
+                              return (
+                                <ToolItem key={tool.name}>
+                                  <ToolDetails>
+                                    <ToolName>{tool.name}</ToolName>
+                                    {tool.description && <ToolDesc>{tool.description}</ToolDesc>}
+                                  </ToolDetails>
+                                  <SwitchContainer>
+                                    <SwitchInput
+                                      type="checkbox"
+                                      checked={isEnabled}
+                                      onChange={(e) => handleToggleTool(client.name, tool.name, e.target.checked)}
+                                    />
+                                    <SwitchSlider active={isEnabled} />
+                                  </SwitchContainer>
+                                </ToolItem>
+                              );
+                            })}
+                          </>
                         )}
                       </ToolListContainer>
                     )}
