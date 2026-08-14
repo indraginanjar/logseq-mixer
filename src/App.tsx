@@ -260,6 +260,18 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [activeAgentId, setActiveAgentId] = useState(getActiveAgentId());
   const [showAgentPanel, setShowAgentPanel] = useState(false);
 
+  // Refresh agents list after migration may have run (lazy storage init)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const loaded = loadAgents();
+      if (loaded.length > 0 && agents.length === 0) {
+        setAgents(loaded);
+        setActiveAgentId(getActiveAgentId());
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Wrappers for hook functions that need refs from this component
   const handleSubmit = () => handleSubmitRaw(textareaRef as React.RefObject<HTMLTextAreaElement>);
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => handleKeyDownRaw(e, handleSubmit);

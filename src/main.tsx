@@ -9,6 +9,7 @@ import type { StorageProvider } from './storage/StorageProvider';
 import { ensureInitialized as ensureTokenizerReady } from './tokenizer';
 import { TokenUsageStore } from './storage/TokenUsageStore';
 import { setTokenUsageStore } from './storage/tokenUsageInstance';
+import { migrateToMultiAgent } from './agents/agentMigration';
 
 /**
  * Lazy storage provider wrapper. Defers the heavy SQLite WASM initialization
@@ -32,6 +33,9 @@ function createLazyStorageProvider(): StorageProvider {
         const db = (p as any).db;
         if (db) {
           setTokenUsageStore(new TokenUsageStore(db));
+          // Run multi-agent migration (idempotent — safe on subsequent loads)
+          const currentPrompt = (window.logseq?.settings?.prompt as string) || '';
+          migrateToMultiAgent(db, currentPrompt);
         }
         return p;
       })();
