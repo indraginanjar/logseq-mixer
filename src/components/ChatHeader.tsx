@@ -1,5 +1,6 @@
 import React from 'react';
 import { styled } from '../stitches.config';
+import AgentSelector from './AgentSelector';
 import ModelSelector from './ModelSelector';
 import EffortSelector from './EffortSelector';
 import { MemoryIndicator } from './MemoryIndicator';
@@ -77,6 +78,10 @@ const HeaderButton = styled('button', {
 
 interface ChatHeaderProps {
   themeMode: string;
+  agents: Array<{ id: string; name: string; icon: string; isDefault: boolean }>;
+  activeAgentId: string | null;
+  onAgentSwitch: (agentId: string) => void;
+  onManageAgents: () => void;
   currentModel: string;
   modelChoices: string[];
   onModelChange: (model: string) => void;
@@ -92,6 +97,10 @@ interface ChatHeaderProps {
 
 export function ChatHeader({
   themeMode,
+  agents,
+  activeAgentId,
+  onAgentSwitch,
+  onManageAgents,
   currentModel,
   modelChoices,
   onModelChange,
@@ -109,6 +118,12 @@ export function ChatHeader({
         <Title>Mixer</Title>
       </HeaderLeft>
       <HeaderRight>
+        <AgentSelector
+          agents={agents}
+          activeAgentId={activeAgentId}
+          onSwitch={onAgentSwitch}
+          onManage={onManageAgents}
+        />
         <ModelSelector
           value={currentModel}
           choices={modelChoices}

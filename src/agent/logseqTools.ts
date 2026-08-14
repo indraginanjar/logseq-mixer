@@ -110,6 +110,48 @@ export const LOGSEQ_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'handoff_to_agent',
+      description: 'Transfer this conversation to another agent. The current conversation ends and the user will interact with the target agent going forward. Use this when the user\'s request is better handled by a different specialized agent.',
+      parameters: {
+        type: 'object',
+        properties: {
+          agent_name: {
+            type: 'string',
+            description: 'Name of the agent to hand off to',
+          },
+          context: {
+            type: 'string',
+            description: 'Brief context/summary to pass to the receiving agent about what the user needs',
+          },
+        },
+        required: ['agent_name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'delegate_to_agent',
+      description: 'Delegate a task to another named agent and get its response. The delegated agent runs with its own personality, tools, and memory. Use this when a task is better suited to a specialized agent.',
+      parameters: {
+        type: 'object',
+        properties: {
+          agent_name: {
+            type: 'string',
+            description: 'Name of the agent to delegate to (e.g., "Researcher", "Coder")',
+          },
+          task: {
+            type: 'string',
+            description: 'The task or question to send to the target agent',
+          },
+        },
+        required: ['agent_name', 'task'],
+      },
+    },
+  },
 ];
 
 /**
@@ -341,6 +383,58 @@ export async function executeLogseqTool(name: string, args: any): Promise<string
         return `[Subtask completed in ${result.iterations} iterations, ${result.toolCalls.length} tool calls]\n\n${summary}`;
       } catch (err: any) {
         return `Subtask failed: ${err.message || err}`;
+      }
+    }
+    case 'handoff_to_agent': {
+      const { agent_name, context: handoffContext } = args;
+      if (!agent_name) return 'Error: agent_name is required';
+
+      const { getAgentByName } = await import('../agents/AgentConfigStore');
+      const targetAgent = getAgentByName(agent_name);
+      if (!targetAgent) return `Error: Agent "${agent_name}" not found.`;
+
+      const { setPendingAgentHandoff } = await import('../manager');
+      setPendingAgentHandoff(agent_name, handoffContext || '');
+
+      return `Handing off conversation to ${agent_name}${handoffContext ? ': ' + handoffContext : ''}`;
+    }
+    case 'delegate_to_agent': {
+      const { agent_name, task } = args;
+      if (!agent_name || !task) return 'Error: agent_name and task are required';
+
+      const { getAgentByName } = await import('../agents/AgentConfigStore');
+      const { resolveSettings } = await import('../agents/resolveAgentSettings');
+
+      const targetAgent = getAgentByName(agent_name);
+      if (!targetAgent) return `Error: Agent "${agent_name}" not found. Available agents can be seen in the Agent panel.`;
+
+      // Prevent self-delegation
+      const { getActiveAgentId } = await import('../agents/AgentConfigStore');
+      if (targetAgent.id === getActiveAgentId()) return 'Error: Cannot delegate to the currently active agent (self-delegation).';
+
+      // Resolve settings for target agent
+      const currentSettings = getSubtaskSettings();
+      const targetSettings = resolveSettings(currentSettings, targetAgent);
+
+      // Build messages with target agent's system prompt
+      const messages = [
+        { role: 'system' as const, content: targetAgent.systemPrompt },
+        { role: 'user' as const, content: task },
+      ];
+
+      try {
+        const { runReActLoop } = await import('./ReActLoop');
+        const result = await runReActLoop(messages, {
+          settings: targetSettings,
+          maxIterations: 10,
+          tokenBudget: 0,
+          tools: [],
+          includeLogseqTools: true,
+          includeLogseqWriteTools: false,
+        });
+        return result.answer || '(No response from delegated agent)';
+      } catch (err: any) {
+        return `Error during delegation: ${err.message}`;
       }
     }
     default:

@@ -175,6 +175,21 @@ export async function activateSkill(name: string): Promise<string | null> {
 export let pendingAgentGoal: string | null = null;
 export function clearPendingAgentGoal(): void { pendingAgentGoal = null; }
 
+/** Pending agent handoff detected during tool execution. */
+let pendingAgentHandoff: { targetAgentName: string; context: string } | null = null;
+
+export function setPendingAgentHandoff(target: string, context: string): void {
+  pendingAgentHandoff = { targetAgentName: target, context };
+}
+
+export function getPendingAgentHandoff(): { targetAgentName: string; context: string } | null {
+  return pendingAgentHandoff;
+}
+
+export function clearPendingAgentHandoff(): void {
+  pendingAgentHandoff = null;
+}
+
 /**
  * Ensure the BM25 index is initialized. If it hasn't been created yet,
  * build it from all document content in the storage provider.

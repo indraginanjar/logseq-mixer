@@ -44,6 +44,9 @@ vi.mock('./manager', () => ({
   setOnThoughtCallback: vi.fn(),
   pendingAgentGoal: null,
   clearPendingAgentGoal: vi.fn(),
+  getPendingAgentHandoff: vi.fn(() => null),
+  clearPendingAgentHandoff: vi.fn(),
+  setPendingAgentHandoff: vi.fn(),
 }));
 
 // Mock useAppVisible to always return true so the component renders

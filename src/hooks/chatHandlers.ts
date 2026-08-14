@@ -1,6 +1,6 @@
 import { ChatMessage } from 'components/ChatMessageList';
 import { MemoryStore } from '../memory/MemoryStore';
-import { pendingAgentGoal, clearPendingAgentGoal } from '../manager';
+import { pendingAgentGoal, clearPendingAgentGoal, getPendingAgentHandoff, clearPendingAgentHandoff } from '../manager';
 import { AgentLoop } from '../agent/AgentLoop';
 import type { AgentProgressEvent, AgentStep } from '../agent/types';
 import { addToConversationHistory, handleQuery } from 'manager';
@@ -376,6 +376,20 @@ export async function handleChatQuery(params: ChatQueryParams): Promise<void> {
         setAgentRunning(true);
         loop.run(plan);
       }
+      return;
+    }
+
+    // Check for agent handoff
+    const handoff = getPendingAgentHandoff();
+    if (handoff) {
+      clearPendingAgentHandoff();
+      setMessages(prev => [...prev, {
+        id: `handoff_${Date.now()}`,
+        content: `🔀 Handed off to **${handoff.targetAgentName}**${handoff.context ? ': ' + handoff.context : ''}`,
+        sender: 'assistant',
+        timestamp: chatTimestamp(),
+      }]);
+      setLoading(false);
       return;
     }
 

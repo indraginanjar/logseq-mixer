@@ -1,6 +1,7 @@
 import { AppUserConfigs } from '@logseq/libs/dist/LSPlugin';
 import ChatMessageList from 'components/ChatMessageList';
 import MCPServerPanel from 'components/MCPServerPanel';
+import AgentPanel from './components/AgentPanel';
 import MemoryPanel from './components/MemoryPanel';
 import SkillPanel from './components/SkillPanel';
 import TokenUsagePanel from './components/TokenUsagePanel';
@@ -23,6 +24,8 @@ import { useModelSelection } from './hooks/useModelSelection';
 import { useIndexing } from './hooks/useIndexing';
 import { useAgentController } from './hooks/useAgentController';
 import { useChatSession } from './hooks/useChatSession';
+import { loadAgents, getActiveAgentId } from './agents/AgentConfigStore';
+import { switchAgent } from './agents/agentSwitcher';
 import { aiEditModeState, settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
@@ -253,6 +256,9 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [showSkillPanel, setShowSkillPanel] = useState(false);
   const [showTokenUsagePanel, setShowTokenUsagePanel] = useState(false);
   const [skillCount, setSkillCount] = useState(0);
+  const [agents, setAgents] = useState(loadAgents());
+  const [activeAgentId, setActiveAgentId] = useState(getActiveAgentId());
+  const [showAgentPanel, setShowAgentPanel] = useState(false);
 
   // Wrappers for hook functions that need refs from this component
   const handleSubmit = () => handleSubmitRaw(textareaRef as React.RefObject<HTMLTextAreaElement>);
@@ -260,6 +266,26 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const handleIndexDB = async () => {
     const errMsg = await handleIndexDBRaw();
     if (errMsg) setError(errMsg);
+  };
+
+  const handleAgentSwitch = (agentId: string) => {
+    try {
+      const currentState = { history: [], messages: messages };
+      switchAgent(currentState, agentId);
+      setActiveAgentId(agentId);
+      setAgents(loadAgents());
+    } catch (err) {
+      console.error('[App] Agent switch failed:', err);
+    }
+  };
+
+  const handleOpenAgentPanel = () => {
+    setShowDbPanel(false);
+    setShowMcpPanel(false);
+    setShowMemoryPanel(false);
+    setShowSkillPanel(false);
+    setShowTokenUsagePanel(false);
+    setShowAgentPanel(prev => !prev);
   };
 
   // Initialize and lifecycle manage MCPManager
@@ -355,6 +381,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowMemoryPanel(false);
     setShowSkillPanel(false);
     setShowTokenUsagePanel(false);
+    setShowAgentPanel(false);
     setShowDbPanel(true);
     if (storageProvider.getDocumentCount) {
       try { const count = await storageProvider.getDocumentCount(); setDocCount(count); } catch { /* ignore */ }
@@ -372,6 +399,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowMemoryPanel(false);
     setShowSkillPanel(false);
     setShowTokenUsagePanel(false);
+    setShowAgentPanel(false);
     setShowMcpPanel(prev => !prev);
   };
 
@@ -380,6 +408,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowMcpPanel(false);
     setShowSkillPanel(false);
     setShowTokenUsagePanel(false);
+    setShowAgentPanel(false);
     setShowMemoryPanel(prev => !prev);
   };
 
@@ -388,6 +417,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowMcpPanel(false);
     setShowMemoryPanel(false);
     setShowTokenUsagePanel(false);
+    setShowAgentPanel(false);
     setShowSkillPanel(prev => !prev);
   };
 
@@ -396,6 +426,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
     setShowMcpPanel(false);
     setShowMemoryPanel(false);
     setShowSkillPanel(false);
+    setShowAgentPanel(false);
     setShowTokenUsagePanel(prev => !prev);
   };
 
@@ -428,6 +459,10 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
         />
         <ChatHeader
           themeMode={themeMode}
+          agents={agents}
+          activeAgentId={activeAgentId}
+          onAgentSwitch={handleAgentSwitch}
+          onManageAgents={handleOpenAgentPanel}
           currentModel={currentModel}
           modelChoices={modelChoices}
           onModelChange={handleModelChange}
@@ -570,6 +605,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
           />
         )}
         {showTokenUsagePanel && <TokenUsagePanel onClose={() => setShowTokenUsagePanel(false)} />}
+        {showAgentPanel && <AgentPanel onClose={() => setShowAgentPanel(false)} onAgentChange={() => setAgents(loadAgents())} />}
       </ChatPanel>
     </Overlay>
   );
