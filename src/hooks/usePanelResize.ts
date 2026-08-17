@@ -4,8 +4,8 @@ export function usePanelResize(panelRef: React.RefObject<HTMLDivElement>) {
   const [panelWidth, setPanelWidth] = useState(() => {
     try {
       const saved = localStorage.getItem('logseq-mixer-panel-width');
-      return saved ? Math.max(320, Math.min(Number(saved), window.innerWidth * 0.85)) : 520;
-    } catch { return 520; }
+      return saved ? Math.max(320, Math.min(Number(saved), window.innerWidth * 0.85)) : 1040;
+    } catch { return 1040; }
   });
   const isResizingRef = useRef(false);
 
