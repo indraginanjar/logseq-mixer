@@ -185,7 +185,12 @@ export function DatabasePanel({
   const [newSourceLabel, setNewSourceLabel] = useState('');
   const [crossError, setCrossError] = useState<string | null>(null);
 
-  const crossGraphEnabled = settings?.crossGraphEnabled !== false && settings?.crossGraphEnabled === true;
+  const crossGraphEnabled = settings?.crossGraphEnabled === true;
+
+  const handleToggleCrossGraph = async () => {
+    const newValue = !crossGraphEnabled;
+    await window.logseq.updateSettings({ crossGraphEnabled: newValue });
+  };
 
   const handleAddSource = () => {
     const path = newSourcePath.trim();
@@ -305,9 +310,29 @@ export function DatabasePanel({
       {/* Cross-Graph Sources */}
       <div style={{ marginTop: '20px', borderTop: '1px solid var(--colors-slate6, #e2e8f0)', paddingTop: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--colors-highContrast, #1e293b)' }}>
-            🌐 Cross-Graph Search
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--colors-highContrast, #1e293b)' }}>
+              🌐 Cross-Graph Search
+            </span>
+            <label style={{ position: 'relative', display: 'inline-block', width: '34px', height: '18px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={crossGraphEnabled}
+                onChange={handleToggleCrossGraph}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: crossGraphEnabled ? 'var(--colors-blue9, #3b82f6)' : 'var(--colors-slate6, #cbd5e1)',
+                borderRadius: '18px', transition: '0.2s',
+              }}>
+                <span style={{
+                  position: 'absolute', height: '12px', width: '12px', left: crossGraphEnabled ? '19px' : '3px', bottom: '3px',
+                  backgroundColor: 'white', borderRadius: '50%', transition: '0.2s',
+                }} />
+              </span>
+            </label>
+          </div>
           {crossGraphEnabled && (
             <button
               onClick={() => { setAddingSource(true); setCrossError(null); }}
@@ -320,8 +345,8 @@ export function DatabasePanel({
         </div>
 
         {!crossGraphEnabled && (
-          <div style={{ fontSize: '12px', color: 'var(--colors-slate9, #94a3b8)', padding: '8px 0' }}>
-            Disabled. Enable <strong>Cross-Graph Search</strong> in plugin settings to search other graphs.
+          <div style={{ fontSize: '12px', color: 'var(--colors-slate9, #94a3b8)', padding: '4px 0' }}>
+            Toggle on to search other Logseq graphs alongside your current one.
           </div>
         )}
 

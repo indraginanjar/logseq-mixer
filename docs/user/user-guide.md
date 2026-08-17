@@ -584,9 +584,9 @@ Search across multiple Logseq graphs simultaneously. When enabled, RAG queries a
 | **Cross-Graph Search** | `false` | Enable searching other Logseq graphs' indexes during RAG retrieval |
 
 **Setup:**
-1. Enable **Cross-Graph Search** in plugin settings
-2. Open the **🗄️ Database Center** panel
-3. In the "🌐 Cross-Graph Search" section, click **➕ Add Graph**
+1. Open the **🗄️ Database Center** panel
+2. In the "🌐 Cross-Graph Search" section, toggle it **ON**
+3. Click **➕ Add Graph**
 4. Enter the graph's file system path and an optional label
 5. Results from other graphs will appear with `[From: GraphName]` attribution
 
