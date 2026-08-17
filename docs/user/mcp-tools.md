@@ -52,7 +52,17 @@ npx -y mcp-proxy --port 3002 -- cmd /c npx -y @playwright/mcp@latest
 
 ### Step 2: Configure in Logseq
 
-Open **Settings → Plugin Settings → Mixer** and set `mcpServers`:
+**Option A — Add Server UI (easiest):**
+
+1. Open the Mixer chat panel
+2. Click **🔌 MCP Servers**
+3. Click **➕ Add** in the panel header
+4. Enter a name (e.g., `playwright`) and the URL (e.g., `http://localhost:3002/sse`)
+5. Click **Add Server** — done
+
+**Option B — Edit JSON directly:**
+
+Open **Settings → Plugin Settings → Mixer** and set `mcpServers` (or click **⚙️ Edit JSON** in the MCP panel):
 
 ```json
 {
@@ -62,11 +72,13 @@ Open **Settings → Plugin Settings → Mixer** and set `mcpServers`:
 }
 ```
 
+**Removing a server:** Click the 🗑️ icon on any server card in the MCP panel, or remove it from the JSON config.
+
 ### Step 3: Verify Connection
 
 1. Open the Mixer chat panel
-2. Click **🔌 MCP Servers**
-3. The server should show as **connected** (green)
+2. Click **🔌 MCP Servers** (or click **🔄 Refresh** if already open)
+3. The server should show as **connected** (green dot)
 4. Expand it to see available tools and toggle them on/off
 
 ---

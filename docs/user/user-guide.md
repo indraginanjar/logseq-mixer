@@ -59,7 +59,7 @@ These control what the AI *can do* in response to your messages.
 | Button | Opens |
 |---|---|
 | **🗄️** | **Database Center** — Index stats (pages, chunks, DB size), export/import/clear actions |
-| **🔌** | **MCP Servers** — Manage external tool connections (web search, file system, browser) |
+| **🔌** | **MCP Servers** — Manage external tool connections. Add servers with ➕, remove with 🗑️, enable/disable per server and per tool, or edit raw JSON config. |
 | **🧠** | **Memory Manager** — View, edit, and delete stored memories. Badge shows memory count. |
 | **🧩** | **Skills Manager** — Enable/disable skills, import from GitHub, create new skills. Badge shows active skill count. See [Agent Skills](skills.md). |
 | **📊** | **Token Usage** — View token consumption stats across all conversations. See [Token Usage Tracking](#token-usage-tracking) below. |

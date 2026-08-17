@@ -361,6 +361,12 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
   const [jsonInput, setJsonInput] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Add Server form state
+  const [isAddingServer, setIsAddingServer] = useState(false);
+  const [newServerName, setNewServerName] = useState('');
+  const [newServerUrl, setNewServerUrl] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+
   useEffect(() => {
     // Sync UI with manager updates (e.g. connections, status, tool listings)
     const unsubscribe = manager.subscribeClientsChange(() => {
@@ -436,6 +442,69 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
     }
   };
 
+  const handleAddServer = async () => {
+    const name = newServerName.trim();
+    const url = newServerUrl.trim();
+
+    if (!name) { setAddError('Server name is required'); return; }
+    if (!url) { setAddError('Server URL is required'); return; }
+    if (!/^https?:\/\/.+/.test(url)) { setAddError('URL must start with http:// or https://'); return; }
+
+    try {
+      const rawVal = window.logseq.settings?.mcpServers || '{}';
+      let parsed: any = {};
+      try {
+        parsed = typeof rawVal === 'string' ? JSON.parse(rawVal) : rawVal;
+      } catch { parsed = {}; }
+
+      // Handle nested mcpServers wrapper
+      let target = parsed;
+      let isWrapped = false;
+      if (parsed.mcpServers && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers)) {
+        target = parsed.mcpServers;
+        isWrapped = true;
+      }
+
+      if (target[name]) { setAddError(`Server "${name}" already exists`); return; }
+
+      target[name] = { url };
+
+      const updatedVal = isWrapped ? JSON.stringify(parsed) : JSON.stringify(target);
+      await window.logseq.updateSettings({ mcpServers: updatedVal });
+
+      setNewServerName('');
+      setNewServerUrl('');
+      setAddError(null);
+      setIsAddingServer(false);
+    } catch (e: any) {
+      setAddError(e.message || 'Failed to add server');
+    }
+  };
+
+  const handleRemoveServer = async (serverName: string) => {
+    try {
+      const rawVal = window.logseq.settings?.mcpServers || '{}';
+      let parsed: any = {};
+      try {
+        parsed = typeof rawVal === 'string' ? JSON.parse(rawVal) : rawVal;
+      } catch { parsed = {}; }
+
+      let target = parsed;
+      let isWrapped = false;
+      if (parsed.mcpServers && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers)) {
+        target = parsed.mcpServers;
+        isWrapped = true;
+      }
+
+      delete target[serverName];
+
+      const updatedVal = isWrapped ? JSON.stringify(parsed) : JSON.stringify(target);
+      await window.logseq.updateSettings({ mcpServers: updatedVal });
+    } catch (e: any) {
+      console.error('[MCPServerPanel] Failed to remove server:', e);
+    }
+  };
+
   const handleToggleServer = async (serverName: string, enabled: boolean) => {
     try {
       const rawVal = window.logseq.settings?.mcpServers || '{}';
@@ -487,6 +556,9 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
         <HeaderButtons>
           {!isEditingJson ? (
             <>
+              <HeaderButton onClick={() => { setIsAddingServer(true); setAddError(null); }} title="Add New MCP Server" disabled={isAddingServer}>
+                ➕ Add
+              </HeaderButton>
               <HeaderButton onClick={() => manager.reconnectAll()} title="Refresh & Reconnect Servers">
                 🔄 Refresh
               </HeaderButton>
@@ -531,6 +603,42 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
           <HelpText>
             Configure server settings via Logseq Plugin settings. Actively connected servers expose tools that the AI assistant can execute during chat.
           </HelpText>
+
+          {/* Add Server inline form */}
+          {isAddingServer && (
+            <div style={{ border: '1px solid var(--colors-blue7, #93c5fd)', borderRadius: '8px', padding: '12px', marginBottom: '12px', backgroundColor: 'var(--colors-blue2, #eff6ff)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--colors-highContrast, #1e293b)' }}>Add MCP Server</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={newServerName}
+                  onChange={e => { setNewServerName(e.target.value); setAddError(null); }}
+                  placeholder="Server name (e.g. web-search)"
+                  autoFocus
+                  style={{ padding: '6px 10px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--colors-slate6, #cbd5e1)', outline: 'none', backgroundColor: 'var(--colors-elevation1, white)', color: 'var(--colors-highContrast, #1e293b)' }}
+                />
+                <input
+                  type="text"
+                  value={newServerUrl}
+                  onChange={e => { setNewServerUrl(e.target.value); setAddError(null); }}
+                  placeholder="http://localhost:3001/sse"
+                  style={{ padding: '6px 10px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--colors-slate6, #cbd5e1)', outline: 'none', backgroundColor: 'var(--colors-elevation1, white)', color: 'var(--colors-highContrast, #1e293b)' }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddServer(); }}
+                />
+                {addError && (
+                  <div style={{ fontSize: '11px', color: '#e5484d' }}>⚠️ {addError}</div>
+                )}
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <CancelButton onClick={() => { setIsAddingServer(false); setNewServerName(''); setNewServerUrl(''); setAddError(null); }} style={{ padding: '4px 12px', fontSize: '12px' }}>
+                    Cancel
+                  </CancelButton>
+                  <SaveButton onClick={handleAddServer} disabled={!newServerName.trim() || !newServerUrl.trim()} style={{ padding: '4px 12px', fontSize: '12px' }}>
+                    Add Server
+                  </SaveButton>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 53px - 48px - 50px - 35px)', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '4px' }}>
             {configError && (
@@ -578,6 +686,13 @@ export default function MCPServerPanel({ onClose }: MCPServerPanelProps) {
                         </ToolCount>
                       </ServerInfo>
                       <HeaderRight onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => { if (window.confirm(`Remove server "${client.name}"?`)) handleRemoveServer(client.name); }}
+                          title={`Remove ${client.name}`}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--colors-red9, #e5484d)', padding: '2px 4px', borderRadius: '4px', opacity: 0.6 }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
+                        >🗑️</button>
                         <SwitchContainer style={{ marginRight: '8px', cursor: 'pointer' }}>
                           <SwitchInput
                             type="checkbox"
