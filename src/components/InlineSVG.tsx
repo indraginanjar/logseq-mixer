@@ -93,7 +93,19 @@ function stripSvgFixedSize(svgHtml: string): string {
 }
 
 export default function InlineSVG({ content }: InlineSVGProps) {
-  const sanitized = useMemo(() => sanitizeSVG(content), [content]);
+  const sanitizationEnabled = (window as any).logseq?.settings?.svgSanitization !== false;
+
+  const sanitized = useMemo(() => {
+    if (!sanitizationEnabled) {
+      // No sanitization — just extract the <svg>...</svg> bounds
+      const svgStart = content.indexOf('<svg');
+      if (svgStart === -1) return '';
+      const svgEnd = content.lastIndexOf('</svg>');
+      if (svgEnd === -1) return '';
+      return content.slice(svgStart, svgEnd + 6);
+    }
+    return sanitizeSVG(content);
+  }, [content, sanitizationEnabled]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState<'png' | 'svg' | null>(null);
   const [maximized, setMaximized] = useState(false);
