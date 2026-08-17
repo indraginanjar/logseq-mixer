@@ -699,8 +699,152 @@ src/memory/
 src/components/
 ├── AgentProgress.tsx  Agent execution progress UI with step states
 ├── AgentToggle.tsx    Agent mode toggle switch (violet)
+├── AgentSelector.tsx  Agent personality dropdown (header bar)
+├── AgentPanel.tsx     Agent CRUD management panel
 └── MemoryPanel.tsx    Memory management panel with CRUD
+
+src/agents/
+├── AgentConfigStore.ts       Agent CRUD + localStorage persistence
+├── resolveAgentSettings.ts   Merge agent overrides over global settings
+├── agentSwitcher.ts          Per-agent conversation state save/load/switch
+└── agentMigration.ts         First-run migration: creates default agent
 ```
+
+---
+
+## 6.1 Multi-Agent Configuration System
+
+### Architecture
+
+The multi-agent system is **orthogonal** to the agent loop (goal detection → plan → execute). It controls *which configuration* the LLM uses, while agent mode controls *whether* autonomous execution is available.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        QUERY ENTRY POINT                          │
+│                       (manager.handleQuery)                        │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  1. getActiveAgent()                                              │
+│     └── localStorage['logseq-mixer:active-agent'] → agent ID     │
+│     └── loadAgents() → find agent by ID (or fallback to default) │
+│                                                                    │
+│  2. resolveSettings(globalSettings, activeAgent)                  │
+│     └── Returns merged config:                                    │
+│         • prompt = agent.systemPrompt                             │
+│         • selectedModel = agent.model || global.selectedModel     │
+│         • chatProvider = agent.provider || global.chatProvider    │
+│         • __agentConfig = agent (for downstream use)             │
+│                                                                    │
+│  3. settings.agentMode !== false?                                 │
+│     ├── Yes → detectGoal() → agent loop (uses resolvedSettings)  │
+│     └── No → normal chat (uses resolvedSettings)                 │
+│                                                                    │
+│  Both paths use the resolved model/prompt from step 2.           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### AgentConfig Interface
+
+```typescript
+interface AgentConfig {
+  id: string;              // crypto.randomUUID()
+  name: string;            // Display name (unique, case-insensitive)
+  description?: string;    // Optional description
+  systemPrompt: string;    // Overrides global AI prompt
+  model?: string | null;   // Overrides Model Selector (null = use global)
+  provider?: string | null; // Overrides Chat Provider (null = use global)
+  mcpToolStates: Record<string, boolean>;  // Per-tool enable/disable ("server:tool" → bool)
+  skillActivations: string[];  // Skill names active for this agent
+  createdAt: number;       // Timestamp
+  updatedAt: number;       // Timestamp
+  isDefault: boolean;      // Exactly one agent is default (cannot be deleted)
+  icon: string;            // Emoji for selector display
+}
+```
+
+### Storage
+
+| Data | Storage | Key |
+|---|---|---|
+| Agent list | localStorage | `logseq-mixer:agents` (JSON array) |
+| Active agent ID | localStorage | `logseq-mixer:active-agent` (string) |
+| Conversation history (per agent) | localStorage | `logseq-mixer:history:{agentId}` |
+| Chat messages (per agent) | localStorage | `logseq-mixer:chat-messages:{agentId}` |
+| Agent-scoped memories | SQLite `agent_memory` | `agent_id` column on each row |
+| Agent-scoped token usage | SQLite `token_usage` | `agent_id` column on each row |
+
+### Settings Resolution (`resolveAgentSettings.ts`)
+
+```typescript
+function resolveSettings(globalSettings: any, agentConfig: AgentConfig | null): any {
+  if (!agentConfig) return globalSettings;
+  return {
+    ...globalSettings,
+    prompt: agentConfig.systemPrompt,
+    selectedModel: agentConfig.model || globalSettings.selectedModel,
+    chatProvider: agentConfig.provider || globalSettings.chatProvider,
+    __agentConfig: agentConfig,
+  };
+}
+```
+
+Resolution priority: **Agent field > Global setting > Default**. Null/empty agent fields fall through to global.
+
+### Tool State Resolution
+
+MCP tools can be individually enabled/disabled per agent:
+
+```typescript
+function resolveToolStates(globalToolStates: Record<string, boolean>, agentConfig: AgentConfig | null): Record<string, boolean> {
+  if (!agentConfig || Object.keys(agentConfig.mcpToolStates).length === 0) {
+    return globalToolStates;
+  }
+  return { ...globalToolStates, ...agentConfig.mcpToolStates };
+}
+```
+
+Agent overrides are merged over global states. Tools not explicitly overridden by the agent use the global setting.
+
+### Agent Switching (`agentSwitcher.ts`)
+
+```
+User clicks agent in dropdown
+         ↓
+switchAgent(currentConversation, targetAgentId)
+         ↓
+┌─────────────────────────────────────────────────┐
+│ 1. Save current agent's state:                  │
+│    localStorage['history:{currentId}'] = history│
+│    localStorage['chat-messages:{currentId}']    │
+│                                                  │
+│ 2. setActiveAgentId(targetAgentId)              │
+│                                                  │
+│ 3. Load target agent's state:                   │
+│    history = localStorage['history:{targetId}'] │
+│    messages = localStorage['chat-messages:...'] │
+│                                                  │
+│ 4. Return { state, agent } to caller            │
+└─────────────────────────────────────────────────┘
+```
+
+The switch is synchronous and purely local (no LLM calls). The UI re-renders with the restored conversation immediately.
+
+### First-Run Migration (`agentMigration.ts`)
+
+On plugin initialization, if no agents exist in localStorage:
+1. Creates a "Default" agent using the current global system prompt
+2. Sets it as active with `isDefault: true`
+3. Adds `agent_id` columns to SQLite tables (memory, token usage) for future per-agent scoping
+
+### Relationship Between Controls
+
+| UI Control | Setting | Scope | Effect |
+|---|---|---|---|
+| Agent Selector (header) | `active-agent` in localStorage | Per-session | Changes personality, model, provider, tools, skills |
+| Agent Mode toggle (🤖) | `agentMode` in plugin settings | Global | Enables/disables goal detection and autonomous execution |
+| Model Selector (header) | `selectedModel` in plugin settings | Global | Sets default model (overridden by agent if agent specifies one) |
+
+These three controls compose independently — any combination is valid.
 
 ---
 

@@ -454,6 +454,60 @@ Agent memory is **on by default** and works alongside your existing Mixer memori
 
 ---
 
+## Multi-Agent Configuration
+
+The agent system described above operates *within* whichever agent personality is currently selected. Mixer supports multiple configured agents — each with its own system prompt, model, provider, tool access, and skills.
+
+### How Agents Relate to Agent Mode
+
+These are two separate concepts that work together:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Agent Selector (header dropdown)     │  Agent Mode (🤖 toggle)  │
+├───────────────────────────────────────┼──────────────────────────┤
+│  Controls WHO the AI is:              │  Controls WHAT it can do: │
+│  • System prompt (personality)        │  • Goal detection         │
+│  • Model override                     │  • Multi-step planning    │
+│  • Provider override                  │  • Autonomous execution   │
+│  • MCP tool access                    │  • Self-correction        │
+│  • Skill activations                  │  • Dynamic replanning     │
+└───────────────────────────────────────┴──────────────────────────┘
+```
+
+**They are orthogonal.** Switching agents doesn't enable/disable agent mode, and toggling agent mode doesn't change which agent is active.
+
+### Query Flow with Multi-Agent
+
+When you send a message, both systems are consulted:
+
+```
+User message
+     ↓
+1. resolveSettings(globalSettings, activeAgent)
+   → Merges active agent's prompt, model, provider over global config
+     ↓
+2. agentMode enabled?
+   ├─ No → Normal single-turn chat (using resolved settings)
+   └─ Yes → detectGoal() → route to agent loop OR normal chat
+                            (using resolved settings for all LLM calls)
+```
+
+The agent loop (planning, execution, self-correction) uses whatever model and prompt the active agent specifies. This means you can have a "Research Agent" that uses a cheaper model for routine queries but still benefits from autonomous goal execution when agent mode is on.
+
+### Per-Agent Conversation State
+
+Each agent maintains independent conversation history. When you switch agents via the dropdown:
+1. Current conversation is saved (associated with current agent ID)
+2. Target agent's previous conversation is restored
+3. The AI resumes where you left off with that agent
+
+This allows parallel workflows — for example, a "Writing Agent" drafting content while a "Research Agent" gathers information — without their conversations interfering.
+
+> 📖 See [User Guide → Agents](user-guide.md#agents) for the full UI walkthrough of creating and managing agents.
+
+---
+
 ## Agent Settings Reference
 
 | Setting | Default | Description |

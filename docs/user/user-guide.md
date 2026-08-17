@@ -31,7 +31,8 @@ The panel can be resized by dragging its left edge. Width persists across sessio
 
 | Element | What it does |
 |---|---|
-| **Model Selector** | Switch between LLM models on the fly. Dynamically fetches available models from your configured provider (OpenAI, Ollama, or LiteLLM). Remembers your last selected model per provider. |
+| **Agent Selector** | Switch between configured agent personalities. Each agent can have its own system prompt, model, provider, MCP tool states, and skill activations. The active agent's name and icon are shown. Click to open the dropdown; select "Manage Agents →" to create, edit, or delete agents. See [Agents](#agents) below. |
+| **Model Selector** | Switch between LLM models on the fly. Dynamically fetches available models from your configured provider (OpenAI, Ollama, or LiteLLM). Remembers your last selected model per provider. **Note:** If the active agent specifies a model override, that takes precedence over this selector. |
 | **⚡ Effort Selector** | Control how much "thinking" the model does before responding. Five levels from Low (fastest/cheapest) to Max (deepest reasoning). See [Reasoning Effort](#reasoning-effort) below. |
 | **✨ New** | Start a fresh conversation. If auto-summarize is enabled, the current session is saved to memory first. |
 | **✕** | Close the chat panel. |
@@ -510,6 +511,60 @@ The conversation history is limited to the last 6 messages to stay within token 
 | **Agent Max Retries Per Step** | `2` | Retries before escalating to user |
 | **Agent Verbose Mode** | `true` | Show step type badges, token usage, self-correction reasoning, and error details. Toggle via 📋 in the toolbar. |
 | **Persist Agent Steps to Chat** | `false` | When Verbose Mode is on, stream each completed step as a chat message and keep full output in conversation context. |
+
+### Agents
+
+Mixer supports multiple agent personalities. Each agent is an independent configuration profile that overrides global settings when active.
+
+#### Agent Selector vs. Agent Mode Toggle
+
+These two controls are **independent and orthogonal**:
+
+| Control | Location | What it controls |
+|---|---|---|
+| **Agent Selector** (dropdown) | Header bar | *Which* agent personality is active — determines system prompt, model, provider, tool access, and skills |
+| **Agent Mode** (🤖 toggle) | Bottom toolbar | *How* the AI responds — whether it can autonomously plan and execute multi-step goals |
+
+They combine freely:
+
+| Agent Selector | Agent Mode | Behavior |
+|---|---|---|
+| "Research Agent" | ON | Uses Research Agent's prompt/model AND can execute multi-step plans |
+| "Research Agent" | OFF | Uses Research Agent's prompt/model but only responds in single-turn chat |
+| "Default" | ON | Uses default config AND can execute multi-step plans |
+| "Default" | OFF | Standard single-turn chat with default settings |
+
+> **Key point:** Switching agents does NOT toggle agent mode, and toggling agent mode does NOT change which agent is selected. They are separate dimensions.
+
+#### What Each Agent Configures
+
+| Field | Effect |
+|---|---|
+| **Name** | Display name in the selector dropdown |
+| **Icon** | Emoji shown in the selector |
+| **System Prompt** | Overrides the global "AI prompt" setting |
+| **Model** | Overrides the Model Selector (leave empty to use global) |
+| **Provider** | Overrides Chat Provider (leave empty to use global) |
+| **MCP Tool States** | Per-agent enable/disable of individual MCP tools |
+| **Skill Activations** | Which skills are active for this agent |
+
+#### Managing Agents
+
+Click **Manage Agents →** at the bottom of the Agent Selector dropdown (or click the Agent Selector when only one agent exists) to open the Agent Panel:
+
+- **Create** a new agent with custom name, icon, system prompt, and optional model/provider overrides
+- **Edit** an existing agent's configuration
+- **Duplicate** an agent to create a variant
+- **Delete** a non-default agent (the default agent cannot be deleted)
+
+#### Conversation State per Agent
+
+Each agent maintains its own conversation state. When you switch agents:
+- The current agent's conversation is saved
+- The target agent's previous conversation is restored
+- Starting a "✨ New" session only clears the current agent's conversation
+
+This means you can have different ongoing conversations with different agents and switch between them without losing context.
 
 ### MCP Servers
 
