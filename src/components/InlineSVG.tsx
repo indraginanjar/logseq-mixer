@@ -15,12 +15,15 @@ const SVGContainer = styled('div', {
   overflow: 'auto',
   display: 'flex',
   justifyContent: 'center',
+  alignItems: 'center',
+  minHeight: '100px',
   backgroundImage: 'linear-gradient(45deg, #e9ecef 25%, transparent 25%), linear-gradient(-45deg, #e9ecef 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e9ecef 75%), linear-gradient(-45deg, transparent 75%, #e9ecef 75%)',
   backgroundSize: '20px 20px',
   backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
   '& svg': {
     maxWidth: '100%',
     height: 'auto',
+    display: 'block',
   },
 });
 
