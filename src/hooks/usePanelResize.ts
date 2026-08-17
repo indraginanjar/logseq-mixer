@@ -3,13 +3,22 @@ import React, { useCallback, useRef, useState } from 'react';
 export function usePanelResize(panelRef: React.RefObject<HTMLDivElement>) {
   const [panelWidth, setPanelWidth] = useState(() => {
     try {
+      const maxWidth = window.innerWidth > 0 ? window.innerWidth * 0.85 : 1040;
       // Try logseq settings first (persists across restarts), then localStorage fallback
-      const fromSettings = logseq.settings?.panelWidth as number | undefined;
-      if (fromSettings && fromSettings >= 320) {
-        return Math.min(fromSettings, window.innerWidth * 0.85);
+      const fromSettings = typeof logseq !== 'undefined' && logseq.settings
+        ? (logseq.settings.panelWidth as number | undefined)
+        : undefined;
+      if (typeof fromSettings === 'number' && fromSettings >= 320) {
+        return Math.min(fromSettings, maxWidth);
       }
       const saved = localStorage.getItem('logseq-mixer-panel-width');
-      return saved ? Math.max(320, Math.min(Number(saved), window.innerWidth * 0.85)) : 1040;
+      if (saved) {
+        const parsed = Number(saved);
+        if (!isNaN(parsed) && parsed >= 320) {
+          return Math.min(parsed, maxWidth);
+        }
+      }
+      return Math.min(1040, maxWidth);
     } catch { return 1040; }
   });
   const isResizingRef = useRef(false);
