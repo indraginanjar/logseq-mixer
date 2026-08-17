@@ -135,13 +135,16 @@ export async function runReActLoop(
 
       let toolResult = '';
       try {
+        console.info(`[ReActLoop] 🔧 Calling tool: ${funcName}`, Object.keys(args).length > 0 ? args : '(no args)');
         if (funcName.startsWith('logseq_') || funcName.startsWith('mixer_') || funcName === 'activate_skill') {
           toolResult = await executeLogseqTool(funcName, args);
         } else {
           toolResult = await MCPManager.getInstance().executeToolCall(funcName, args);
         }
+        console.info(`[ReActLoop] ✓ Tool result: ${funcName} → ${toolResult.length} chars`);
       } catch (err: any) {
         toolResult = `Error: ${err.message || err}`;
+        console.warn(`[ReActLoop] ✗ Tool error: ${funcName} →`, err.message || err);
       }
 
       toolCalls.push({ iteration: iterations, tool: funcName, args, result: toolResult });
