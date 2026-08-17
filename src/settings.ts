@@ -367,6 +367,13 @@ const settings: SettingSchemaDesc[] = [
     description: 'When enabled, RAG queries also search other Logseq graphs you have previously indexed. Manage which graphs to include via the 🔌 Database panel. Limitations: results come from the last-indexed snapshot (not live data), embedding models must match, and cross-graph block references are not clickable.',
     default: false,
   },
+  {
+    key: 'panelWidth',
+    type: 'number',
+    title: 'Chat Panel Width',
+    description: 'Width of the chat panel in pixels. Automatically saved when you resize the panel by dragging.',
+    default: 1040,
+  },
 ];
 
 export default settings;
