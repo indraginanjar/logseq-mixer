@@ -627,8 +627,21 @@ const renderMarkdownWithProperties = (
   const { properties, content } = parseProperties(rawText);
   let processedContent = wrapCliInCodeBlocks(content);
 
+  // Protect SVG blocks from markdown transforms (transforms destroy hex colors like #ff0000)
+  const svgPlaceholders: Map<string, string> = new Map();
+  processedContent = processedContent.replace(/(<svg[\s\S]*?<\/svg>)/gi, (match, _svg, offset) => {
+    const key = `__SVG_PLACEHOLDER_${offset}__`;
+    svgPlaceholders.set(key, match);
+    return key;
+  });
+
   if (shouldTransform) {
     processedContent = processMarkdownContent(processedContent);
+  }
+
+  // Restore SVG blocks after transforms
+  for (const [key, svg] of svgPlaceholders) {
+    processedContent = processedContent.replace(key, svg);
   }
 
   const hasProperties = Object.keys(properties).length > 0;
