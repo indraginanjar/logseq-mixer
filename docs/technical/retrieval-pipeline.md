@@ -441,7 +441,7 @@ LLM responses containing Logseq notation are transformed:
 
 ## Cross-Graph Search
 
-When enabled (`crossGraphEnabled` setting), the retrieval pipeline extends to search other Logseq graphs' indexed databases.
+When enabled (toggle in the 🗄️ Database Center panel, persisted as `crossGraphEnabled` setting), the retrieval pipeline extends to search other Logseq graphs' indexed databases.
 
 ### How It Works
 

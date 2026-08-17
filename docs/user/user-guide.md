@@ -581,7 +581,7 @@ Search across multiple Logseq graphs simultaneously. When enabled, RAG queries a
 
 | Setting | Default | Description |
 |---|---|---|
-| **Cross-Graph Search** | `false` | Enable searching other Logseq graphs' indexes during RAG retrieval |
+| **Cross-Graph Search** | `false` | Enable searching other Logseq graphs' indexes during RAG retrieval. Togglable from the 🗄️ Database Center panel. |
 
 **Setup:**
 1. Open the **🗄️ Database Center** panel
