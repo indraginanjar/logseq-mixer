@@ -61,17 +61,20 @@ function sanitizeSVG(svgString: string): string {
   if (svgEnd === -1) return '';
   clean = clean.slice(svgStart, svgEnd + 6);
 
-  // Replace dark/black background rects with white to ensure visibility
-  // Matches fill="black", fill="#000", fill="#000000", fill="rgb(0,0,0)" on full-size rects
+  // Replace dark/black background rects with white to ensure visibility.
+  // Only targets the FIRST rect element if it has a dark fill AND appears to be a background
+  // (it's the first shape element or has width/height matching common viewport patterns).
+  // This avoids turning intentional black shapes (duck body, icons, etc.) white.
   clean = clean.replace(
-    /(<rect[^>]*)(fill\s*=\s*["'](#000000|#000|black|rgb\(0,\s*0,\s*0\))["'])/gi,
-    '$1fill="white"'
-  );
-
-  // Also handle style="fill:black" or style="fill:#000" on rects
-  clean = clean.replace(
-    /(<rect[^>]*style\s*=\s*["'][^"']*)(fill\s*:\s*(#000000|#000|black|rgb\(0,\s*0,\s*0\)))/gi,
-    '$1fill:white'
+    /(<svg[^>]*>[\s\S]*?)(<rect\s[^>]*(?:width\s*=\s*["'](?:100%|\d{2,4}(?:px)?)\s*["'][^>]*height\s*=\s*["'](?:100%|\d{2,4}(?:px)?)["'])[^>]*)(fill\s*=\s*["'](#000000|#000|black|rgb\(0,\s*0,\s*0\))["'])/i,
+    (match, before, rectStart, fillAttr) => {
+      // Only replace if this rect appears before any other shape elements
+      const shapesBefore = (before.match(/<(rect|circle|ellipse|line|polyline|polygon|path|text|g)\b/gi) || []).length;
+      if (shapesBefore <= 1) { // Only the <svg> open tag and maybe a <g> wrapper
+        return before + rectStart + 'fill="white"';
+      }
+      return match; // Don't touch it — it's not a background rect
+    }
   );
 
   return clean;
