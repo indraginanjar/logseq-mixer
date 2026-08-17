@@ -13,6 +13,7 @@
   <a href="https://github.com/martindev9999/logseq-composer"><img src="https://img.shields.io/badge/fork--of-logseq--composer-blue?style=flat-square" alt="Fork of Logseq Composer"></a>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License MIT">
   <img src="https://img.shields.io/badge/LLM_providers-100+-purple?style=flat-square" alt="100+ LLM Providers">
+  <img src="https://img.shields.io/badge/MCP_tools-unlimited-orange?style=flat-square" alt="Unlimited MCP Tools">
 </p>
 
 ---
@@ -88,7 +89,7 @@ If your graph has more than 50 pages, you're leaving value on the table without 
 
 ---
 
-Logseq Mixer isn't a chatbot bolted onto your notes. It's an **autonomous agent** with persistent memory, hybrid RAG retrieval, and direct graph editing — powered by any model from any provider. Give it a goal, and it plans, executes, self-corrects, and learns.
+Logseq Mixer isn't a chatbot bolted onto your notes. It's an **autonomous agent** with persistent memory, hybrid RAG retrieval, direct graph editing, and multi-agent workspaces — powered by any model from any provider. Give it a goal, and it plans, executes, self-corrects, and learns.
 
 ---
 
@@ -108,9 +109,9 @@ Three built-in providers — **no proxy required** for the simplest setups:
 
 **Need Anthropic, Google, or other providers?** Run a [LiteLLM](https://github.com/BerriAI/litellm) proxy to access 100+ providers through a single endpoint. Switch models mid-conversation without changing any plugin settings.
 
-**Control reasoning depth:** Use the ⚡ Effort selector in the header to dial reasoning up or down — from fast/cheap (`Low`) to maximum capability (`Max`). Works across all providers. Reasoning models think deeper; standard models gracefully ignore it.
+**Control reasoning depth:** Use the ⚡ Effort selector in the header to dial reasoning up or down — from fast/cheap (`Low`) to maximum capability (`Max`). Works across all providers.
 
-**Track token usage:** Every AI response shows real-time token counts (↑ input, ↓ output). Click the 📊 button to open the Token Usage analytics panel with daily, weekly, monthly, yearly, and all-time breakdowns. All LLM API calls are automatically tracked with persistent storage across sessions. Works with all providers — uses actual API-reported tokens when available, falls back to local estimation for providers that don't report usage.
+**Track token usage:** Every AI response shows real-time token counts (↑ input, ↓ output). Click the 📊 button for daily, weekly, monthly, and all-time analytics.
 
 ---
 
@@ -147,6 +148,26 @@ Agent: 🤖 Goal detected. Generating plan...
 
 ---
 
+## Multi-Agent Workspaces
+
+Create **multiple AI agents** — each with its own personality, model, tools, and skills. Switch between them instantly.
+
+| Agent | Role | Model | Tools |
+|---|---|---|---|
+| 🔬 Research | Deep analysis, cross-referencing | GPT-4o | Web search, graph read |
+| ✍️ Writer | Content drafting, editing | Claude 3.5 | Graph write |
+| 💻 Code | Technical Q&A, architecture | DeepSeek | Filesystem |
+| 📋 Tasks | Quick captures, TODO management | GPT-4o-mini | Graph write |
+
+- **Independent conversations** — each agent maintains its own chat history. Switch without losing context.
+- **Per-agent tool access** — control which MCP tools each agent can use. Research agents don't need write access; writing agents don't need web search.
+- **Per-agent skills** — activate different skill sets per agent automatically.
+- **Orthogonal to Agent Mode** — the agent selector controls *who* the AI is; the Agent Mode toggle controls *whether* it can execute multi-step plans. Mix and match freely.
+
+> 📖 [Multi-agent docs →](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/user-guide.md#agents)
+
+---
+
 ## Understands your notes
 
 Ask about something you wrote months ago. Mixer finds it — even if you don't remember the exact words. It understands meaning, not just keywords.
@@ -155,6 +176,7 @@ Ask about something you wrote months ago. Mixer finds it — even if you don't r
 - **Keyword precision** — Also does exact term matching for code, names, and quoted phrases when that's what you need.
 - **Hierarchy-aware** — Respects Logseq's block tree structure. Parent context is preserved, so answers maintain the original nesting and relationships.
 - **Clickable citations** — Every answer cites source blocks as `((uuid))` links. Click to navigate directly to the source. Verify, expand, or edit in place.
+- **Cross-graph search** — Search across multiple Logseq graphs simultaneously. Your work graph, personal graph, and reference library — all queryable in one question.
 
 Under the hood: HNSW-accelerated vector search (sub-5ms across 20,000+ chunks), BM25 keyword index, and Reciprocal Rank Fusion — all running locally in your browser. Nothing leaves your machine unless you choose a cloud embedding provider.
 
@@ -169,6 +191,7 @@ Toggle **Allow Graph Edits** and the AI becomes a co-author. It reads the full b
 - **Insert** — Create nested blocks under any existing block
 - **Update** — Rewrite content or properties of existing blocks
 - **Delete** — Remove blocks cleanly
+- **Inline SVG rendering** — Ask for diagrams or illustrations and see them rendered directly in chat
 - **Change summary** — See exactly what was created or altered after every edit
 
 No copy-paste. No switching contexts. Just tell it what you want, and your page transforms.
@@ -188,6 +211,8 @@ Mixer supports the **[Model Context Protocol (MCP)](https://modelcontextprotocol
 ```
 
 **6 built-in Logseq tools** (search, read, insert, update, delete, create pages) + **unlimited MCP tools** — all chainable in a single query. The AI decides which tools to call, chains them iteratively, and synthesizes the results.
+
+**Add servers in seconds:** Click ➕ in the MCP panel, enter a name and URL — done. No JSON editing required. Remove servers with one click. Enable/disable individual tools per server.
 
 Web search, browser automation, file system access, database queries — anything with an MCP server becomes a capability your AI can use inside your graph.
 
@@ -250,6 +275,23 @@ Click the **Re-Index** button in the chat panel. Mixer will incrementally proces
 
 ---
 
+## Feature Highlights
+
+| Feature | Description |
+|---|---|
+| **Multi-Agent Workspaces** | Multiple AI personalities with independent conversations, tools, and skills |
+| **Cross-Graph Search** | Query across multiple Logseq graphs in a single question |
+| **Hybrid RAG** | HNSW vector search + BM25 keyword index + Reciprocal Rank Fusion |
+| **Persistent Memory** | Remembers preferences, facts, and past conversations across sessions |
+| **Agent Skills** | Importable instruction sets from GitHub — teach your agent new behaviors |
+| **Inline Visuals** | SVG illustrations, Mermaid diagrams, and PlantUML rendered directly in chat |
+| **Token Analytics** | Per-message, daily, weekly, monthly, and all-time usage tracking |
+| **MCP Tools** | One-click server management with per-agent tool access control |
+| **Effort Control** | 5-level reasoning depth dial — from fast/cheap to maximum capability |
+| **Graph Editing** | AI directly inserts, updates, and deletes blocks on your pages |
+
+---
+
 ## Documentation
 
 ### For Users
@@ -258,7 +300,7 @@ Click the **Re-Index** button in the chat panel. Mixer will incrementally proces
 |---|---|
 | [Getting Started](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/getting-started.md) | Installation, provider setup, first-time indexing |
 | [User Guide](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/user-guide.md) | UI walkthrough, settings reference, troubleshooting |
-| [Agentic AI](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/agentic-ai.md) | Agent capabilities, memory, autonomy modes |
+| [Agentic AI](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/agentic-ai.md) | Agent capabilities, memory, autonomy modes, multi-agent |
 | [Agent Skills](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/skills.md) | Skills system, import from GitHub, creating and managing skills |
 | [MCP Tools](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/user/mcp-tools.md) | External tool setup and configuration |
 
@@ -267,8 +309,8 @@ Click the **Re-Index** button in the chat panel. Mixer will incrementally proces
 | Document | Description |
 |---|---|
 | [Architecture](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/architecture.md) | System overview, module map, data flow |
-| [Retrieval Pipeline](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/retrieval-pipeline.md) | Embedding, chunking, hybrid search, HNSW |
-| [Agent Internals](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/agent-internals.md) | ReAct loop, goal detection, self-correction |
+| [Retrieval Pipeline](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/retrieval-pipeline.md) | Embedding, chunking, hybrid search, HNSW, cross-graph |
+| [Agent Internals](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/agent-internals.md) | ReAct loop, goal detection, self-correction, multi-agent config |
 | [Skills System](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/skills-system.md) | Storage format, progressive disclosure, tool integration, subagent |
 | [MCP Protocol](https://github.com/indraginanjar/logseq-mixer/blob/main/docs/technical/mcp-protocol.md) | Transport layer, tool calling loop |
 
@@ -280,4 +322,4 @@ Click the **Re-Index** button in the chat panel. Mixer will incrementally proces
   <a href="https://github.com/martindev9999/logseq-composer"><img src="https://img.shields.io/badge/fork--of-logseq--composer-blue?style=flat-square" alt="Fork of Logseq Composer"></a>
 </p>
 
-This project is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, developed by **[Martin Minarik](https://github.com/martindev9999)**. We extend our sincere thanks to Martin for building and open-sourcing the original version of this software. Mixer builds on that foundation with autonomous agent capabilities, hybrid RAG retrieval, persistent memory, and MCP tool integration.
+This project is a fork of **[Logseq Composer](https://github.com/martindev9999/logseq-composer)**, developed by **[Martin Minarik](https://github.com/martindev9999)**. We extend our sincere thanks to Martin for building and open-sourcing the original version of this software. Mixer builds on that foundation with autonomous agent capabilities, hybrid RAG retrieval, persistent memory, multi-agent workspaces, cross-graph search, and MCP tool integration.
