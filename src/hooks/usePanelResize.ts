@@ -3,7 +3,7 @@ import React, { useCallback, useRef, useState } from 'react';
 export function usePanelResize(panelRef: React.RefObject<HTMLDivElement>) {
   const [panelWidth, setPanelWidth] = useState(() => {
     try {
-      const maxWidth = window.innerWidth > 0 ? window.innerWidth * 0.85 : 1040;
+      const maxWidth = window.innerWidth > 0 ? window.innerWidth * 0.85 : 640;
       // Try logseq settings first (persists across restarts), then localStorage fallback
       const fromSettings = typeof logseq !== 'undefined' && logseq.settings
         ? (logseq.settings.panelWidth as number | undefined)
@@ -19,7 +19,7 @@ export function usePanelResize(panelRef: React.RefObject<HTMLDivElement>) {
         }
       }
       return Math.min(1040, maxWidth);
-    } catch { return 1040; }
+    } catch { return 640; }
   });
   const isResizingRef = useRef(false);
 
