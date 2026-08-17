@@ -575,6 +575,32 @@ This means you can have different ongoing conversations with different agents an
 | **MCP Servers Configuration** | JSON object | `{"server-name": {"url": "http://localhost:3002/sse"}}` |
 | **MCP Tool Call Timeout (seconds)** | `180` | Max wait time for an MCP tool call. Increase for slow tools like browser automation (Playwright). |
 
+### Cross-Graph Search
+
+Search across multiple Logseq graphs simultaneously. When enabled, RAG queries also search other graphs you've previously indexed.
+
+| Setting | Default | Description |
+|---|---|---|
+| **Cross-Graph Search** | `false` | Enable searching other Logseq graphs' indexes during RAG retrieval |
+
+**Setup:**
+1. Enable **Cross-Graph Search** in plugin settings
+2. Open the **🗄️ Database Center** panel
+3. In the "🌐 Cross-Graph Search" section, click **➕ Add Graph**
+4. Enter the graph's file system path and an optional label
+5. Results from other graphs will appear with `[From: GraphName]` attribution
+
+**⚠️ Limitations (important):**
+
+| Limitation | What it means |
+|---|---|
+| **Snapshot-based** | Results come from the last time you opened that graph and indexed it. Not live data. |
+| **Must re-index manually** | To update a cross-graph source, open it in Logseq and run Re-Index. |
+| **Embedding model must match** | All graphs must be indexed with the same embedding model (e.g., `text-embedding-3-small`). Mismatched dimensions are silently skipped. |
+| **Block refs not clickable** | Cross-graph `((uuid))` references cannot navigate to the source — they appear as text citations. |
+| **Read-only** | The agent cannot write to other graphs. Only the active graph supports edits. |
+| **Memory overhead** | Each cross-graph query opens an additional SQLite database temporarily. With many large graphs, this uses more RAM. |
+
 ### PlantUML
 
 | Setting | Default | Description |

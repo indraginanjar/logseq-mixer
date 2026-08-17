@@ -357,6 +357,16 @@ const settings: SettingSchemaDesc[] = [
     description: '⚠️ DEPRECATED — SQLite is now the only supported backend. This setting is ignored.',
     default: 'sqlite',
   },
+  // ═══════════════════════════════════════════════════════════════════
+  // CROSS-GRAPH SEARCH
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    key: 'crossGraphEnabled',
+    type: 'boolean',
+    title: 'Cross-Graph Search',
+    description: 'When enabled, RAG queries also search other Logseq graphs you have previously indexed. Manage which graphs to include via the 🔌 Database panel. Limitations: results come from the last-indexed snapshot (not live data), embedding models must match, and cross-graph block references are not clickable.',
+    default: false,
+  },
 ];
 
 export default settings;

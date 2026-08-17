@@ -26,6 +26,7 @@ import type { SkillEntry, SkillCatalogEntry } from './skills';
 import { resetQueryTokenAccumulator, getQueryTokenUsage } from './storage/logTokenUsage';
 import { getActiveAgent } from './agents/AgentConfigStore';
 import { resolveSettings } from './agents/resolveAgentSettings';
+import { searchCrossGraphs, loadCrossGraphSources } from './search/crossGraphSearch';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -283,6 +284,35 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
     const index = ensureBM25Index(provider);
     const reranked = await hybridSearch(query, queryEmbedding, provider, index, { accelerator: accelerator ?? undefined });
     console.info(`[retrieveVectorContext] Query: "${query.slice(0, 80)}..." → ${reranked.length} results`);
+
+    // --- Cross-graph search ---
+    if (settings.crossGraphEnabled !== false) {
+      const crossGraphSources = loadCrossGraphSources();
+      if (crossGraphSources.length > 0) {
+        try {
+          const crossHits = await searchCrossGraphs(queryEmbedding, query, crossGraphSources, 5);
+          if (crossHits.length > 0) {
+            console.info(`[retrieveVectorContext] Cross-graph search: ${crossHits.length} hits from ${new Set(crossHits.map(h => h.sourceGraph)).size} graph(s)`);
+            // Merge into reranked results with source attribution in content
+            for (const hit of crossHits) {
+              reranked.push({
+                id: `xgraph:${hit.sourceGraphPath}:${hit.id}`,
+                content: `[From: ${hit.sourceGraph}] ${hit.content}`,
+                score: 0,
+                rrfScore: hit.rrfScore,
+                keywordScore: 0,
+                vectorRank: 0,
+                keywordRank: 0,
+              });
+            }
+            // Re-sort after merging
+            reranked.sort((a, b) => b.rrfScore - a.rrfScore);
+          }
+        } catch (err) {
+          console.warn('[retrieveVectorContext] Cross-graph search failed:', err);
+        }
+      }
+    }
     if (reranked.length > 0) {
       reranked.forEach((hit, i) => {
         console.info(`  [${i}] score=${hit.rrfScore.toFixed(4)} id=${hit.id} content="${hit.content.slice(0, 100)}..."`);

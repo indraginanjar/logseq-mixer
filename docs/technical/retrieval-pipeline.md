@@ -439,6 +439,49 @@ LLM responses containing Logseq notation are transformed:
 
 ---
 
+## Cross-Graph Search
+
+When enabled (`crossGraphEnabled` setting), the retrieval pipeline extends to search other Logseq graphs' indexed databases.
+
+### How It Works
+
+```
+retrieveVectorContext(query)
+     ↓
+1. Normal hybrid search on current graph (vector + BM25 + HNSW)
+     ↓
+2. If crossGraphEnabled && registered sources exist:
+   For each registered graph:
+     a. Open its SQLite database from IndexedDB (key: "vectors:{graphPath}")
+     b. Run brute-force vector search (no HNSW — read-only access)
+     c. Build ephemeral BM25 index and search
+     d. Merge via RRF, tag results with source graph label
+     e. Close database (free memory)
+     ↓
+3. Apply 0.85 discount factor to cross-graph scores
+   (current graph results are inherently more relevant)
+     ↓
+4. Merge all results, re-sort by RRF score
+     ↓
+5. Prefix cross-graph results with "[From: GraphLabel]" in content
+```
+
+### Constraints
+
+| Constraint | Reason |
+|---|---|
+| Same embedding model required | Vector dimensions must match for cosine similarity. Mismatched dimensions are skipped. |
+| Brute-force only (no HNSW) | External databases are opened read-only; HNSW requires a separate accelerator instance per graph. |
+| Snapshot-based (stale) | Other graphs are only updated when you open them and run Re-Index. |
+| Score discount (×0.85) | Cross-graph results are deprioritized vs. current-graph matches. |
+| No write access | Logseq API only works on the active graph. |
+
+### Storage
+
+Cross-graph source registrations are stored in localStorage (`logseq-mixer:cross-graph-sources`) as a JSON array of `{ path, label, embeddingModel, lastIndexed }` objects.
+
+---
+
 ## Limitations
 
 - **Full chunk injection:** Retrieved chunks injected in full — consumes significant prompt tokens for long pages
@@ -468,6 +511,7 @@ LLM responses containing Logseq notation are transformed:
 | `src/search/hybridSearch.ts` | Hybrid search pipeline orchestration |
 | `src/search/reranker.ts` | `mergeWithRRF()` (dual-list) and `rerankWithRRF()` (legacy single-list) |
 | `src/search/recencyScoring.ts` | Time-decay scoring for journal pages |
+| `src/search/crossGraphSearch.ts` | Cross-graph RAG: opens other graphs' SQLite indexes, runs hybrid search, merges with source attribution |
 | `src/search/depthWeightedSearch.ts` | Block depth weight adjustment |
 | `src/search/queryRewriter.ts` | LLM-based query rewriting for better retrieval |
 | `src/search/deduplicator.ts` | Cross-page chunk deduplication |

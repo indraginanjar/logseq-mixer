@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { keyframes, styled } from '../stitches.config';
 import type { StorageProvider } from '../storage/StorageProvider';
+import { loadCrossGraphSources, saveCrossGraphSources, addCrossGraphSource, removeCrossGraphSource, type CrossGraphSource } from '../search/crossGraphSearch';
 
 // --- Utilities ---
 
@@ -178,6 +179,38 @@ export function DatabasePanel({
   onImportFileChange,
   onClose,
 }: DatabasePanelProps) {
+  const [crossSources, setCrossSources] = useState<CrossGraphSource[]>(loadCrossGraphSources());
+  const [addingSource, setAddingSource] = useState(false);
+  const [newSourcePath, setNewSourcePath] = useState('');
+  const [newSourceLabel, setNewSourceLabel] = useState('');
+  const [crossError, setCrossError] = useState<string | null>(null);
+
+  const crossGraphEnabled = settings?.crossGraphEnabled !== false && settings?.crossGraphEnabled === true;
+
+  const handleAddSource = () => {
+    const path = newSourcePath.trim();
+    const label = newSourceLabel.trim() || path.split(/[/\\]/).pop() || path;
+    if (!path) { setCrossError('Graph path is required'); return; }
+    const source: CrossGraphSource = {
+      path,
+      label,
+      embeddingModel: settings?.embeddingModel || 'text-embedding-3-small',
+      lastIndexed: Date.now(),
+    };
+    const added = addCrossGraphSource(source);
+    if (!added) { setCrossError('This graph is already registered'); return; }
+    setCrossSources(loadCrossGraphSources());
+    setNewSourcePath('');
+    setNewSourceLabel('');
+    setCrossError(null);
+    setAddingSource(false);
+  };
+
+  const handleRemoveSource = (path: string) => {
+    removeCrossGraphSource(path);
+    setCrossSources(loadCrossGraphSources());
+  };
+
   return (
     <DbPanel>
       <DbPanelHeader>
@@ -268,6 +301,93 @@ export function DatabasePanel({
           </div>
         )}
       </DbPanelActions>
+
+      {/* Cross-Graph Sources */}
+      <div style={{ marginTop: '20px', borderTop: '1px solid var(--colors-slate6, #e2e8f0)', paddingTop: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--colors-highContrast, #1e293b)' }}>
+            🌐 Cross-Graph Search
+          </span>
+          {crossGraphEnabled && (
+            <button
+              onClick={() => { setAddingSource(true); setCrossError(null); }}
+              disabled={addingSource}
+              style={{ background: 'none', border: '1px solid var(--colors-slate6, #cbd5e1)', borderRadius: '4px', fontSize: '11px', padding: '3px 8px', cursor: 'pointer', color: 'var(--colors-slate11, #64748b)' }}
+            >
+              ➕ Add Graph
+            </button>
+          )}
+        </div>
+
+        {!crossGraphEnabled && (
+          <div style={{ fontSize: '12px', color: 'var(--colors-slate9, #94a3b8)', padding: '8px 0' }}>
+            Disabled. Enable <strong>Cross-Graph Search</strong> in plugin settings to search other graphs.
+          </div>
+        )}
+
+        {crossGraphEnabled && (
+          <>
+            {/* Limitation warning */}
+            <div style={{ fontSize: '11px', color: 'var(--colors-amber11, #92400e)', backgroundColor: 'var(--colors-amber3, #fffbeb)', border: '1px solid var(--colors-amber6, #fcd34d)', borderRadius: '6px', padding: '8px 10px', marginBottom: '10px', lineHeight: 1.4 }}>
+              ⚠️ <strong>Limitations:</strong> Results come from the <em>last-indexed snapshot</em> — not live data. To update, open each graph and re-index it. Embedding model must match across graphs. Cross-graph block references are not clickable.
+            </div>
+
+            {/* Add form */}
+            {addingSource && (
+              <div style={{ border: '1px solid var(--colors-blue7, #93c5fd)', borderRadius: '6px', padding: '10px', marginBottom: '10px', backgroundColor: 'var(--colors-blue2, #eff6ff)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <input
+                    type="text"
+                    value={newSourcePath}
+                    onChange={e => { setNewSourcePath(e.target.value); setCrossError(null); }}
+                    placeholder="Graph path (e.g., C:\Users\me\Documents\MyGraph)"
+                    autoFocus
+                    style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--colors-slate6, #cbd5e1)', outline: 'none', backgroundColor: 'var(--colors-elevation1, white)', color: 'var(--colors-highContrast, #1e293b)' }}
+                  />
+                  <input
+                    type="text"
+                    value={newSourceLabel}
+                    onChange={e => setNewSourceLabel(e.target.value)}
+                    placeholder="Label (optional, e.g., Work Notes)"
+                    style={{ padding: '5px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--colors-slate6, #cbd5e1)', outline: 'none', backgroundColor: 'var(--colors-elevation1, white)', color: 'var(--colors-highContrast, #1e293b)' }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddSource(); }}
+                  />
+                  {crossError && <div style={{ fontSize: '11px', color: '#e5484d' }}>⚠️ {crossError}</div>}
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    <button onClick={() => { setAddingSource(false); setCrossError(null); }} style={{ background: 'none', border: '1px solid var(--colors-slate6, #cbd5e1)', borderRadius: '4px', fontSize: '11px', padding: '3px 10px', cursor: 'pointer', color: 'var(--colors-slate11, #64748b)' }}>Cancel</button>
+                    <button onClick={handleAddSource} disabled={!newSourcePath.trim()} style={{ background: 'var(--colors-blue9, #3b82f6)', border: 'none', borderRadius: '4px', fontSize: '11px', padding: '3px 10px', cursor: 'pointer', color: 'white', opacity: newSourcePath.trim() ? 1 : 0.5 }}>Add</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Source list */}
+            {crossSources.length === 0 && !addingSource && (
+              <div style={{ fontSize: '12px', color: 'var(--colors-slate9, #94a3b8)', textAlign: 'center', padding: '12px 0' }}>
+                No cross-graph sources registered. Click "➕ Add Graph" to include another graph's index.
+              </div>
+            )}
+            {crossSources.map(source => (
+              <div key={source.path} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: 'var(--colors-slate3, #f1f5f9)', borderRadius: '6px', marginBottom: '6px', border: '1px solid var(--colors-slate5, #e2e8f0)' }}>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--colors-highContrast, #1e293b)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source.label}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--colors-slate9, #94a3b8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source.path}</div>
+                  {source.embeddingModel && (
+                    <div style={{ fontSize: '10px', color: 'var(--colors-slate9, #94a3b8)' }}>Model: {source.embeddingModel}</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleRemoveSource(source.path)}
+                  title="Remove this graph source"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--colors-red9, #e5484d)', padding: '2px 4px', opacity: 0.7 }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
+                >🗑️</button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
     </DbPanel>
   );
 }
