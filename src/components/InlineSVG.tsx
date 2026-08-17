@@ -96,13 +96,22 @@ export default function InlineSVG({ content }: InlineSVGProps) {
   const sanitizationEnabled = (window as any).logseq?.settings?.svgSanitization !== false;
 
   const sanitized = useMemo(() => {
+    console.info('[InlineSVG] sanitization=' + sanitizationEnabled + ', content length=' + content.length + ', starts with:', content.slice(0, 100));
     if (!sanitizationEnabled) {
       // No sanitization — just extract the <svg>...</svg> bounds
       const svgStart = content.indexOf('<svg');
-      if (svgStart === -1) return '';
+      if (svgStart === -1) {
+        console.warn('[InlineSVG] No <svg found in content');
+        return '';
+      }
       const svgEnd = content.lastIndexOf('</svg>');
-      if (svgEnd === -1) return '';
-      return content.slice(svgStart, svgEnd + 6);
+      if (svgEnd === -1) {
+        console.warn('[InlineSVG] No </svg> found in content');
+        return '';
+      }
+      const result = content.slice(svgStart, svgEnd + 6);
+      console.info('[InlineSVG] Extracted SVG, length=' + result.length);
+      return result;
     }
     return sanitizeSVG(content);
   }, [content, sanitizationEnabled]);
