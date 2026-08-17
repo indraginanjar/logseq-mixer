@@ -29,14 +29,9 @@ Instead, Mixer connects to MCP servers using **HTTP/SSE**. For servers that only
 
 ### Step 1: Start a Bridge Proxy
 
-Choose either `supergateway` or `mcp-proxy`:
+Choose a bridge proxy to expose stdio MCP servers as HTTP/SSE:
 
-**Using supergateway (recommended):**
-```bash
-npx -y supergateway --port 3002 --stdio "npx -y @playwright/mcp@latest"
-```
-
-**Using mcp-proxy:**
+**Using mcp-proxy (recommended):**
 
 macOS / Linux:
 ```bash
@@ -49,6 +44,11 @@ npx -y mcp-proxy --port 3002 -- cmd /c npx -y @playwright/mcp@latest
 ```
 
 > **Why `cmd /c` on Windows?** Node.js on Windows can't spawn `.cmd` batch scripts directly. The `cmd /c` wrapper resolves this.
+
+**Using supergateway (alternative):**
+```bash
+npx -y supergateway --port 3002 --stdio "npx -y @playwright/mcp@latest"
+```
 
 ### Step 2: Configure in Logseq
 
@@ -138,7 +138,7 @@ If a server entry has `command` instead of `url`, Mixer shows an error status wi
 ### Web Search
 
 ```bash
-npx -y supergateway --port 3001 --stdio "npx -y @anthropic/mcp-server-web-search"
+npx -y mcp-proxy --port 3001 -- npx -y @anthropic/mcp-server-web-search
 ```
 ```json
 { "web-search": { "url": "http://localhost:3001/sse" } }
@@ -147,7 +147,7 @@ npx -y supergateway --port 3001 --stdio "npx -y @anthropic/mcp-server-web-search
 ### Browser Automation (Playwright)
 
 ```bash
-npx -y supergateway --port 3002 --stdio "npx -y @playwright/mcp@latest"
+npx -y mcp-proxy --port 3002 -- npx -y @playwright/mcp@latest
 ```
 ```json
 { "playwright": { "url": "http://localhost:3002/sse" } }
@@ -156,7 +156,7 @@ npx -y supergateway --port 3002 --stdio "npx -y @playwright/mcp@latest"
 ### File System
 
 ```bash
-npx -y supergateway --port 3003 --stdio "npx -y @anthropic/mcp-server-filesystem /path/to/allowed/dir"
+npx -y mcp-proxy --port 3003 -- npx -y @anthropic/mcp-server-filesystem /path/to/allowed/dir
 ```
 ```json
 { "filesystem": { "url": "http://localhost:3003/sse" } }

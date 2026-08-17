@@ -12,7 +12,7 @@ Logseq plugins run inside sandboxed browser iframes. This imposes strict securit
 - **No direct filesystem access** — cannot read local config files or sockets
 - **HTTP/SSE only** — the plugin can only make outbound HTTP requests and open EventSource connections
 
-Consequently, Mixer implements **SSE-based MCP transport** exclusively. For stdio-based servers (the majority of MCP ecosystem), users run a local bridge proxy (`supergateway` or `mcp-proxy`) that exposes an HTTP/SSE endpoint.
+Consequently, Mixer implements **SSE-based MCP transport** exclusively. For stdio-based servers (the majority of MCP ecosystem), users run a local bridge proxy (`mcp-proxy` or `supergateway`) that exposes an HTTP/SSE endpoint.
 
 ---
 
