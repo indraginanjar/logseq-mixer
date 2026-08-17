@@ -23,7 +23,7 @@ Click the Mixer toolbar icon in Logseq to open the chat panel:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The panel can be resized by dragging its left edge. Width persists across sessions (min 320px, max 85%, default 520px).
+The panel can be resized by dragging its left edge. Width persists across sessions (min 320px, max 85%, default 1040px).
 
 ---
 
