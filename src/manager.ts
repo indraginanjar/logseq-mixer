@@ -26,7 +26,7 @@ import type { SkillEntry, SkillCatalogEntry } from './skills';
 import { resetQueryTokenAccumulator, getQueryTokenUsage } from './storage/logTokenUsage';
 import { getActiveAgent } from './agents/AgentConfigStore';
 import { resolveSettings } from './agents/resolveAgentSettings';
-import { searchCrossGraphs, loadCrossGraphSources } from './search/crossGraphSearch';
+import { searchCrossGraphs, loadCrossGraphSources, getCurrentGraphPath } from './search/crossGraphSearch';
 
 const CURRENT_CHUNKING_VERSION = '2'; // token-based
 
@@ -287,7 +287,8 @@ async function retrieveVectorContext(query: string, settings: any, storageProvid
 
     // --- Cross-graph search ---
     if (settings.crossGraphEnabled !== false) {
-      const crossGraphSources = loadCrossGraphSources();
+      const currentPath = await getCurrentGraphPath();
+      const crossGraphSources = currentPath ? loadCrossGraphSources(currentPath) : [];
       if (crossGraphSources.length > 0) {
         try {
           const crossHits = await searchCrossGraphs(queryEmbedding, query, crossGraphSources, 5);

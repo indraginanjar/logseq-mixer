@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { keyframes, styled } from '../stitches.config';
 import type { StorageProvider } from '../storage/StorageProvider';
-import { loadCrossGraphSources, saveCrossGraphSources, addCrossGraphSource, removeCrossGraphSource, type CrossGraphSource } from '../search/crossGraphSearch';
+import { loadCrossGraphSources, addCrossGraphSource, removeCrossGraphSource, getCurrentGraphPath, type CrossGraphSource } from '../search/crossGraphSearch';
 
 // --- Utilities ---
 
@@ -179,13 +179,22 @@ export function DatabasePanel({
   onImportFileChange,
   onClose,
 }: DatabasePanelProps) {
-  const [crossSources, setCrossSources] = useState<CrossGraphSource[]>(loadCrossGraphSources());
+  const [crossSources, setCrossSources] = useState<CrossGraphSource[]>([]);
   const [addingSource, setAddingSource] = useState(false);
   const [newSourcePath, setNewSourcePath] = useState('');
   const [newSourceLabel, setNewSourceLabel] = useState('');
   const [crossError, setCrossError] = useState<string | null>(null);
+  const [currentGraphPath, setCurrentGraphPath] = useState<string | null>(null);
 
   const crossGraphEnabled = settings?.crossGraphEnabled === true;
+
+  // Load current graph path and cross-graph sources
+  useEffect(() => {
+    getCurrentGraphPath().then(path => {
+      setCurrentGraphPath(path);
+      if (path) setCrossSources(loadCrossGraphSources(path));
+    });
+  }, []);
 
   const handleToggleCrossGraph = async () => {
     const newValue = !crossGraphEnabled;
@@ -196,15 +205,17 @@ export function DatabasePanel({
     const path = newSourcePath.trim();
     const label = newSourceLabel.trim() || path.split(/[/\\]/).pop() || path;
     if (!path) { setCrossError('Graph path is required'); return; }
+    if (!currentGraphPath) { setCrossError('Cannot determine current graph'); return; }
+    if (path === currentGraphPath) { setCrossError('Cannot add the current graph as a cross-graph source'); return; }
     const source: CrossGraphSource = {
       path,
       label,
       embeddingModel: settings?.embeddingModel || 'text-embedding-3-small',
       lastIndexed: Date.now(),
     };
-    const added = addCrossGraphSource(source);
+    const added = addCrossGraphSource(source, currentGraphPath);
     if (!added) { setCrossError('This graph is already registered'); return; }
-    setCrossSources(loadCrossGraphSources());
+    setCrossSources(loadCrossGraphSources(currentGraphPath));
     setNewSourcePath('');
     setNewSourceLabel('');
     setCrossError(null);
@@ -212,8 +223,9 @@ export function DatabasePanel({
   };
 
   const handleRemoveSource = (path: string) => {
-    removeCrossGraphSource(path);
-    setCrossSources(loadCrossGraphSources());
+    if (!currentGraphPath) return;
+    removeCrossGraphSource(path, currentGraphPath);
+    setCrossSources(loadCrossGraphSources(currentGraphPath));
   };
 
   return (

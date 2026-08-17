@@ -214,34 +214,56 @@ export async function searchCrossGraphs(
 
 // --- Settings persistence helpers ---
 
-const CROSS_GRAPH_SOURCES_KEY = 'logseq-mixer:cross-graph-sources';
+const CROSS_GRAPH_SOURCES_PREFIX = 'logseq-mixer:cross-graph-sources:';
 
-/** Load registered cross-graph sources from localStorage. */
-export function loadCrossGraphSources(): CrossGraphSource[] {
+/** Get the localStorage key for the current graph's cross-graph sources. */
+function getSourcesKey(currentGraphPath: string): string {
+  return CROSS_GRAPH_SOURCES_PREFIX + currentGraphPath;
+}
+
+/** Get the current graph path. */
+export async function getCurrentGraphPath(): Promise<string | null> {
   try {
-    const stored = localStorage.getItem(CROSS_GRAPH_SOURCES_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const graph = await logseq.App.getCurrentGraph();
+    return graph?.path ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Load registered cross-graph sources for a specific graph. */
+export function loadCrossGraphSources(currentGraphPath?: string): CrossGraphSource[] {
+  try {
+    if (!currentGraphPath) {
+      // Fallback: try all keys with prefix and return empty
+      return [];
+    }
+    const stored = localStorage.getItem(getSourcesKey(currentGraphPath));
+    // Filter out the current graph itself (shouldn't be there, but safety check)
+    const sources: CrossGraphSource[] = stored ? JSON.parse(stored) : [];
+    return sources.filter(s => s.path !== currentGraphPath);
   } catch {
     return [];
   }
 }
 
-/** Save cross-graph sources to localStorage. */
-export function saveCrossGraphSources(sources: CrossGraphSource[]): void {
-  localStorage.setItem(CROSS_GRAPH_SOURCES_KEY, JSON.stringify(sources));
+/** Save cross-graph sources for a specific graph. */
+export function saveCrossGraphSources(sources: CrossGraphSource[], currentGraphPath: string): void {
+  localStorage.setItem(getSourcesKey(currentGraphPath), JSON.stringify(sources));
 }
 
-/** Add a cross-graph source. Returns false if already registered. */
-export function addCrossGraphSource(source: CrossGraphSource): boolean {
-  const existing = loadCrossGraphSources();
+/** Add a cross-graph source. Returns false if already registered or is the current graph. */
+export function addCrossGraphSource(source: CrossGraphSource, currentGraphPath: string): boolean {
+  if (source.path === currentGraphPath) return false; // Can't add self
+  const existing = loadCrossGraphSources(currentGraphPath);
   if (existing.some(s => s.path === source.path)) return false;
   existing.push(source);
-  saveCrossGraphSources(existing);
+  saveCrossGraphSources(existing, currentGraphPath);
   return true;
 }
 
 /** Remove a cross-graph source by path. */
-export function removeCrossGraphSource(path: string): void {
-  const existing = loadCrossGraphSources();
-  saveCrossGraphSources(existing.filter(s => s.path !== path));
+export function removeCrossGraphSource(path: string, currentGraphPath: string): void {
+  const existing = loadCrossGraphSources(currentGraphPath);
+  saveCrossGraphSources(existing.filter(s => s.path !== path), currentGraphPath);
 }
