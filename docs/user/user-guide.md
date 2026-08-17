@@ -543,28 +543,30 @@ They combine freely:
 | **Name** | Display name in the selector dropdown |
 | **Icon** | Emoji shown in the selector |
 | **System Prompt** | Overrides the global "AI prompt" setting |
-| **Model** | Overrides the Model Selector (leave empty to use global) |
-| **Provider** | Overrides Chat Provider (leave empty to use global) |
-| **MCP Tool States** | Per-agent enable/disable of individual MCP tools |
-| **Skill Activations** | Which skills are active for this agent |
+| **Model** | Overrides the Model Selector (leave empty to use global). Invalid values are ignored with fallback to global. |
+| **Provider** | Overrides Chat Provider (must be `openai`, `ollama`, or `litellm`; invalid values fall back to global) |
+| **MCP Tool States** | Per-agent enable/disable of individual MCP tools (configurable via checkboxes in the agent edit form) |
+| **Skill Activations** | Skills automatically activated when this agent handles a query (configurable via checkboxes in the agent edit form) |
 
 #### Managing Agents
 
 Click **Manage Agents →** at the bottom of the Agent Selector dropdown (or click the Agent Selector when only one agent exists) to open the Agent Panel:
 
-- **Create** a new agent with custom name, icon, system prompt, and optional model/provider overrides
-- **Edit** an existing agent's configuration
+- **Create** a new agent with custom name, icon, system prompt, model/provider overrides, MCP tool access, and skill activations
+- **Edit** an existing agent's configuration — including per-tool checkboxes for MCP access and per-skill checkboxes for auto-activation
 - **Duplicate** an agent to create a variant
-- **Delete** a non-default agent (the default agent cannot be deleted)
+- **Delete** a non-default agent (the default agent cannot be deleted; deleting an agent also cleans up its stored conversation)
 
 #### Conversation State per Agent
 
 Each agent maintains its own conversation state. When you switch agents:
-- The current agent's conversation is saved
+- The current agent's conversation (both UI messages and LLM history) is saved
 - The target agent's previous conversation is restored
 - Starting a "✨ New" session only clears the current agent's conversation
 
 This means you can have different ongoing conversations with different agents and switch between them without losing context.
+
+> **Storage limits:** Each agent's conversation is limited to the most recent 50 messages (approximately 500KB). If storage fills up, older messages are progressively trimmed. This prevents localStorage exhaustion when using many agents.
 
 ### MCP Servers
 

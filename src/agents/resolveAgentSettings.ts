@@ -1,18 +1,43 @@
 import type { AgentConfig } from './AgentConfigStore';
 
+/** Valid provider identifiers that the system supports. */
+const VALID_PROVIDERS = ['openai', 'ollama', 'litellm'];
+
 /**
  * Resolve effective settings for an agent by merging agent overrides with global settings.
  * Agent-specific values take precedence; null/undefined falls back to global.
+ * Validates agent model/provider and falls back to global if invalid.
  */
 export function resolveSettings(globalSettings: any, agentConfig: AgentConfig | null): any {
   if (!agentConfig) return globalSettings;
 
+  // Validate provider if specified
+  let resolvedProvider = globalSettings.chatProvider;
+  if (agentConfig.provider) {
+    if (VALID_PROVIDERS.includes(agentConfig.provider)) {
+      resolvedProvider = agentConfig.provider;
+    } else {
+      console.warn(`[resolveSettings] Agent "${agentConfig.name}" has invalid provider "${agentConfig.provider}", falling back to global provider "${globalSettings.chatProvider}"`);
+    }
+  }
+
+  // Validate model if specified (basic sanity: non-empty string, no whitespace-only)
+  let resolvedModel = globalSettings.selectedModel;
+  if (agentConfig.model) {
+    const trimmedModel = agentConfig.model.trim();
+    if (trimmedModel.length > 0 && trimmedModel.length <= 200) {
+      resolvedModel = trimmedModel;
+    } else {
+      console.warn(`[resolveSettings] Agent "${agentConfig.name}" has invalid model "${agentConfig.model}", falling back to global model "${globalSettings.selectedModel}"`);
+    }
+  }
+
   return {
     ...globalSettings,
-    // Agent overrides
+    // Agent overrides (validated)
     prompt: agentConfig.systemPrompt,
-    selectedModel: agentConfig.model || globalSettings.selectedModel,
-    chatProvider: agentConfig.provider || globalSettings.chatProvider,
+    selectedModel: resolvedModel,
+    chatProvider: resolvedProvider,
     // Keep a reference to the agent config for downstream use
     __agentConfig: agentConfig,
   };

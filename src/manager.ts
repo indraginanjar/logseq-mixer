@@ -89,6 +89,17 @@ export function clearConversationHistory(): void {
   activatedSkills = new Set();
 }
 
+/** Get the current conversation history (for saving on agent switch). */
+export function getConversationHistory(): Array<{ role: 'user' | 'assistant'; content: string }> {
+  return [...conversationHistory];
+}
+
+/** Replace the conversation history (for restoring on agent switch). */
+export function setConversationHistory(history: Array<{ role: 'user' | 'assistant'; content: string }>): void {
+  conversationHistory.length = 0;
+  history.forEach(msg => conversationHistory.push(msg));
+}
+
 /** Add a message to conversation history (used by agent to persist results for follow-up). */
 export function addToConversationHistory(role: 'user' | 'assistant', content: string): void {
   conversationHistory.push({ role, content });
@@ -554,6 +565,15 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   const activeAgent = getActiveAgent();
   const resolvedSettings = resolveSettings(settings, activeAgent);
 
+  // Activate agent-specific skills (if not already activated in this session)
+  if (activeAgent && activeAgent.skillActivations.length > 0) {
+    for (const skillName of activeAgent.skillActivations) {
+      if (!activatedSkills.has(skillName)) {
+        await activateSkill(skillName);
+      }
+    }
+  }
+
   // Detect explicit memory triggers early — before goal detection — so that
   // "Remember this: ..." messages are never misrouted to the agent loop.
   let earlyMemoryDetected = false;
@@ -570,7 +590,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // Skip goal detection when an image is attached — images need the multipart message path
   // Skip goal detection when edit mode is on — edit mode handles write requests directly
   // Skip goal detection when an explicit memory was just stored — let it flow through as a normal chat
-  if (!earlyMemoryDetected && settings.agentMode !== false && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, settings)).isGoal) {
+  if (!earlyMemoryDetected && settings.agentMode !== false && !editMode && !imageDataUrl && (await detectGoal(query, settings.agentConfidenceThreshold || 0.6, resolvedSettings)).isGoal) {
     pendingAgentGoal = query;
     return '__AGENT_GOAL_DETECTED__';
   }
@@ -613,7 +633,7 @@ export async function handleQuery(query: string, settings: any, storageProvider:
   // The rewritten query is used ONLY for retrieval, not for the final prompt to the LLM.
   let retrievalQuery = query;
   if (needsRetrieval && conversationHistory.length > 1) {
-    retrievalQuery = await rewriteQueryForRetrieval(query, conversationHistory.slice(0, -1), settings, signal);
+    retrievalQuery = await rewriteQueryForRetrieval(query, conversationHistory.slice(0, -1), resolvedSettings, signal);
   }
 
   // --- Retrieval with scored results ---
@@ -688,8 +708,8 @@ export async function handleQuery(query: string, settings: any, storageProvider:
 
   // Calculate token budgets
   const systemTokens = countTokens(systemMessage);
-  const contextLimit = getContextLimitForModel(settings.selectedModel);
-  const maxOutput = getMaxTokensForModel(settings.selectedModel);
+  const contextLimit = getContextLimitForModel(resolvedSettings.selectedModel);
+  const maxOutput = getMaxTokensForModel(resolvedSettings.selectedModel);
   const totalInputBudget = Math.max(1024, contextLimit - maxOutput - 500);
   let userBudget = Math.max(1024, totalInputBudget - systemTokens);
 

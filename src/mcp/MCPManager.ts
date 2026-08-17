@@ -1,4 +1,6 @@
 import { MCPClient, MCPTool } from './MCPClient';
+import { getActiveAgent } from '../agents/AgentConfigStore';
+import { resolveToolStates } from '../agents/resolveAgentSettings';
 
 export interface MCPServerConfig {
   name: string;
@@ -301,10 +303,16 @@ export class MCPManager {
     const openAiTools: OpenAIFunctionTool[] = [];
     this.functionMapping.clear();
 
+    // Resolve tool states: merge active agent's overrides on top of global states
+    const activeAgent = getActiveAgent();
+    const effectiveToolStates = resolveToolStates(this.toolStates, activeAgent);
+
     this.clients.forEach((client, serverName) => {
       if (client.status === 'connected') {
         client.tools.forEach((tool) => {
-          if (this.isToolEnabled(serverName, tool.name)) {
+          const key = `${serverName}:${tool.name}`;
+          const enabled = effectiveToolStates[key] !== false;
+          if (enabled) {
             const funcName = this.makeFunctionName(serverName, tool.name);
             this.functionMapping.set(funcName, {
               serverName,

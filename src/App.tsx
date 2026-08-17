@@ -26,6 +26,7 @@ import { useAgentController } from './hooks/useAgentController';
 import { useChatSession } from './hooks/useChatSession';
 import { loadAgents, getActiveAgentId } from './agents/AgentConfigStore';
 import { switchAgent } from './agents/agentSwitcher';
+import { getConversationHistory, setConversationHistory, clearActivatedSkills } from './manager';
 import { aiEditModeState, settingsState } from './state/settings';
 import { darkTheme, keyframes, styled } from './stitches.config';
 import type { StorageProvider } from './storage/StorageProvider';
@@ -228,7 +229,7 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   // Destructure chat session
   const {
-    messages,
+    messages, setMessages,
     inputMessage, setInputMessage,
     loading, error, setError,
     editResults,
@@ -260,16 +261,17 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
   const [activeAgentId, setActiveAgentId] = useState(getActiveAgentId());
   const [showAgentPanel, setShowAgentPanel] = useState(false);
 
-  // Refresh agents list after migration may have run (lazy storage init)
+  // Refresh agents list after migration completes (lazy storage init dispatches event)
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const handleAgentsReady = () => {
       const loaded = loadAgents();
-      if (loaded.length > 0 && agents.length === 0) {
+      if (loaded.length > 0) {
         setAgents(loaded);
         setActiveAgentId(getActiveAgentId());
       }
-    }, 2000);
-    return () => clearTimeout(timer);
+    };
+    window.addEventListener('mixer:agents-ready', handleAgentsReady);
+    return () => window.removeEventListener('mixer:agents-ready', handleAgentsReady);
   }, []);
 
   // Wrappers for hook functions that need refs from this component
@@ -282,8 +284,17 @@ export function App({ themeMode: initialThemeMode, storageProvider }: Props) {
 
   const handleAgentSwitch = (agentId: string) => {
     try {
-      const currentState = { history: [], messages: messages };
-      switchAgent(currentState, agentId);
+      // Save current state: both LLM history from manager and UI messages
+      const currentState = { history: getConversationHistory(), messages: messages };
+      const { state: targetState } = switchAgent(currentState, agentId);
+
+      // Restore target agent's conversation state
+      setConversationHistory(targetState.history);
+      setMessages(targetState.messages);
+
+      // Reset activated skills so the new agent's skills are freshly activated on next query
+      clearActivatedSkills();
+
       setActiveAgentId(agentId);
       setAgents(loadAgents());
     } catch (err) {

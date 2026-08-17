@@ -36,6 +36,8 @@ function createLazyStorageProvider(): StorageProvider {
           // Run multi-agent migration (idempotent — safe on subsequent loads)
           const currentPrompt = (window.logseq?.settings?.prompt as string) || '';
           migrateToMultiAgent(db, currentPrompt);
+          // Notify App component that agents are ready
+          window.dispatchEvent(new Event('mixer:agents-ready'));
         }
         return p;
       })();

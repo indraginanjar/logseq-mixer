@@ -477,6 +477,8 @@ These are two separate concepts that work together:
 
 **They are orthogonal.** Switching agents doesn't enable/disable agent mode, and toggling agent mode doesn't change which agent is active.
 
+Each agent is a self-contained workspace: its own system prompt, model, provider, MCP tool access (per-tool enable/disable), and skill activations — all configurable via the Agent Panel.
+
 ### Query Flow with Multi-Agent
 
 When you send a message, both systems are consulted:
@@ -486,8 +488,11 @@ User message
      ↓
 1. resolveSettings(globalSettings, activeAgent)
    → Merges active agent's prompt, model, provider over global config
+   → Validates model/provider (falls back to global if invalid)
      ↓
-2. agentMode enabled?
+2. Auto-activate agent's configured skills (if not already active)
+     ↓
+3. agentMode enabled?
    ├─ No → Normal single-turn chat (using resolved settings)
    └─ Yes → detectGoal() → route to agent loop OR normal chat
                             (using resolved settings for all LLM calls)
@@ -498,11 +503,14 @@ The agent loop (planning, execution, self-correction) uses whatever model and pr
 ### Per-Agent Conversation State
 
 Each agent maintains independent conversation history. When you switch agents via the dropdown:
-1. Current conversation is saved (associated with current agent ID)
+1. Current conversation is saved — both UI messages and LLM history (associated with current agent ID)
 2. Target agent's previous conversation is restored
 3. The AI resumes where you left off with that agent
+4. Activated skills are reset so the new agent's skills activate on the next query
 
 This allows parallel workflows — for example, a "Writing Agent" drafting content while a "Research Agent" gathers information — without their conversations interfering.
+
+> **Storage limits:** Conversations are limited to 50 messages per agent (~500KB). Older messages are progressively trimmed when limits are reached. localStorage quota errors are handled gracefully.
 
 > 📖 See [User Guide → Agents](user-guide.md#agents) for the full UI walkthrough of creating and managing agents.
 

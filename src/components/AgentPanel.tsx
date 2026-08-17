@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { styled, keyframes } from '../stitches.config';
 import { loadAgents, createAgent, updateAgent, deleteAgent, duplicateAgent, getActiveAgentId, setActiveAgentId } from '../agents/AgentConfigStore';
 import type { AgentConfig } from '../agents/AgentConfigStore';
+import { MCPManager } from '../mcp/MCPManager';
+import { loadAllSkills } from '../skills/SkillStore';
 
 // --- Animations ---
 
@@ -350,6 +352,12 @@ export default function AgentPanel({ onClose, onAgentChange }: AgentPanelProps) 
   const [formSystemPrompt, setFormSystemPrompt] = useState('');
   const [formModel, setFormModel] = useState('');
   const [formProvider, setFormProvider] = useState('');
+  const [formToolStates, setFormToolStates] = useState<Record<string, boolean>>({});
+  const [formSkillActivations, setFormSkillActivations] = useState<string[]>([]);
+
+  // Available tools and skills (loaded when form opens)
+  const [availableTools, setAvailableTools] = useState<Array<{ serverName: string; toolName: string }>>([]);
+  const [availableSkills, setAvailableSkills] = useState<Array<{ name: string; description: string }>>([]);
 
   const activeAgentId = getActiveAgentId();
 
@@ -368,13 +376,39 @@ export default function AgentPanel({ onClose, onAgentChange }: AgentPanelProps) 
     setFormSystemPrompt('');
     setFormModel('');
     setFormProvider('');
+    setFormToolStates({});
+    setFormSkillActivations([]);
     setError(null);
+  };
+
+  const loadAvailableToolsAndSkills = async () => {
+    // Load available MCP tools from connected servers
+    const mcpManager = MCPManager.getInstance();
+    const servers = mcpManager.getServers();
+    const tools: Array<{ serverName: string; toolName: string }> = [];
+    servers.forEach(client => {
+      if (client.status === 'connected') {
+        client.tools.forEach(tool => {
+          tools.push({ serverName: client.name, toolName: tool.name });
+        });
+      }
+    });
+    setAvailableTools(tools);
+
+    // Load available skills
+    try {
+      const skills = await loadAllSkills();
+      setAvailableSkills(skills.map(s => ({ name: s.name, description: s.description })));
+    } catch {
+      setAvailableSkills([]);
+    }
   };
 
   const handleCreate = () => {
     setEditingAgent(null);
     setIsCreating(true);
     resetForm();
+    loadAvailableToolsAndSkills();
   };
 
   const handleEdit = (agent: AgentConfig) => {
@@ -386,7 +420,10 @@ export default function AgentPanel({ onClose, onAgentChange }: AgentPanelProps) 
     setFormSystemPrompt(agent.systemPrompt);
     setFormModel(agent.model || '');
     setFormProvider(agent.provider || '');
+    setFormToolStates({ ...agent.mcpToolStates });
+    setFormSkillActivations([...agent.skillActivations]);
     setError(null);
+    loadAvailableToolsAndSkills();
   };
 
   const handleCancelForm = () => {
@@ -410,8 +447,8 @@ export default function AgentPanel({ onClose, onAgentChange }: AgentPanelProps) 
           systemPrompt: formSystemPrompt,
           model: formModel.trim() || null,
           provider: formProvider.trim() || null,
-          mcpToolStates: {},
-          skillActivations: [],
+          mcpToolStates: formToolStates,
+          skillActivations: formSkillActivations,
           isDefault: false,
         });
       } else if (editingAgent) {
@@ -422,6 +459,8 @@ export default function AgentPanel({ onClose, onAgentChange }: AgentPanelProps) 
           systemPrompt: formSystemPrompt,
           model: formModel.trim() || null,
           provider: formProvider.trim() || null,
+          mcpToolStates: formToolStates,
+          skillActivations: formSkillActivations,
         });
       }
 
@@ -537,6 +576,87 @@ export default function AgentPanel({ onClose, onAgentChange }: AgentPanelProps) 
                 placeholder="Leave empty to use global provider"
               />
             </FormField>
+
+            {/* MCP Tool States */}
+            {availableTools.length > 0 && (
+              <FormField>
+                <FormLabel>MCP Tool Access</FormLabel>
+                <div style={{ fontSize: '11px', color: 'var(--colors-slate9)', marginBottom: '4px' }}>
+                  Override which tools this agent can use. Unchecked tools use the global setting.
+                </div>
+                <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid var(--colors-slate6)', borderRadius: '4px', padding: '4px' }}>
+                  {availableTools.map(({ serverName, toolName }) => {
+                    const key = `${serverName}:${toolName}`;
+                    const hasOverride = key in formToolStates;
+                    const isEnabled = hasOverride ? formToolStates[key] : true;
+                    return (
+                      <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 4px', fontSize: '11px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isEnabled}
+                          onChange={e => {
+                            setFormToolStates(prev => ({ ...prev, [key]: e.target.checked }));
+                          }}
+                          style={{ margin: 0 }}
+                        />
+                        <span style={{ color: 'var(--colors-slate9)', fontSize: '10px' }}>{serverName}:</span>
+                        <span>{toolName}</span>
+                        {hasOverride && (
+                          <button
+                            onClick={() => {
+                              setFormToolStates(prev => {
+                                const next = { ...prev };
+                                delete next[key];
+                                return next;
+                              });
+                            }}
+                            title="Reset to global"
+                            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '10px', color: 'var(--colors-slate9)' }}
+                          >↺</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </FormField>
+            )}
+
+            {/* Skill Activations */}
+            {availableSkills.length > 0 && (
+              <FormField>
+                <FormLabel>Auto-Activate Skills</FormLabel>
+                <div style={{ fontSize: '11px', color: 'var(--colors-slate9)', marginBottom: '4px' }}>
+                  Skills to automatically activate when this agent handles a query.
+                </div>
+                <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid var(--colors-slate6)', borderRadius: '4px', padding: '4px' }}>
+                  {availableSkills.map(skill => {
+                    const isActive = formSkillActivations.includes(skill.name);
+                    return (
+                      <div key={skill.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 4px', fontSize: '11px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isActive}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setFormSkillActivations(prev => [...prev, skill.name]);
+                            } else {
+                              setFormSkillActivations(prev => prev.filter(s => s !== skill.name));
+                            }
+                          }}
+                          style={{ margin: 0 }}
+                        />
+                        <span>{skill.name}</span>
+                        {skill.description && (
+                          <span style={{ color: 'var(--colors-slate9)', fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            — {skill.description}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </FormField>
+            )}
 
             <FormButtons>
               <SaveButton onClick={handleSave} disabled={!formName.trim()}>

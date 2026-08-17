@@ -729,17 +729,25 @@ The multi-agent system is **orthogonal** to the agent loop (goal detection → p
 │     └── loadAgents() → find agent by ID (or fallback to default) │
 │                                                                    │
 │  2. resolveSettings(globalSettings, activeAgent)                  │
+│     └── Validates provider (must be openai/ollama/litellm)       │
+│     └── Validates model (non-empty, ≤200 chars)                  │
+│     └── Invalid values → fallback to global + console.warn       │
 │     └── Returns merged config:                                    │
 │         • prompt = agent.systemPrompt                             │
-│         • selectedModel = agent.model || global.selectedModel     │
-│         • chatProvider = agent.provider || global.chatProvider    │
+│         • selectedModel = validated agent model || global         │
+│         • chatProvider = validated agent provider || global       │
 │         • __agentConfig = agent (for downstream use)             │
 │                                                                    │
-│  3. settings.agentMode !== false?                                 │
-│     ├── Yes → detectGoal() → agent loop (uses resolvedSettings)  │
+│  3. Auto-activate agent's skillActivations[]                     │
+│     └── For each skill not yet in activatedSkills set:           │
+│         activateSkill(name) → loads body into session context    │
+│                                                                    │
+│  4. settings.agentMode !== false?                                 │
+│     ├── Yes → detectGoal(resolvedSettings) → agent loop          │
 │     └── No → normal chat (uses resolvedSettings)                 │
 │                                                                    │
 │  Both paths use the resolved model/prompt from step 2.           │
+│  Token budgets (context limit, max output) use resolvedSettings. │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -764,31 +772,50 @@ interface AgentConfig {
 
 ### Storage
 
-| Data | Storage | Key |
-|---|---|---|
-| Agent list | localStorage | `logseq-mixer:agents` (JSON array) |
-| Active agent ID | localStorage | `logseq-mixer:active-agent` (string) |
-| Conversation history (per agent) | localStorage | `logseq-mixer:history:{agentId}` |
-| Chat messages (per agent) | localStorage | `logseq-mixer:chat-messages:{agentId}` |
-| Agent-scoped memories | SQLite `agent_memory` | `agent_id` column on each row |
-| Agent-scoped token usage | SQLite `token_usage` | `agent_id` column on each row |
+| Data | Storage | Key | Limits |
+|---|---|---|---|
+| Agent list | localStorage | `logseq-mixer:agents` (JSON array) | — |
+| Active agent ID | localStorage | `logseq-mixer:active-agent` (string) | — |
+| Conversation history (per agent) | localStorage | `logseq-mixer:history:{agentId}` | 50 messages, 500KB |
+| Chat messages (per agent) | localStorage | `logseq-mixer:chat-messages:{agentId}` | 50 messages, 500KB |
+| Agent-scoped memories | SQLite `agent_memory` | `agent_id` column on each row | — |
+| Agent-scoped token usage | SQLite `token_usage` | `agent_id` column on each row | — |
 
 ### Settings Resolution (`resolveAgentSettings.ts`)
 
 ```typescript
+const VALID_PROVIDERS = ['openai', 'ollama', 'litellm'];
+
 function resolveSettings(globalSettings: any, agentConfig: AgentConfig | null): any {
   if (!agentConfig) return globalSettings;
+
+  // Validate provider — must be a known value or falls back to global
+  let resolvedProvider = globalSettings.chatProvider;
+  if (agentConfig.provider && VALID_PROVIDERS.includes(agentConfig.provider)) {
+    resolvedProvider = agentConfig.provider;
+  } else if (agentConfig.provider) {
+    console.warn(`Invalid provider "${agentConfig.provider}", using global`);
+  }
+
+  // Validate model — non-empty, ≤200 chars or falls back to global
+  let resolvedModel = globalSettings.selectedModel;
+  if (agentConfig.model?.trim() && agentConfig.model.trim().length <= 200) {
+    resolvedModel = agentConfig.model.trim();
+  } else if (agentConfig.model) {
+    console.warn(`Invalid model "${agentConfig.model}", using global`);
+  }
+
   return {
     ...globalSettings,
     prompt: agentConfig.systemPrompt,
-    selectedModel: agentConfig.model || globalSettings.selectedModel,
-    chatProvider: agentConfig.provider || globalSettings.chatProvider,
+    selectedModel: resolvedModel,
+    chatProvider: resolvedProvider,
     __agentConfig: agentConfig,
   };
 }
 ```
 
-Resolution priority: **Agent field > Global setting > Default**. Null/empty agent fields fall through to global.
+Resolution priority: **Agent field (validated) > Global setting > Default**. Invalid or null/empty agent fields fall through to global with a console warning.
 
 ### Tool State Resolution
 
@@ -805,29 +832,64 @@ function resolveToolStates(globalToolStates: Record<string, boolean>, agentConfi
 
 Agent overrides are merged over global states. Tools not explicitly overridden by the agent use the global setting.
 
+**Runtime integration:** `MCPManager.getEnabledTools()` calls `getActiveAgent()` and `resolveToolStates()` on every invocation. This means per-agent tool filtering is evaluated at query time — switching agents immediately changes which MCP tools are available without requiring a reconnect or settings reload.
+
+### Skill Auto-Activation
+
+In `handleQuery`, after resolving settings, the agent's `skillActivations` array is iterated:
+
+```typescript
+if (activeAgent && activeAgent.skillActivations.length > 0) {
+  for (const skillName of activeAgent.skillActivations) {
+    if (!activatedSkills.has(skillName)) {
+      await activateSkill(skillName);  // Loads skill body into session context
+    }
+  }
+}
+```
+
+On agent switch, `clearActivatedSkills()` resets the session set so the new agent's skills are freshly activated on the next query. This ensures each agent operates with its own skill set without contamination from the previous agent.
+
 ### Agent Switching (`agentSwitcher.ts`)
 
 ```
 User clicks agent in dropdown
          ↓
-switchAgent(currentConversation, targetAgentId)
+handleAgentSwitch(agentId) in App.tsx
          ↓
-┌─────────────────────────────────────────────────┐
-│ 1. Save current agent's state:                  │
-│    localStorage['history:{currentId}'] = history│
-│    localStorage['chat-messages:{currentId}']    │
-│                                                  │
-│ 2. setActiveAgentId(targetAgentId)              │
-│                                                  │
-│ 3. Load target agent's state:                   │
-│    history = localStorage['history:{targetId}'] │
-│    messages = localStorage['chat-messages:...'] │
-│                                                  │
-│ 4. Return { state, agent } to caller            │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Get current LLM history: getConversationHistory()        │
+│                                                              │
+│ 2. switchAgent({ history, messages }, targetAgentId)         │
+│    ├── Save current agent's state to localStorage           │
+│    │   (trimmed to MAX_STORED_MESSAGES = 50)                │
+│    ├── setActiveAgentId(targetAgentId)                      │
+│    └── Load target agent's state from localStorage          │
+│                                                              │
+│ 3. Restore target state:                                    │
+│    ├── setConversationHistory(targetState.history)           │
+│    └── setMessages(targetState.messages)                    │
+│                                                              │
+│ 4. clearActivatedSkills()                                   │
+│    (new agent's skills activate on next query)              │
+│                                                              │
+│ 5. Update React state for re-render                         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 The switch is synchronous and purely local (no LLM calls). The UI re-renders with the restored conversation immediately.
+
+#### Storage Limits
+
+| Limit | Value | Behavior on Exceed |
+|---|---|---|
+| Max messages per agent | 50 | Oldest messages trimmed on save |
+| Max serialized size per agent | 500KB | Progressive trimming (remove 25% repeatedly until fits) |
+| localStorage quota exceeded | — | Graceful fallback: saves last 6 messages; logs error if even that fails |
+
+#### Cleanup on Agent Deletion
+
+`deleteAgent(id)` calls `clearConversationState(id)` to remove orphaned `logseq-mixer:history:{id}` and `logseq-mixer:chat-messages:{id}` entries from localStorage.
 
 ### First-Run Migration (`agentMigration.ts`)
 
@@ -835,6 +897,7 @@ On plugin initialization, if no agents exist in localStorage:
 1. Creates a "Default" agent using the current global system prompt
 2. Sets it as active with `isDefault: true`
 3. Adds `agent_id` columns to SQLite tables (memory, token usage) for future per-agent scoping
+4. Dispatches `window` event `mixer:agents-ready` — App.tsx listens for this to refresh the agent selector (replaces the previous `setTimeout(2000)` approach)
 
 ### Relationship Between Controls
 

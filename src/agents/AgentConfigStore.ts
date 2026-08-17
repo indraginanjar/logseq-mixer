@@ -1,3 +1,5 @@
+import { clearConversationState } from './agentSwitcher';
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -88,6 +90,8 @@ export function deleteAgent(id: string): void {
   if (!agent) throw new Error(`Agent not found: ${id}`);
   if (agent.isDefault) throw new Error('Cannot delete the default agent');
   saveAgents(agents.filter(a => a.id !== id));
+  // Clean up orphaned conversation state
+  clearConversationState(id);
   // If this was the active agent, switch to default
   if (getActiveAgentId() === id) {
     const defaultAgent = loadAgents().find(a => a.isDefault);

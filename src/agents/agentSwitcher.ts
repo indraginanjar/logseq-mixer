@@ -6,6 +6,14 @@ const HISTORY_KEY_PREFIX = 'logseq-mixer:history:';
 /** Key prefix for per-agent UI chat messages in localStorage. */
 const MESSAGES_KEY_PREFIX = 'logseq-mixer:chat-messages:';
 
+/** Maximum size (in characters) for a single agent's stored conversation.
+ *  ~500KB allows for substantial history while keeping total multi-agent
+ *  usage well within the 5-10MB localStorage quota. */
+const MAX_CONVERSATION_SIZE = 500_000;
+
+/** Maximum number of messages to store per agent. */
+const MAX_STORED_MESSAGES = 50;
+
 export interface ConversationState {
   /** LLM-facing conversation history (role + content pairs). */
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -14,14 +22,58 @@ export interface ConversationState {
 }
 
 /**
+ * Trim conversation state to stay within storage limits.
+ * Keeps the most recent messages and history entries.
+ */
+function trimConversationState(state: ConversationState): ConversationState {
+  const trimmedHistory = state.history.length > MAX_STORED_MESSAGES
+    ? state.history.slice(-MAX_STORED_MESSAGES)
+    : state.history;
+  const trimmedMessages = state.messages.length > MAX_STORED_MESSAGES
+    ? state.messages.slice(-MAX_STORED_MESSAGES)
+    : state.messages;
+  return { history: trimmedHistory, messages: trimmedMessages };
+}
+
+/**
  * Save the current agent's conversation state to localStorage.
+ * Applies size limits and gracefully handles quota exceeded errors.
  */
 export function saveConversationState(agentId: string, state: ConversationState): void {
   try {
-    localStorage.setItem(HISTORY_KEY_PREFIX + agentId, JSON.stringify(state.history));
-    localStorage.setItem(MESSAGES_KEY_PREFIX + agentId, JSON.stringify(state.messages));
-  } catch (err) {
-    console.warn('[AgentSwitcher] Failed to save conversation state:', err);
+    const trimmed = trimConversationState(state);
+    const historyJson = JSON.stringify(trimmed.history);
+    const messagesJson = JSON.stringify(trimmed.messages);
+
+    // Check if serialized data exceeds our per-agent limit
+    if (historyJson.length + messagesJson.length > MAX_CONVERSATION_SIZE) {
+      // Progressively trim until it fits
+      let h = trimmed.history;
+      let m = trimmed.messages;
+      while (JSON.stringify(h).length + JSON.stringify(m).length > MAX_CONVERSATION_SIZE && (h.length > 4 || m.length > 4)) {
+        if (h.length > 4) h = h.slice(Math.ceil(h.length * 0.25));
+        if (m.length > 4) m = m.slice(Math.ceil(m.length * 0.25));
+      }
+      localStorage.setItem(HISTORY_KEY_PREFIX + agentId, JSON.stringify(h));
+      localStorage.setItem(MESSAGES_KEY_PREFIX + agentId, JSON.stringify(m));
+    } else {
+      localStorage.setItem(HISTORY_KEY_PREFIX + agentId, historyJson);
+      localStorage.setItem(MESSAGES_KEY_PREFIX + agentId, messagesJson);
+    }
+  } catch (err: any) {
+    // QuotaExceededError — try to save a minimal state
+    if (err?.name === 'QuotaExceededError') {
+      console.warn('[AgentSwitcher] localStorage quota exceeded, saving minimal state');
+      try {
+        const minimal = { history: state.history.slice(-6), messages: state.messages.slice(-6) };
+        localStorage.setItem(HISTORY_KEY_PREFIX + agentId, JSON.stringify(minimal.history));
+        localStorage.setItem(MESSAGES_KEY_PREFIX + agentId, JSON.stringify(minimal.messages));
+      } catch {
+        console.error('[AgentSwitcher] Cannot save conversation state even after trimming');
+      }
+    } else {
+      console.warn('[AgentSwitcher] Failed to save conversation state:', err);
+    }
   }
 }
 
