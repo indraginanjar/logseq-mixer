@@ -44,6 +44,8 @@ const GENERIC_DIAGRAM_PATTERNS: RegExp[] = [
   /\b(diagram|chart|graph|visualization|flowchart|visual)\b.{0,30}\b(of|for|about|showing|depicting|illustrating)\b/i,
   /\bvisualize\b/i,
   /\b(architecture\s*diagram)\b/i,
+  /\b(create|generate|make|draw|produce|show)\b.{0,30}\b(image|picture|illustration|svg|graphic|icon)\b/i,
+  /\b(image|picture|illustration|svg|graphic|icon)\b.{0,30}\b(of|for|about|showing|depicting)\b/i,
 ];
 
 /**
@@ -115,8 +117,13 @@ REMEMBER: Use ALL the data provided (names, statuses, relationships, etc.) — j
 // ─── Combined Rules ───────────────────────────────────────────────────────────
 
 export const DIAGRAM_RULES = `
-DIAGRAM FORMAT SELECTION:
-You can generate diagrams using EITHER Mermaid or PlantUML. Choose the best format for the request:
+DIAGRAM AND IMAGE FORMAT SELECTION:
+You can generate diagrams using EITHER Mermaid or PlantUML, and simple images/illustrations using inline SVG.
+
+CRITICAL RULE FOR IMAGES AND VISUALS:
+- When the user asks you to create, draw, or generate an image, picture, illustration, icon, or graphic: OUTPUT THE SVG DIRECTLY IN YOUR RESPONSE as a \`\`\`svg code block. Do NOT write it to a file. Do NOT use filesystem tools to save it. The chat window renders inline SVG automatically.
+- For diagrams: use \`\`\`mermaid or \`\`\`plantuml code blocks (also rendered inline).
+- NEVER save visual content to files unless the user EXPLICITLY asks you to save/export it to a specific path.
 
 USE MERMAID (\`\`\`mermaid) FOR:
 - Flowcharts and process flows
